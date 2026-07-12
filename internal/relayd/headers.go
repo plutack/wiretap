@@ -14,8 +14,8 @@ import (
 // This is a faithful *enough* reconstruction for the MVP. The http.Header
 // type collapses duplicate values into a slice within one key, but doesn't
 // preserve the original ordering between different keys. That's an
-// acceptable trade for the dashboard display; a future phase can capture
-// truly raw bytes off the connection for stricter replay.
+// acceptable trade for the dashboard display; a future improvement can
+// capture truly raw bytes off the connection for stricter replay.
 //
 // Headers that net/http hides from Request.Header (Host, Content-Length,
 // Transfer-Encoding) are added back from the request so the captured block

@@ -38,7 +38,7 @@ func (s *Server) requireAdmin(h http.HandlerFunc) http.HandlerFunc {
 // covers owner-only ops in the MVP); included here as the seam the replay
 // route will use once we add per-client auth on top of admin.
 //
-//nolint:unused // reserved for the next phase of HTTP routes
+//nolint:unused // reserved for future per-client HTTP routes
 func (s *Server) requireClient(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := r.Context().Value(clientIDKey{}).(string)

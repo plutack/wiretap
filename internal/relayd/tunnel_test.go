@@ -90,7 +90,7 @@ func readTunnel(t *testing.T, ctx context.Context, conn *websocket.Conn) relaypr
 	return m
 }
 
-// TestTunnel_HappyPath is the Phase 2 integration contract:
+// TestTunnel_HappyPath is the relayd-side integration contract:
 // register -> ingress (seq=1) -> attach tunnel -> HELLO{last_seqs=0} ->
 // receive PUSH{seq=1} -> send ACK{up_to_seq=1} -> relay's acked_seq now 1.
 //

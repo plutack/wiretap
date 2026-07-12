@@ -22,7 +22,7 @@ import (
 // A tunnel is a long-lived goroutine reading messages from the PC and a
 // push channel for the relay to send messages to the PC. Each project has
 // at most one tunnel — when a new tunnel attaches for the same project, we
-// close the old one. (Multi-PC sync is a later phase.)
+// close the old one. Multi-PC sync is not supported yet.
 type TunnelRegistry struct {
 	mu      sync.RWMutex
 	tunnels map[string]*TunnelSession // keyed by project path
@@ -99,7 +99,7 @@ func (s *TunnelSession) send(m relayproto.Message) bool {
 	case <-s.done:
 		return false
 	default:
-		// Buffer full — drop. Phase 3 will add backpressure.
+		// Buffer full — drop. Backpressure is a future improvement.
 		return false
 	}
 }
@@ -283,8 +283,8 @@ func (s *Server) tunnelReadLoop(ctx context.Context, conn *websocket.Conn, sess 
 			if !s.ownsProject(ownedPaths, v.Project) {
 				continue
 			}
-			// Re-push the listed webhooks. Phase 3 will surface this to the
-			// local app; for now we just re-send over the session.
+			// Re-push the listed webhooks to the local app as fresh PUSH
+			// messages; it dedups via INSERT OR IGNORE on (project, seq).
 			for _, seq := range v.Seqs {
 				row, err := s.store.WebhookBySeq(ctx, v.Project, seq)
 				if err != nil {

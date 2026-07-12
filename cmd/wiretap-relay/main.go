@@ -1,6 +1,6 @@
 // Command wiretap-relay is the standalone relay server deployed on the VPS.
-// In Phase 0 it only serves GET /health; later it gains the admin API,
-// webhook ingress, and the WebSocket tunnel.
+// It serves the admin API, webhook ingress, and the WebSocket tunnel used by
+// wiretap clients to receive captured webhooks.
 package main
 
 import (
@@ -73,8 +73,8 @@ func routes() http.Handler {
 	return mux
 }
 
-// health reports liveness. Phase 0 returns a static payload; later it will
-// surface DB connectivity and tunnel count.
+// health reports liveness. Returns a static payload for now; richer probes
+// (DB connectivity, tunnel count) can be added as needed.
 func health(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

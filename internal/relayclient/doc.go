@@ -15,6 +15,7 @@
 // be tested entirely in-memory without spinning up real WebSocket servers.
 // The Dialer interface wraps coder/websocket.Dial; tests substitute it with
 // a fake that returns a pipe of channels. A full end-to-end test against an
-// httptest.Server running internal/relayd lives in client_integration_test.go
-// and exercises the wire format the same way Phase 2 did on the relay side.
+// httptest.Server running internal/relayd lives in integration_test.go and
+// exercises the wire format the same way the relayd tunnel tests do on the
+// relay side.
 package relayclient

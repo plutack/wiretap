@@ -215,7 +215,8 @@ func (s *Server) handleIngress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If a tunnel is currently attached for this project, push the webhook
-	// straight down so the PC sees it immediately (Phase 2 task).
+	// straight down so the PC sees it immediately rather than waiting for a
+	// reconnect.
 	s.pushIfTunnelAttached(r.Context(), project, row)
 
 	writeJSON(w, http.StatusOK, api.IngressResponse{Seq: seq})

@@ -17,7 +17,7 @@ import (
 	"github.com/plutack/wiretap/internal/testutil"
 )
 
-// This file runs the Phase 3 integration contract end-to-end:
+// This file runs the relay-client integration contract end-to-end:
 //   relayd (httptest) + relayclient + two in-memory SQLite DBs
 //   app POSTs webhook to relay -> PC stores it locally -> ACKs ->
 //   relay's acked_seq advances. Across real WebSocket transport.
@@ -86,8 +86,8 @@ func wsURL(hs *httptest.Server) string {
 	return u.String()
 }
 
-// TestPhase3_HappyPath is the symmetric mirror of Phase 2's tunnel test:
-// the full relayd + relayclient contract across two in-memory SQLite DBs.
+// TestClientRelay_HappyPath is the symmetric mirror of the relayd tunnel
+// test: the full relayd + relayclient contract across two in-memory SQLite DBs.
 //
 // Steps:
 //  1. relayd seeded with c1/project-a
@@ -97,7 +97,7 @@ func wsURL(hs *httptest.Server) string {
 //  5. PC stores it in its local SQLite
 //  6. PC sends ACK{up_to_seq:1}
 //  7. relayd's projects.acked_seq advances to 1
-func TestPhase3_HappyPath(t *testing.T) {
+func TestClientRelay_HappyPath(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -164,7 +164,7 @@ func TestPhase3_HappyPath(t *testing.T) {
 	}
 }
 
-// TestPhase3_OfflineIngressStreamsOnConnect confirms store-and-forward:
+// TestClientRelay_OfflineIngressStreamsOnConnect confirms store-and-forward:
 // when webhooks arrive at the relay's HTTP ingress while NO tunnel is
 // attached, the relay stores them in its SQLite. When the PC then connects
 // and HELLOs with last_seqs.project-a=0, the relay's HandleTunnel pumps
@@ -173,7 +173,7 @@ func TestPhase3_HappyPath(t *testing.T) {
 //
 // This is the contract that makes the relay survive PC downtime — the
 // whole point of the ack-cursor pattern.
-func TestPhase3_OfflineIngressStreamsOnConnect(t *testing.T) {
+func TestClientRelay_OfflineIngressStreamsOnConnect(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

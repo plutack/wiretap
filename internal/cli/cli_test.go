@@ -43,7 +43,7 @@ func withTempConfigManager(t *testing.T) string {
 func TestNewRootCmd_BuildsTree(t *testing.T) {
 	t.Parallel()
 	root := NewRootCmd("dev")
-	// We expect exactly two top-level subcommands at this phase.
+	// We expect exactly two top-level subcommands right now (version, config).
 	names := subcommandNames(root)
 	if len(names) != 2 {
 		t.Fatalf("top-level subcommands = %v, want exactly 2", names)
