@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -246,6 +247,52 @@ func TestRelayStore_NextWebhookSeq_UnknownProject(t *testing.T) {
 	s := freshRelayStore(t)
 	if _, err := s.NextWebhookSeq(ctx, "ghost"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestRelayStore_InsertAndRetrieve_Webhook_RawHeadersAndBodyPreserved(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := freshRelayStore(t)
+	if err := s.CreateClient(ctx, "c1", "t", "", fixedTime); err != nil {
+		t.Fatalf("CreateClient: %v", err)
+	}
+	if err := s.BindProject(ctx, "project-a", "c1", fixedTime); err != nil {
+		t.Fatalf("BindProject: %v", err)
+	}
+	seq, err := s.NextWebhookSeq(ctx, "project-a")
+	if err != nil {
+		t.Fatalf("NextWebhookSeq: %v", err)
+	}
+	// Raw header block with a duplicate header, exactly as a sender would emit.
+	rawHeaders := []byte("X-Forwarded-For: 10.0.0.1\r\nX-Forwarded-For: 10.0.0.2\r\nContent-Type: application/json\r\n")
+	// Binary-ish body to confirm BLOB byte-exactness.
+	body := []byte{0x00, 0x01, 0xFF, 'h', 'e', 'l', 'l', 'o'}
+	w := WebhookRow{
+		Project: "project-a", Seq: seq,
+		ReceivedAt: fixedTime, SourceIP: "10.0.0.1", Method: "POST",
+		Path: "/orders/42", HeadersJSON: `{"X-Forwarded-For":["10.0.0.1","10.0.0.2"],"Content-Type":["application/json"]}`,
+		RawHeaders: rawHeaders, Body: body,
+	}
+	if err := s.InsertWebhook(ctx, w); err != nil {
+		t.Fatalf("InsertWebhook: %v", err)
+	}
+	got, err := s.WebhooksAfter(ctx, "project-a", 0)
+	if err != nil {
+		t.Fatalf("WebhooksAfter: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d rows, want 1", len(got))
+	}
+	row := got[0]
+	if !bytes.Equal(row.RawHeaders, rawHeaders) {
+		t.Errorf("RawHeaders mismatch\n want %q\n  got %q", rawHeaders, row.RawHeaders)
+	}
+	if !bytes.Equal(row.Body, body) {
+		t.Errorf("Body mismatch\n want %x\n  got %x", body, row.Body)
+	}
+	if row.Method != "POST" {
+		t.Errorf("Method = %q, want POST", row.Method)
 	}
 }
 

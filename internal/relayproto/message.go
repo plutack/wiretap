@@ -14,8 +14,6 @@ import (
 	"fmt"
 )
 
-// Encode serializes m to JSON. The result is suitable for a single
-// WebSocket text/binary frame.
 // Type is the message discriminator carried in the JSON "type" field.
 type Type string
 
@@ -89,11 +87,15 @@ type OK struct {
 	ResumeFrom map[string]int64 `json:"resume_from"`
 }
 
-// Push delivers a single webhook to the PC. Headers use the net/http shape
-// (map[string][]string) so the local app can reconstruct an http.Header
-// directly. Body is a raw byte slice; encoding/json marshals []byte as
-// base64 automatically, preserving arbitrary binary payloads. ReceivedAt is
-// a unix-seconds timestamp carried through from the relay's store.
+// Push delivers a single webhook to the PC.
+//
+// Headers is the parsed http.Header (map[string][]string) so the local app
+// can reconstruct an http.Header directly. RawHeaders is the raw header
+// block as received by the relay (CRLF-joined, preserving ordering and
+// duplicate headers). Body is the raw request body, byte-exact;
+// encoding/json marshals []byte as base64 automatically, preserving
+// arbitrary binary payloads. ReceivedAt is a unix-seconds timestamp
+// carried through from the relay's store.
 type Push struct {
 	Base
 	Project    string              `json:"project"`
@@ -101,6 +103,7 @@ type Push struct {
 	Method     string              `json:"method"`
 	Path       string              `json:"path"`
 	Headers    map[string][]string `json:"headers"`
+	RawHeaders []byte              `json:"raw_headers,omitempty"`
 	Body       []byte              `json:"body"`
 	ReceivedAt int64               `json:"received_at"`
 	SourceIP   string              `json:"source_ip"`
@@ -114,8 +117,8 @@ type Error struct {
 	Message string `json:"message"`
 }
 
-// Encode serializes m to JSON. The result is suitable for a single
-// WebSocket text/binary frame.
+// Encode serializes m to JSON. The result is suitable for a single WebSocket
+// text/binary frame.
 func Encode(m Message) ([]byte, error) {
 	if m == nil {
 		return nil, fmt.Errorf("relayproto: encode: nil message")

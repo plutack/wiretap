@@ -20,6 +20,14 @@ CREATE TABLE IF NOT EXISTS projects (
 
 -- Webhooks received at the relay, awaiting or already delivered over the
 -- tunnel. (project, seq) is the natural key for dedup and cursor resume.
+-- Webhooks received at the relay, awaiting or already delivered over the
+-- tunnel. (project, seq) is the natural key for dedup and cursor resume.
+--
+-- headers      -- parsed http.Header as JSON (queryable, lossy on order)
+-- raw_headers  -- the raw header block exactly as received (BLOB). Preserves
+--                 ordering and duplicate headers (X-Forwarded-For: a\r\n...
+--                 X-Forwarded-For: b). Used for faithful replay and display.
+-- body         -- raw request body, byte-exact (BLOB).
 CREATE TABLE IF NOT EXISTS webhooks (
     project      TEXT NOT NULL REFERENCES projects(path) ON DELETE CASCADE,
     seq          INTEGER NOT NULL,
@@ -28,6 +36,7 @@ CREATE TABLE IF NOT EXISTS webhooks (
     method       TEXT NOT NULL,
     path         TEXT,
     headers      TEXT NOT NULL,
+    raw_headers  BLOB,
     body         BLOB,
     delivered    INTEGER NOT NULL DEFAULT 0,
     delivered_at INTEGER,

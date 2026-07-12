@@ -34,9 +34,9 @@ func (s *PCStore) DB() *sql.DB { return s.db }
 func (s *PCStore) StoreWebhook(ctx context.Context, w WebhookRow, storedAt time.Time) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO webhooks
-		 (project, seq, received_at, stored_at, source_ip, method, path, headers, body)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		w.Project, w.Seq, w.ReceivedAt.Unix(), storedAt.Unix(), w.SourceIP, w.Method, w.Path, w.HeadersJSON, w.Body,
+			 (project, seq, received_at, stored_at, source_ip, method, path, headers, raw_headers, body)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		w.Project, w.Seq, w.ReceivedAt.Unix(), storedAt.Unix(), w.SourceIP, w.Method, w.Path, w.HeadersJSON, w.RawHeaders, w.Body,
 	)
 	if err != nil {
 		return false, fmt.Errorf("PCStore.StoreWebhook %s/%d: %w", w.Project, w.Seq, err)
@@ -62,8 +62,8 @@ func (s *PCStore) LastSeq(ctx context.Context, project string) (int64, error) {
 // Webhooks lists the most recent `limit` webhooks for `project` (or all
 // projects when project is empty), newest-first. Used by the TUI/GUI.
 func (s *PCStore) Webhooks(ctx context.Context, project string, limit int) ([]WebhookRow, error) {
-	q := `SELECT project, seq, received_at, COALESCE(source_ip, ''), method, COALESCE(path, ''), headers, body
-	      FROM webhooks`
+	q := `SELECT project, seq, received_at, COALESCE(source_ip, ''), method, COALESCE(path, ''), headers, COALESCE(raw_headers, ''), body
+		      FROM webhooks`
 	args := []any{}
 	if project != "" {
 		q += " WHERE project = ?"
@@ -84,9 +84,11 @@ func (s *PCStore) Webhooks(ctx context.Context, project string, limit int) ([]We
 	for rows.Next() {
 		var w WebhookRow
 		var received int64
-		if err := rows.Scan(&w.Project, &w.Seq, &received, &w.SourceIP, &w.Method, &w.Path, &w.HeadersJSON, &w.Body); err != nil {
+		var rawHeaders []byte
+		if err := rows.Scan(&w.Project, &w.Seq, &received, &w.SourceIP, &w.Method, &w.Path, &w.HeadersJSON, &rawHeaders, &w.Body); err != nil {
 			return nil, fmt.Errorf("PCStore.Webhooks scan: %w", err)
 		}
+		w.RawHeaders = rawHeaders
 		w.ReceivedAt = time.Unix(received, 0).UTC()
 		out = append(out, w)
 	}
@@ -100,18 +102,20 @@ func (s *PCStore) Webhooks(ctx context.Context, project string, limit int) ([]We
 // replay feature: load one row and re-POST it to a target URL.
 func (s *PCStore) WebhookBySeq(ctx context.Context, project string, seq int64) (*WebhookRow, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT project, seq, received_at, COALESCE(source_ip, ''), method, COALESCE(path, ''), headers, body
+		`SELECT project, seq, received_at, COALESCE(source_ip, ''), method, COALESCE(path, ''), headers, COALESCE(raw_headers, ''), body
 		 FROM webhooks WHERE project = ? AND seq = ?`,
 		project, seq,
 	)
 	var w WebhookRow
 	var received int64
-	if err := row.Scan(&w.Project, &w.Seq, &received, &w.SourceIP, &w.Method, &w.Path, &w.HeadersJSON, &w.Body); err != nil {
+	var rawHeaders []byte
+	if err := row.Scan(&w.Project, &w.Seq, &received, &w.SourceIP, &w.Method, &w.Path, &w.HeadersJSON, &rawHeaders, &w.Body); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("PCStore.WebhookBySeq %s/%d: %w", project, seq, ErrNotFound)
 		}
 		return nil, fmt.Errorf("PCStore.WebhookBySeq %s/%d: %w", project, seq, err)
 	}
+	w.RawHeaders = rawHeaders
 	w.ReceivedAt = time.Unix(received, 0).UTC()
 	return &w, nil
 }

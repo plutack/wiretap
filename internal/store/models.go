@@ -26,6 +26,11 @@ type ProjectRow struct {
 
 // WebhookRow is a row in the webhooks table (both sides use the same shape;
 // the PC store omits Delivered/DeliveredAt).
+//
+// HeadersJSON is the parsed http.Header as JSON (queryable, lossy on order).
+// RawHeaders is the raw header block exactly as received by the relay
+// (CRLF-joined lines, preserving duplicate headers); used for faithful
+// replay and display. Body is the raw request body, byte-exact.
 type WebhookRow struct {
 	Project     string
 	Seq         int64
@@ -33,8 +38,9 @@ type WebhookRow struct {
 	SourceIP    string
 	Method      string
 	Path        string
-	HeadersJSON string // raw JSON blob; callers (de)serialize
-	Body        []byte
+	HeadersJSON string    // parsed http.Header as JSON
+	RawHeaders  []byte    // raw header block as received; preserves order+dupes
+	Body        []byte    // raw request body, byte-exact
 	Delivered   bool      // PC side always false
 	DeliveredAt time.Time // PC side always zero
 }

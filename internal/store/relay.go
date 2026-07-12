@@ -205,11 +205,14 @@ func (s *RelayStore) NextWebhookSeq(ctx context.Context, project string) (int64,
 // InsertWebhook stores an inbound webhook. Caller must have allocated seq
 // via NextWebhookSeq (or otherwise guaranteed uniqueness); this method
 // does not allocate. receivedAt stamps the relay's receipt time.
+//
+// Both Body and RawHeaders are stored as BLOBs, byte-exact, so replay and
+// debug display show exactly what the relay received.
 func (s *RelayStore) InsertWebhook(ctx context.Context, w WebhookRow) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO webhooks (project, seq, received_at, source_ip, method, path, headers, body, delivered)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-		w.Project, w.Seq, w.ReceivedAt.Unix(), w.SourceIP, w.Method, w.Path, w.HeadersJSON, w.Body,
+		`INSERT INTO webhooks (project, seq, received_at, source_ip, method, path, headers, raw_headers, body, delivered)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+		w.Project, w.Seq, w.ReceivedAt.Unix(), w.SourceIP, w.Method, w.Path, w.HeadersJSON, w.RawHeaders, w.Body,
 	)
 	return wrapExec(err, "InsertWebhook", fmt.Sprintf("%s/%d", w.Project, w.Seq))
 }
@@ -218,10 +221,10 @@ func (s *RelayStore) InsertWebhook(ctx context.Context, w WebhookRow) error {
 // afterSeq, in ascending seq order. This is the tunnel's sweep query.
 func (s *RelayStore) WebhooksAfter(ctx context.Context, project string, afterSeq int64) ([]WebhookRow, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT project, seq, received_at, COALESCE(source_ip, ''), method, COALESCE(path, ''), headers, body
-		 FROM webhooks
-		 WHERE project = ? AND seq > ?
-		 ORDER BY seq ASC`,
+		`SELECT project, seq, received_at, COALESCE(source_ip, ''), method, COALESCE(path, ''), headers, COALESCE(raw_headers, ''), body
+			 FROM webhooks
+			 WHERE project = ? AND seq > ?
+			 ORDER BY seq ASC`,
 		project, afterSeq,
 	)
 	if err != nil {
@@ -232,9 +235,11 @@ func (s *RelayStore) WebhooksAfter(ctx context.Context, project string, afterSeq
 	for rows.Next() {
 		var w WebhookRow
 		var received int64
-		if err := rows.Scan(&w.Project, &w.Seq, &received, &w.SourceIP, &w.Method, &w.Path, &w.HeadersJSON, &w.Body); err != nil {
+		var rawHeaders []byte
+		if err := rows.Scan(&w.Project, &w.Seq, &received, &w.SourceIP, &w.Method, &w.Path, &w.HeadersJSON, &rawHeaders, &w.Body); err != nil {
 			return nil, fmt.Errorf("WebhooksAfter %q scan: %w", project, err)
 		}
+		w.RawHeaders = rawHeaders
 		w.ReceivedAt = time.Unix(received, 0).UTC()
 		out = append(out, w)
 	}

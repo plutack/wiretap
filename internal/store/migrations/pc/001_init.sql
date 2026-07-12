@@ -5,6 +5,11 @@
 -- Webhooks pushed to this PC by the relay. (project, seq) is the natural
 -- dedup key: a reconnect re-pushes rows the PC already has, so inserts are
 -- INSERT OR IGNORE.
+--
+-- headers      -- parsed http.Header as JSON (queryable)
+-- raw_headers  -- raw header block as received by the relay and forwarded
+--                 over the tunnel. Preserves ordering and duplicates.
+-- body         -- raw request body, byte-exact (BLOB).
 CREATE TABLE IF NOT EXISTS webhooks (
     project      TEXT NOT NULL,
     seq          INTEGER NOT NULL,
@@ -13,7 +18,8 @@ CREATE TABLE IF NOT EXISTS webhooks (
     source_ip    TEXT,
     method       TEXT,
     path         TEXT,
-    headers     TEXT,
+    headers      TEXT,
+    raw_headers  BLOB,
     body         BLOB,
     PRIMARY KEY (project, seq)
 );

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -20,6 +21,43 @@ func freshPCStore(t *testing.T) *PCStore {
 		t.Fatalf("MigratePC: %v", err)
 	}
 	return NewPCStore(db)
+}
+
+func TestPCStore_StoreWebhook_RawHeadersAndBodyPreserved(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := freshPCStore(t)
+	rawHeaders := []byte("X-Forwarded-For: 10.0.0.1\r\nX-Forwarded-For: 10.0.0.2\r\nX-Event: created\r\n")
+	body := []byte{0x00, 0x01, 0xFF, 'b', 'i', 'n'}
+	inserted, err := s.StoreWebhook(ctx, WebhookRow{
+		Project: "project-a", Seq: 7, ReceivedAt: fixedTime,
+		Method: "POST", Path: "/x", HeadersJSON: `{"X-Event":["created"]}`,
+		RawHeaders: rawHeaders, Body: body,
+	}, fixedTime)
+	if err != nil || !inserted {
+		t.Fatalf("StoreWebhook: inserted=%v err=%v", inserted, err)
+	}
+	row, err := s.WebhookBySeq(ctx, "project-a", 7)
+	if err != nil {
+		t.Fatalf("WebhookBySeq: %v", err)
+	}
+	if !bytes.Equal(row.RawHeaders, rawHeaders) {
+		t.Errorf("RawHeaders mismatch\n want %q\n  got %q", rawHeaders, row.RawHeaders)
+	}
+	if !bytes.Equal(row.Body, body) {
+		t.Errorf("Body mismatch\n want %x\n  got %x", body, row.Body)
+	}
+	// Also confirm the list query surfaces raw_headers.
+	rows, err := s.Webhooks(ctx, "project-a", 0)
+	if err != nil {
+		t.Fatalf("Webhooks: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	if !bytes.Equal(rows[0].RawHeaders, rawHeaders) {
+		t.Errorf("list query RawHeaders mismatch")
+	}
 }
 
 func TestPCStore_StoreWebhook_AndLastSeq(t *testing.T) {
