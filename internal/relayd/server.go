@@ -1,6 +1,7 @@
 package relayd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -472,6 +473,29 @@ func strconvParseInt(s string) (int64, error) {
 	_, err := fmt.Sscanf(s, "%d", &n)
 	return n, err
 }
+
+// AckedSeqThroughStore reports the relay's current acked_seq cursor for
+// project. Exported so cross-package integration tests (see
+// internal/relayclient/integration_test.go) can assert on it without poking
+// private fields. Production code should prefer RelayStore.AckedSeq
+// directly via Server.Store().
+func (s *Server) AckedSeqThroughStore(ctx context.Context, project string) (int64, error) {
+	return s.store.AckedSeq(ctx, project)
+}
+
+// PendingCountThroughStore reports the number of undelivered webhooks for
+// project on the relay. Same rationale as AckedSeqThroughStore: exported so
+// cross-package integration tests can assert without breaking the
+// encapsulation of the private store field.
+func (s *Server) PendingCountThroughStore(ctx context.Context, project string) (int64, error) {
+	return s.store.PendingCount(ctx, project)
+}
+
+// Store exposes the relay's underlying RelayStore. Production callers should
+// use it sparingly; prefer adding a domain method to Server. Cross-package
+// tests use it for ad-hoc seeding (Store.CreateClient, Store.BindProject,
+// Store.StoreWebhook) without re-implementing those helpers.
+func (s *Server) Store() *store.RelayStore { return s.store }
 
 // pathClean normalises a path for logging; safe wrapper around path.Clean.
 func pathClean(p string) string { return path.Clean("/" + p) }
