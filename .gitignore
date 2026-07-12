@@ -16,6 +16,13 @@ coverage.txt
 /ui/frontend/wailsjs/
 /build/
 
+# Node deps (commitlint + future lint tooling). package.json and
+# package-lock.json are committed; node_modules is per-developer.
+node_modules/
+
+# Commitlint cache.
+.commitlint-cache/
+
 # Editor / OS
 .DS_Store
 .idea/

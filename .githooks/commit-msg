@@ -1,0 +1,32 @@
+#!/usr/bin/env sh
+# commit-msg hook: run commitlint against the new commit message.
+#
+# This hook fires because `git config core.hooksPath .githooks` is set in
+# the repo. Use `npm install` (or `npm ci`) once to fetch commitlint into
+# ./node_modules; without it the hook will fail instructively.
+#
+# To bypass for a one-off commit: `git commit --no-verify`. Do not make a
+# habit of this; the convention shields the project's changelog readers.
+
+set -e
+
+# Resolve the repo root regardless of where the hook was invoked from.
+hook_dir=$(cd "$(dirname "$0")/.." && pwd)
+
+# commitlint reads the message file path as its first positional argument.
+msg_file="$1"
+if [ -z "$msg_file" ]; then
+  echo "commit-msg hook: no message file passed" >&2
+  exit 1
+fi
+
+# Run commitlint via the local install; missing deps fail instructively
+# rather than fetching from the network silently.
+cd "$hook_dir"
+if ! [ -x "./node_modules/.bin/commitlint" ]; then
+  echo "commitlint is not installed; run \`npm install\` once in the repo root." >&2
+  echo "(Skipping this commit is allowed via: git commit --no-verify)" >&2
+  exit 1
+fi
+
+exec ./node_modules/.bin/commitlint --edit "$msg_file"
