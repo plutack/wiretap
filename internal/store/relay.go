@@ -223,12 +223,16 @@ func (s *RelayStore) AckedSeq(ctx context.Context, project string) (int64, error
 }
 
 // NextWebhookSeq reserves the next sequence number for a project atomically.
-// It updates projects.acked_seq to be the max of current and (max+1) and
-// returns the next seq. Implemented as a single UPDATE ... RETURNING when
-// supported (modernc.org/sqlite supports it) — wrapped in a tx for clarity.
 //
-// The next seq is acked_seq + 1 (acked_seq doubles as "highest allocated");
-// we bump it under a transaction so concurrent inserts cannot share a seq.
+// Allocation reads projects.next_seq and bumps it under a transaction so
+// concurrent ingress cannot share a seq. This is deliberately decoupled from
+// projects.acked_seq — that column tracks the PC's delivery cursor (see
+// MarkDelivered). Conflating them would make the relay think every
+// freshly-ingressed webhook was already acked.
+//
+// SQLite's single-writer model serialises transactions, so we do not need
+// an explicit advisory lock; BEGIN IMMEDIATE could be added later if a
+// highly contended relay ever shows SQLITE_BUSY under load.
 func (s *RelayStore) NextWebhookSeq(ctx context.Context, project string) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -236,25 +240,25 @@ func (s *RelayStore) NextWebhookSeq(ctx context.Context, project string) (int64,
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	var seq int64
+	var nextSeq int64
 	if err := tx.QueryRowContext(ctx,
-		"SELECT acked_seq FROM projects WHERE path = ?", project,
-	).Scan(&seq); err != nil {
+		"SELECT next_seq FROM projects WHERE path = ?", project,
+	).Scan(&nextSeq); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, fmt.Errorf("NextWebhookSeq %q: %w", project, ErrNotFound)
 		}
 		return 0, fmt.Errorf("NextWebhookSeq %q select: %w", project, err)
 	}
-	seq++
+	allocated := nextSeq
 	if _, err := tx.ExecContext(ctx,
-		"UPDATE projects SET acked_seq = ? WHERE path = ?", seq, project,
+		"UPDATE projects SET next_seq = ? WHERE path = ?", nextSeq+1, project,
 	); err != nil {
 		return 0, fmt.Errorf("NextWebhookSeq %q update: %w", project, err)
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("NextWebhookSeq %q commit: %w", project, err)
 	}
-	return seq, nil
+	return allocated, nil
 }
 
 // InsertWebhook stores an inbound webhook. Caller must have allocated seq
@@ -357,16 +361,65 @@ func (s *RelayStore) ListWebhooks(ctx context.Context, project string, afterSeq,
 	return out, maxSeq + 1, nil
 }
 
+// WebhookBySeq returns a specific webhook by (project, seq). Used by the
+// replay route to re-push an already-delivered webhook down the tunnel.
+func (s *RelayStore) WebhookBySeq(ctx context.Context, project string, seq int64) (*WebhookRow, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT project, seq, received_at, COALESCE(source_ip, ''), method, COALESCE(path, ''), headers, COALESCE(raw_headers, ''), body
+		 FROM webhooks WHERE project = ? AND seq = ?`,
+		project, seq,
+	)
+	var w WebhookRow
+	var received int64
+	var rawHeaders []byte
+	if err := row.Scan(&w.Project, &w.Seq, &received, &w.SourceIP, &w.Method, &w.Path, &w.HeadersJSON, &rawHeaders, &w.Body); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("WebhookBySeq %s/%d: %w", project, seq, ErrNotFound)
+		}
+		return nil, fmt.Errorf("WebhookBySeq %s/%d: %w", project, seq, err)
+	}
+	w.RawHeaders = rawHeaders
+	w.ReceivedAt = time.Unix(received, 0).UTC()
+	return &w, nil
+}
+
 // MarkDelivered flips the delivered flag on rows up to and including
-// upToSeq. Also stamps delivered_at. Idempotent: re-acking an old seq is a
-// no-op (no rows match").
+// upToSeq and stamps delivered_at. It also advances projects.acked_seq to
+// max(acked_seq, upToSeq) — the relay's view of the PC's cursor — and is
+// idempotent: re-acking an old seq is a no-op (no rows match the WHERE, and
+// the GREATEST clamp keeps acked_seq from going backwards).
+//
+// The work runs in a single transaction so the delivered flag and the
+// cursor move atomically; an acked webhook can never be visibly undelivered
+// to a later reader.
 func (s *RelayStore) MarkDelivered(ctx context.Context, project string, upToSeq int64, now time.Time) error {
-	_, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("MarkDelivered %q begin: %w", project, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE webhooks SET delivered = 1, delivered_at = ?
 		 WHERE project = ? AND seq <= ? AND delivered = 0`,
 		now.Unix(), project, upToSeq,
-	)
-	return wrapExec(err, "MarkDelivered", fmt.Sprintf("%s/%d", project, upToSeq))
+	); err != nil {
+		return fmt.Errorf("MarkDelivered %q update rows: %w", project, err)
+	}
+	// Advance the cursor monotonically: only move forward when the new seq
+	// is greater than the current value. SQLite's MAX() over a constant works
+	// for this clamp without a separate SELECT.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE projects SET acked_seq = ?
+		 WHERE path = ? AND ? > acked_seq`,
+		upToSeq, project, upToSeq,
+	); err != nil {
+		return fmt.Errorf("MarkDelivered %q update cursor: %w", project, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("MarkDelivered %q commit: %w", project, err)
+	}
+	return nil
 }
 
 // PendingCount returns the number of undelivered rows for a project. Useful

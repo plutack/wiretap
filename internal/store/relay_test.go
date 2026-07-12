@@ -232,12 +232,61 @@ func TestRelayStore_NextWebhookSeq_Monotonic(t *testing.T) {
 			t.Errorf("NextWebhookSeq[%d] = %d, want %d", i, got, want)
 		}
 	}
+	// acked_seq is the PC's delivery cursor, NOT the allocation counter.
+	// Five un-acked allocations must leave it at 0. Earlier versions conflated
+	// these two columns; this assertion locks the corrected semantics so the
+	// bug cannot silently come back.
 	seq, err := s.AckedSeq(ctx, "project-a")
 	if err != nil {
 		t.Fatalf("AckedSeq: %v", err)
 	}
-	if seq != 5 {
-		t.Errorf("AckedSeq = %d, want 5", seq)
+	if seq != 0 {
+		t.Errorf("AckedSeq = %d, want 0 (allocation must not advance the delivery cursor)", seq)
+	}
+}
+
+// TestRelayStore_NextWebhookSeq_AndMarkDelivered_AreDecoupled confirms the
+// fixed semantics end-to-end: allocating 3 webhooks, acking only up to seq=2,
+// leaves acked_seq=2 while NextWebhookSeq continues to allocate 4, 5, ...
+// This is the invariant the tunnel protocol relies on.
+func TestRelayStore_NextWebhookSeq_AndMarkDelivered_AreDecoupled(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := freshRelayStore(t)
+	if err := s.CreateClient(ctx, "c1", "t", "", fixedTime); err != nil {
+		t.Fatalf("CreateClient: %v", err)
+	}
+	if err := s.BindProject(ctx, "project-a", "c1", fixedTime); err != nil {
+		t.Fatalf("BindProject: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		seq, err := s.NextWebhookSeq(ctx, "project-a")
+		if err != nil {
+			t.Fatalf("NextWebhookSeq[%d]: %v", i, err)
+		}
+		if err := s.InsertWebhook(ctx, WebhookRow{
+			Project: "project-a", Seq: seq, ReceivedAt: fixedTime,
+			Method: "POST", HeadersJSON: "{}",
+		}); err != nil {
+			t.Fatalf("InsertWebhook[%d]: %v", i, err)
+		}
+	}
+	if err := s.MarkDelivered(ctx, "project-a", 2, fixedTime.Add(time.Minute)); err != nil {
+		t.Fatalf("MarkDelivered: %v", err)
+	}
+	if seq, _ := s.AckedSeq(ctx, "project-a"); seq != 2 {
+		t.Errorf("acked_seq after ack=2 = %d, want 2", seq)
+	}
+	// Further allocations continue monotonically and do not touch the cursor.
+	next, err := s.NextWebhookSeq(ctx, "project-a")
+	if err != nil {
+		t.Fatalf("NextWebhookSeq after ack: %v", err)
+	}
+	if next != 4 {
+		t.Errorf("next allocation = %d, want 4 (3 already allocated)", next)
+	}
+	if seq, _ := s.AckedSeq(ctx, "project-a"); seq != 2 {
+		t.Errorf("acked_seq touched by allocation = %d, want unchanged at 2", seq)
 	}
 }
 

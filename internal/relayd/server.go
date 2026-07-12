@@ -1,7 +1,6 @@
 package relayd
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,6 +26,7 @@ type Server struct {
 	clock      testutil.Clock
 	idgen      testutil.IDGen
 	version    string
+	tunnels    *TunnelRegistry
 }
 
 // Option configures a Server.
@@ -55,6 +55,7 @@ func NewServer(st *store.RelayStore, opts ...Option) *Server {
 		clock:   testutil.SystemClock{},
 		idgen:   testutil.HexIDGen{},
 		version: "dev",
+		tunnels: NewTunnelRegistry(),
 	}
 	for _, o := range opts {
 		o(s)
@@ -82,6 +83,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /admin/projects", s.requireAdmin(s.handleListProjects))
 	mux.HandleFunc("POST /admin/projects", s.requireAdmin(s.handleReclaimProject))
 	mux.HandleFunc("GET /admin/projects/{project}/webhooks", s.requireAdmin(s.handleListWebhooks))
+	// WebSocket tunnel. Auth via HTTP basic auth on the upgrade request.
+	mux.HandleFunc("GET /tunnel", s.HandleTunnel)
 	// Catch-all for ingress. The first segment of the path is the project;
 	// everything after is preserved as the webhook's "path" column.
 	mux.HandleFunc("/", s.handleIngress)
@@ -440,16 +443,6 @@ func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {
 		Webhooks:     webhooks,
 		NextAfterSeq: next,
 	})
-}
-
-// pushIfTunnelAttached forwards a freshly-stored webhook to the owning
-// client's tunnel if one is connected. In Phase 2's first commit this is a
-// no-op stub; the tunnel package wires this when the WebSocket lands.
-func (s *Server) pushIfTunnelAttached(ctx context.Context, project string, row store.WebhookRow) {
-	// Implemented in tunnel.go.
-	_ = ctx
-	_ = project
-	_ = row
 }
 
 // parseInt64Query parses a query parameter as int64, returning fallback on

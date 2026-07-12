@@ -11,10 +11,17 @@ CREATE TABLE IF NOT EXISTS clients (
 );
 
 -- Project paths claimed by clients; e.g. "project-a".
+--
+-- next_seq   -- monotonic allocation counter; the next webhook seq to hand
+--              out. Bumped by NextWebhookSeq. Decoupled from acked_seq so
+--              that allocating a seq does not imply the PC has acked it.
+-- acked_seq  -- the highest seq the owning PC has ACKed. Advanced by
+--              MarkDelivered; never moved by allocation alone.
 CREATE TABLE IF NOT EXISTS projects (
     path         TEXT PRIMARY KEY,
     client_id    TEXT NOT NULL REFERENCES clients(client_id) ON DELETE CASCADE,
     created_at   INTEGER NOT NULL,
+    next_seq     INTEGER NOT NULL DEFAULT 1,
     acked_seq    INTEGER NOT NULL DEFAULT 0
 );
 
