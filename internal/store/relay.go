@@ -63,6 +63,35 @@ func (s *RelayStore) Client(ctx context.Context, clientID string) (*ClientRow, e
 	return &c, nil
 }
 
+// ListClients returns every registered client, ordered by creation.
+// Used by GET /admin/clients. last_seen_at is 0 (zero time) when NULL.
+func (s *RelayStore) ListClients(ctx context.Context, includeProjects bool) ([]ClientRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		"SELECT client_id, client_token, COALESCE(display_name, ''), created_at, COALESCE(last_seen_at, 0) FROM clients ORDER BY created_at",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("ListClients: %w", err)
+	}
+	defer rows.Close()
+	var out []ClientRow
+	for rows.Next() {
+		var c ClientRow
+		var created, lastSeen int64
+		if err := rows.Scan(&c.ClientID, &c.ClientToken, &c.DisplayName, &created, &lastSeen); err != nil {
+			return nil, fmt.Errorf("ListClients scan: %w", err)
+		}
+		c.CreatedAt = time.Unix(created, 0).UTC()
+		if lastSeen > 0 {
+			c.LastSeenAt = time.Unix(lastSeen, 0).UTC()
+		}
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ListClients rows: %w", err)
+	}
+	return out, nil
+}
+
 // TouchClient updates last_seen_at. Used by the tunnel loop on connect.
 func (s *RelayStore) TouchClient(ctx context.Context, clientID string, now time.Time) error {
 	_, err := s.db.ExecContext(ctx,
@@ -152,6 +181,32 @@ func (s *RelayStore) DeleteClient(ctx context.Context, clientID string) error {
 		return fmt.Errorf("DeleteClient %q: %w", clientID, ErrNotFound)
 	}
 	return nil
+}
+
+// ListProjects returns every claimed project path with its owning client and
+// acked seq, ordered by path. Used by GET /admin/projects.
+func (s *RelayStore) ListProjects(ctx context.Context) ([]ProjectRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		"SELECT path, client_id, created_at, acked_seq FROM projects ORDER BY path",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("ListProjects: %w", err)
+	}
+	defer rows.Close()
+	var out []ProjectRow
+	for rows.Next() {
+		var p ProjectRow
+		var created int64
+		if err := rows.Scan(&p.Path, &p.ClientID, &created, &p.AckedSeq); err != nil {
+			return nil, fmt.Errorf("ListProjects scan: %w", err)
+		}
+		p.CreatedAt = time.Unix(created, 0).UTC()
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ListProjects rows: %w", err)
+	}
+	return out, nil
 }
 
 // AckedSeq returns the currently-acked sequence number for a project.
@@ -247,6 +302,59 @@ func (s *RelayStore) WebhooksAfter(ctx context.Context, project string, afterSeq
 		return nil, fmt.Errorf("WebhooksAfter %q rows: %w", project, err)
 	}
 	return out, nil
+}
+
+// ListWebhooks returns up to limit webhooks for project with seq <=
+// BeforeSeq (descending), starting from afterSeq (ascending) when set. Used
+// by GET /admin/projects/:p/webhooks for paginated history reads.
+//
+// Parameters:
+//   - afterSeq: only return rows with seq > this (0 = from start)
+//   - limit:    page size; default 50 when 0
+//
+// Returns rows in ascending seq order plus the next cursor (next_after_seq
+// is the highest seq returned + 1). When fewer rows than limit are returned,
+// NextAfterSeq is 0 to signal end-of-data.
+func (s *RelayStore) ListWebhooks(ctx context.Context, project string, afterSeq, limit int64) ([]WebhookRow, int64, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT project, seq, received_at, COALESCE(source_ip, ''), method, COALESCE(path, ''), headers, COALESCE(raw_headers, ''), body
+		 FROM webhooks
+		 WHERE project = ? AND seq > ?
+		 ORDER BY seq ASC
+		 LIMIT ?`,
+		project, afterSeq, limit,
+	)
+	if err != nil {
+		return nil, 0, fmt.Errorf("ListWebhooks %q: %w", project, err)
+	}
+	defer rows.Close()
+	var out []WebhookRow
+	var maxSeq int64
+	for rows.Next() {
+		var w WebhookRow
+		var received int64
+		var rawHeaders []byte
+		if err := rows.Scan(&w.Project, &w.Seq, &received, &w.SourceIP, &w.Method, &w.Path, &w.HeadersJSON, &rawHeaders, &w.Body); err != nil {
+			return nil, 0, fmt.Errorf("ListWebhooks %q scan: %w", project, err)
+		}
+		w.RawHeaders = rawHeaders
+		w.ReceivedAt = time.Unix(received, 0).UTC()
+		if w.Seq > maxSeq {
+			maxSeq = w.Seq
+		}
+		out = append(out, w)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("ListWebhooks %q rows: %w", project, err)
+	}
+	if int64(len(out)) < limit {
+		// Less than a full page means end of data.
+		return out, 0, nil
+	}
+	return out, maxSeq + 1, nil
 }
 
 // MarkDelivered flips the delivered flag on rows up to and including
