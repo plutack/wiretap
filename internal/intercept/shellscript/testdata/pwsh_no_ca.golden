@@ -1,0 +1,23 @@
+    $Env:WIRETAP_ACTIVE = "1"
+    $Env:HTTP_PROXY = "http://127.0.0.1:8888"
+    $Env:HTTPS_PROXY = "http://127.0.0.1:8888"
+    $Env:NO_PROXY = "localhost,127.0.0.1"
+    $Env:PATH = "/home/user/.local/share/wiretap/override-bin" + ";" + $Env:PATH
+    $__WIRETAP_OLD_ENV = Get-ChildItem Env:
+    $PSDefaultParameterValues["invoke-webrequest:proxy"] = $Env:HTTP_PROXY
+    $PSDefaultParameterValues["invoke-webrequest:SkipCertificateCheck"] = $True
+
+    function Stop-Interception {
+        foreach ($var in (Get-ChildItem Env:)) {
+            [System.Environment]::SetEnvironmentVariable($var.Name, $null)
+        }
+        foreach ($var in $__WIRETAP_OLD_ENV) {
+            [System.Environment]::SetEnvironmentVariable($var.Name, $var.Value)
+        }
+        $PSDefaultParameterValues.Remove("invoke-webrequest:proxy")
+        $PSDefaultParameterValues.Remove("invoke-webrequest:SkipCertificateCheck")
+        Write-Host 'wiretap: interception disabled in this shell'
+    }
+    Start-Job -ScriptBlock { Invoke-WebRequest "http://127.0.0.1:9999/callback" -NoProxy -Method 'POST' } | Out-Null
+    Write-Host "wiretap: interception enabled`nTo stop intercepting type " -NoNewline
+    Write-Host "Stop-Interception" -ForegroundColor Red

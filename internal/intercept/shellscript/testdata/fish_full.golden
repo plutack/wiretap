@@ -1,0 +1,31 @@
+    set -x WIRETAP_ACTIVE 1
+    set -x HTTP_PROXY "http://127.0.0.1:8888"
+    set -x HTTPS_PROXY "http://127.0.0.1:8888"
+    set -x NO_PROXY "localhost,127.0.0.1"
+    set -x SSL_CERT_FILE "/home/user/.local/share/wiretap/ca.crt"
+    set -x NODE_EXTRA_CA_CERTS "/home/user/.local/share/wiretap/ca.crt"
+    set -x PATH "/home/user/.local/share/wiretap/override-bin" $PATH
+    set -g __WIRETAP_OLD_PATH $PATH
+    set -g __WIRETAP_OLD_HTTP_PROXY $HTTP_PROXY
+    set -g __WIRETAP_OLD_HTTPS_PROXY $HTTPS_PROXY
+    set -g __WIRETAP_OLD_NO_PROXY $NO_PROXY
+    set -g __WIRETAP_OLD_SSL_CERT_FILE $SSL_CERT_FILE
+    set -g __WIRETAP_OLD_NODE_EXTRA_CA_CERTS $NODE_EXTRA_CA_CERTS
+    function wiretap_stop_interception
+        set -x PATH $__WIRETAP_OLD_PATH
+        set -x HTTP_PROXY $__WIRETAP_OLD_HTTP_PROXY
+        set -x HTTPS_PROXY $__WIRETAP_OLD_HTTPS_PROXY
+        set -x NO_PROXY $__WIRETAP_OLD_NO_PROXY
+        set -x SSL_CERT_FILE $__WIRETAP_OLD_SSL_CERT_FILE
+        set -x NODE_EXTRA_CA_CERTS $__WIRETAP_OLD_NODE_EXTRA_CA_CERTS
+        set -e __WIRETAP_OLD_SSL_CERT_FILE
+        set -e __WIRETAP_OLD_NODE_EXTRA_CA_CERTS
+        set -e __WIRETAP_OLD_PATH __WIRETAP_OLD_HTTP_PROXY __WIRETAP_OLD_HTTPS_PROXY __WIRETAP_OLD_NO_PROXY
+        set -e WIRETAP_ACTIVE
+        echo 'wiretap: interception disabled in this shell'
+    end
+    if command -v curl >/dev/null 2>&1
+        curl --noproxy '*' -X POST "http://127.0.0.1:9999/callback" >/dev/null 2>&1 &
+    end
+    echo 'wiretap: interception enabled'
+    echo 'Run wiretap_stop_interception to stop intercepting in this shell.'

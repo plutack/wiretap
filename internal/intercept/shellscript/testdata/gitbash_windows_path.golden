@@ -1,0 +1,31 @@
+    export WIRETAP_ACTIVE=1
+    export HTTP_PROXY="http://127.0.0.1:8888"
+    export HTTPS_PROXY="http://127.0.0.1:8888"
+    export NO_PROXY="localhost,127.0.0.1"
+    export SSL_CERT_FILE="/home/user/.local/share/wiretap/ca.crt"
+    export NODE_EXTRA_CA_CERTS="/home/user/.local/share/wiretap/ca.crt"
+    export PATH="/c/Users/dev/wiretap/override-bin:$PATH"
+
+    __WIRETAP_OLD_PATH="$PATH"
+    __WIRETAP_OLD_HTTP_PROXY="${HTTP_PROXY:-}"
+    __WIRETAP_OLD_HTTPS_PROXY="${HTTPS_PROXY:-}"
+    __WIRETAP_OLD_NO_PROXY="${NO_PROXY:-}"
+    __WIRETAP_OLD_SSL_CERT_FILE="${SSL_CERT_FILE:-}"
+    __WIRETAP_OLD_NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-}"
+
+    wiretap_stop_interception() {
+        export PATH="$__WIRETAP_OLD_PATH"
+        export HTTP_PROXY="$__WIRETAP_OLD_HTTP_PROXY"
+        export HTTPS_PROXY="$__WIRETAP_OLD_HTTPS_PROXY"
+        export NO_PROXY="$__WIRETAP_OLD_NO_PROXY"
+        export SSL_CERT_FILE="$__WIRETAP_OLD_SSL_CERT_FILE"
+        export NODE_EXTRA_CA_CERTS="$__WIRETAP_OLD_NODE_EXTRA_CA_CERTS"
+        unset __WIRETAP_OLD_PATH __WIRETAP_OLD_HTTP_PROXY __WIRETAP_OLD_HTTPS_PROXY __WIRETAP_OLD_NO_PROXY __WIRETAP_OLD_SSL_CERT_FILE __WIRETAP_OLD_NODE_EXTRA_CA_CERTS
+        unset WIRETAP_ACTIVE
+        echo 'wiretap: interception disabled in this shell'
+    }
+    if command -v curl >/dev/null 2>&1; then
+        (curl --noproxy '*' -X POST "http://127.0.0.1:9999/callback" >/dev/null 2>&1 &) &> /dev/null
+    fi
+    echo 'wiretap: interception enabled'
+    echo 'Run wiretap_stop_interception to stop intercepting in this shell.'

@@ -1,0 +1,25 @@
+    export WIRETAP_ACTIVE=1
+    export HTTP_PROXY="http://127.0.0.1:8888"
+    export HTTPS_PROXY="http://127.0.0.1:8888"
+    export NO_PROXY="localhost,127.0.0.1"
+    export PATH="/home/user/.local/share/wiretap/override-bin:$PATH"
+
+    __WIRETAP_OLD_PATH="$PATH"
+    __WIRETAP_OLD_HTTP_PROXY="${HTTP_PROXY:-}"
+    __WIRETAP_OLD_HTTPS_PROXY="${HTTPS_PROXY:-}"
+    __WIRETAP_OLD_NO_PROXY="${NO_PROXY:-}"
+
+    wiretap_stop_interception() {
+        export PATH="$__WIRETAP_OLD_PATH"
+        export HTTP_PROXY="$__WIRETAP_OLD_HTTP_PROXY"
+        export HTTPS_PROXY="$__WIRETAP_OLD_HTTPS_PROXY"
+        export NO_PROXY="$__WIRETAP_OLD_NO_PROXY"
+        unset __WIRETAP_OLD_PATH __WIRETAP_OLD_HTTP_PROXY __WIRETAP_OLD_HTTPS_PROXY __WIRETAP_OLD_NO_PROXY
+        unset WIRETAP_ACTIVE
+        echo 'wiretap: interception disabled in this shell'
+    }
+    if command -v curl >/dev/null 2>&1; then
+        (curl --noproxy '*' -X POST "http://127.0.0.1:9999/callback" >/dev/null 2>&1 &) &> /dev/null
+    fi
+    echo 'wiretap: interception enabled'
+    echo 'Run wiretap_stop_interception to stop intercepting in this shell.'
