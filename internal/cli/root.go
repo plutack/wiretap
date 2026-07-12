@@ -34,6 +34,7 @@ func NewRootCmd(version string) *cobra.Command {
 	}
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newConfigCmd())
+	root.AddCommand(newRelayCmd())
 	return root
 }
 
