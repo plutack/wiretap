@@ -1,0 +1,30 @@
+# Binaries
+/wiretap
+/wiretap-relay
+/bin/
+/dist/
+
+# Go
+*.test
+*.out
+coverage.out
+coverage.txt
+
+# Wails / frontend
+/ui/frontend/node_modules/
+/ui/frontend/dist/
+/ui/frontend/wailsjs/
+/build/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local data
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+relay-credentials.json
