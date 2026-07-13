@@ -28,6 +28,7 @@ func newInterceptCmd(version string) *cobra.Command {
 	}
 	cmd.AddCommand(newInterceptStartCmd(version))
 	cmd.AddCommand(newInterceptStopCmd())
+	cmd.AddCommand(newInterceptTrustCACmd())
 	return cmd
 }
 
@@ -145,6 +146,49 @@ func resolveInterceptDeps(m *config.Manager, cfg *config.Config, kind shellscrip
 		PCStore:      store.NewPCStore(db),
 		Version:      version,
 	}, nil
+}
+
+// newInterceptTrustCACmd installs the wiretap CA into the system trust store.
+// This is the one command that needs root (on Linux it writes to
+// /usr/local/share/ca-certificates/ and runs update-ca-certificates). It's
+// optional: `wiretap intercept start` works without it because the shims pin
+// the CA cert directly (--cacert, http.sslCAInfo, NODE_EXTRA_CA_CERTS,
+// SSL_CERT_FILE). TrustSystem is only needed for tools that read the system
+// trust store exclusively (e.g. a system Python without SSL_CERT_FILE set).
+//
+// Run once: `sudo wiretap intercept trust-ca`
+func newInterceptTrustCACmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "trust-ca",
+		Short: "Install the wiretap CA into the system trust store (needs root, optional)",
+		Long: "Install the wiretap interception CA into the OS trust store so tools that\n" +
+			"only read the system store (not env vars or --cacert flags) trust it.\n\n" +
+			"This is OPTIONAL. The three supported tools (curl, git, node) already trust\n" +
+			"the CA via shims and env vars. You only need this if you want other tools\n" +
+			"(e.g. system Python) to trust the CA too.\n\n" +
+			"Needs root on Linux: sudo wiretap intercept trust-ca",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			m := newConfigManager()
+			configDir, err := m.Dir()
+			if err != nil {
+				return fmt.Errorf("resolve config dir: %w", err)
+			}
+			installer := castore.NewInstaller(configDir)
+			ctx := cmd.Context()
+			// Ensure the CA exists first (generates + persists, no root needed).
+			if _, err := installer.EnsureCA(ctx); err != nil {
+				return fmt.Errorf("ensure CA: %w", err)
+			}
+			// Now install into the system trust store (needs root).
+			if err := installer.TrustSystem(ctx); err != nil {
+				return fmt.Errorf("trust-ca: %w", err)
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "wiretap: CA installed into system trust store")
+			return nil
+		},
+	}
 }
 
 // detectShellKind picks the shell kind in priority order: the --shell flag,
