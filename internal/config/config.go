@@ -15,10 +15,11 @@ import (
 // Config is the in-memory representation of ~/.config/wiretap/config.yaml.
 // Tags are yaml so the file reads naturally when written by Manager.Init.
 type Config struct {
-	ListenAddr string      `yaml:"listen_addr"`
-	Relay      RelayConfig `yaml:"relay"`
-	Store      StoreConfig `yaml:"store"`
-	TUI        TUIConfig   `yaml:"tui"`
+	ListenAddr string          `yaml:"listen_addr"`
+	Relay      RelayConfig     `yaml:"relay"`
+	Store      StoreConfig     `yaml:"store"`
+	TUI        TUIConfig       `yaml:"tui"`
+	Intercept  InterceptConfig `yaml:"intercept"`
 }
 
 // RelayConfig holds the outbound-tunnel settings used by relayclient.
@@ -45,6 +46,22 @@ type TUIConfig struct {
 	Theme string `yaml:"theme"`
 }
 
+// InterceptConfig holds the traffic-interception settings consumed by the
+// `wiretap intercept` commands: the local interception proxy listen address,
+// the local 127.0.0.1 control HTTP API address (see PLAN.md open question #1),
+// and an optional shell override (auto-detected from $SHELL when empty).
+type InterceptConfig struct {
+	// ProxyAddr is the host:port the interception proxy listens on. Clients
+	// point HTTP_PROXY/HTTPS_PROXY here.
+	ProxyAddr string `yaml:"proxy_addr"`
+	// LocalAPIAddr is the 127.0.0.1 control HTTP API address
+	// (/local/webhooks, /local/captures) external scripts can query.
+	LocalAPIAddr string `yaml:"local_api_addr"`
+	// Shell selects the shell kind to spawn for `wiretap intercept start`
+	// (one of bash, fish, powershell, gitbash). Empty means auto-detect.
+	Shell string `yaml:"shell"`
+}
+
 // Default returns the zero-touch defaults. Manager.Init writes this to
 // disk; Manager.Load overlays user values on top of it.
 func Default() Config {
@@ -57,6 +74,11 @@ func Default() Config {
 		},
 		Store: StoreConfig{Path: ""},
 		TUI:   TUIConfig{Theme: "dark"},
+		Intercept: InterceptConfig{
+			ProxyAddr:    "127.0.0.1:8888",
+			LocalAPIAddr: "127.0.0.1:9876",
+			Shell:        "",
+		},
 	}
 }
 
