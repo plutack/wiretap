@@ -37,7 +37,8 @@ func NewRootCmd(version string) *cobra.Command {
 	root.AddCommand(newRelayCmd())
 	root.AddCommand(newTUICmd())
 	root.AddCommand(newInterceptCmd(version))
-	return root
+		root.AddCommand(newGUICmd(version))
+return root
 }
 
 // newVersionCmd prints the embedded build version.

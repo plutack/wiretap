@@ -43,12 +43,12 @@ func withTempConfigManager(t *testing.T) string {
 func TestNewRootCmd_BuildsTree(t *testing.T) {
 	t.Parallel()
 	root := NewRootCmd("dev")
-	// Five top-level subcommands: version, config, relay, tui, intercept.
+	// Six top-level subcommands: version, config, relay, tui, intercept, gui.
 	names := subcommandNames(root)
-	if len(names) != 5 {
-		t.Fatalf("top-level subcommands = %v, want exactly 5", names)
+	if len(names) != 6 {
+		t.Fatalf("top-level subcommands = %v, want exactly 6", names)
 	}
-	want := map[string]bool{"version": false, "config": false, "relay": false, "tui": false, "intercept": false}
+	want := map[string]bool{"version": false, "config": false, "relay": false, "tui": false, "intercept": false, "gui": false}
 	for _, n := range names {
 		if _, ok := want[n]; !ok {
 			t.Errorf("unexpected subcommand %q", n)
@@ -82,6 +82,26 @@ func TestRoot_VersionFlag(t *testing.T) {
 	}
 	if !strings.Contains(out, "9.9.9") {
 		t.Errorf("--version output = %q, want it to contain 9.9.9", out)
+	}
+}
+
+// TestGUICmd_StubErrorsWithoutTag exercises the !gui stub: the command exists
+// in the tree (so help lists it) but running it errors with rebuild instructions.
+// The real launcher lives in gui.go (build-tagged `gui`); a working GUI build
+// additionally needs Wails' `production` and `webkit2_41` tags (see Makefile).
+func TestGUICmd_StubErrorsWithoutTag(t *testing.T) {
+	t.Parallel()
+	_, _, err := runCmd(t, "dev", "gui")
+	if err == nil {
+		t.Fatal("gui (no -tags gui): expected error, got nil")
+	}
+	// The stub message points at `make gui` and the full `go build -tags` form,
+	// including the Wails tags (production + webkit2_41) the user actually needs.
+	if !strings.Contains(err.Error(), "make gui") {
+		t.Errorf("gui stub error = %q, want it to mention `make gui`", err.Error())
+	}
+	if !strings.Contains(err.Error(), "production") || !strings.Contains(err.Error(), "webkit2_41") {
+		t.Errorf("gui stub error = %q, want it to mention production + webkit2_41", err.Error())
 	}
 }
 
