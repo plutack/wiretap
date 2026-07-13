@@ -6,6 +6,48 @@
 
 ---
 
+## 0. Current status (for fresh agents)
+
+> This section summarises the state of the project. It is the single source
+> of truth for "what's landed" when picking up the project without prior
+> context. Update it whenever a phase completes or statuses change.
+
+| Phase | Status | Lead commits |
+|---|---|---|
+| 0 — Scaffolding | ✅ DONE | `35a34f9` |
+| 1 — Cross-cutting cores | ✅ DONE | `7683597`, `0bf277a`, `171325c` |
+| 2 — relayd HTTP + tunnel | ✅ DONE | `92c354b`, `37fb6a4` |
+| 3 — PC relay client + CLI | ✅ DONE | `8479067`, `b01b8b1`, `7af7334` |
+| 4 — Traffic interception | ⬜ NOT STARTED | -- |
+| 5 — Wails GUI | ⬜ NOT STARTED | -- |
+| 6 — Hardening | ⬜ NOT STARTED | -- |
+
+Latest commit on `main`: `7af7334`. Calendar date July 2026 (this is just a
+reference; treat the commit graph as ground truth).
+
+All tests pass under `go test -race -shuffle=on ./...`. Coverage per package:
+
+| Package | Coverage | Notes |
+|---|---|---|
+| `internal/relayproto` | 97.6% | Sealed Message union |
+| `internal/intercept/shellscript` | 99.1% | Golden-file tested |
+| `internal/relayclient` | 84.8% | Dialer/Conn/Backoff fakes |
+| `internal/cli` | ~73% | Relay subcommands + TUI seam |
+| `internal/api` | 74.7% | Typed HTTPClient |
+| `internal/config` | 74.6% | Includes credentials round-trip |
+| `internal/store` | 64.4% | Real `:memory:` SQLite |
+| `internal/relayd` | 70.9% | httptest + real WebSocket |
+| `internal/tui` | 64.7% | Polls PCStore, truncate tested |
+| `internal/testutil` | 36.4% | Golden helper + fake clock/idgen |
+| `cmd/wiretap-relay` | 21.4% | HTTP handler + graceful shutdown |
+
+Commit messages follow Conventional Commits; a `commit-msg` hook backed by
+`@commitlint/cli` enforces this locally. See `commitlint.config.js` for the
+accepted types and scopes.
+
+`README.md` is intentionally untracked. It will be revisited at the end of
+the project. Don't stage it via `git add -A` without excluding it.
+
 ## 1. Goals & non-goals
 
 ### Goals (MVP)
@@ -372,52 +414,107 @@ Path-naming regex for `:project`: `^[a-z0-9][a-z0-9-]{1,62}$`. Reserved roots:
 
 Each phase ends with a green test suite for its packages before moving on.
 
-### Phase 0 — Scaffolding (no behaviour)
-- Rename module to `github.com/plutack/wiretap` in `go.mod`.
-- Create directory layout above (empty `doc.go`s).
-- `cmd/wiretap/main.go`: cobra root with `version`, `config init` only.
-- `cmd/relayd/main.go`: serves `/health` and exits cleanly.
-- `internal/config`, `internal/testutil` baselines.
-- Wire `go test ./...` clean (zero tests pass trivially).
+### Phase 0 — Scaffolding (no behaviour)  ✅ DONE
 
-### Phase 1 — Cross-cutting cores (pure logic, easiest to test)
-- `internal/relayproto` types + encode/decode + table tests.
-- `internal/store` migrations + `RelayStore` + `PCStore` + tests.
-- `internal/intercept/shellscript` dispatcher + bash/fish/powershell/gitbash
-  generators + golden files. **No stop_interception** omitted; we include
-  `wiretap_stop_interception` in every shell per your latest call.
+**Lead commit:** `35a34f9` — feat: scaffold wiretap and wiretap-relay binaries
 
-### Phase 2 — relayd MVP (HTTP + tunnel)
-- `internal/api/types.go`, `server.go` routes from §8.
-- `internal/relayd` registration, auth, `/inbox/:project` ingress,
-  `/tunnel` WebSocket with §7 protocol.
-- `internal/clitwo` subcommands wrap the same routes.
-- Integration test: register → ingress → tunnel PUSH → PC ACK → acked_seq
-  advanced.
+- ✅ Rename module to `github.com/plutack/wiretap` in `go.mod`.
+- ✅ Create directory layout above (empty `doc.go`s).
+- ✅ `cmd/wiretap/main.go`: cobra root with `version`, `config init` only.
+- ✅ `cmd/wiretap-relay/main.go`: serves `/health` and exits cleanly.
+- ✅ `internal/config`, `internal/testutil` baselines.
+- ✅ Wire `go test ./...` clean (zero tests pass trivially).
 
-### Phase 3 — wiretap local (relay client + CLI)
-- `internal/relayclient` dial/reconnect/recv loop.
-- Cursor loading/saving via `PCStore`.
-- `wiretap relay register`, `wiretap relay clients list`, ... cobra commands.
-- TUI stub: `wiretap tui` shows live webhook feed from PC store.
+### Phase 1 — Cross-cutting cores (pure logic, easiest to test)  ✅ DONE
 
-### Phase 4 — Traffic interception
-- `internal/intercept/castore` Linux impl (+ stubs for darwin/windows).
-- `internal/intercept/proxy` MITM core using `net/http` + CONNECT.
-- `internal/intercept` orchestration: write startup-file gated blocks,
+**Lead commits:** `7683597`, `0bf277a`, `171325c`
+
+- ✅ `internal/relayproto` types + encode/decode + table tests
+  (97.6% coverage, table-driven round-trip tests, sealed Message interface
+  with direction validation).
+- ✅ `internal/store` migrations + `RelayStore` + `PCStore` + tests
+  (modernc.org/sqlite, embedded migrations, sentinel errors
+  ErrNotFound/ErrConflict, `next_seq`/`acked_seq` decoupled per the bug
+  fix in `37fb6a4`).
+- ✅ `internal/intercept/shellscript` dispatcher + bash/fish/powershell/gitbash
+  generators + golden files (99.1% coverage, `wiretap_stop_interception`
+  injected into every shell with env-var snapshot/restore).
+- ✅ Raw header preservation (`raw_headers` BLOB) — commit `171325c`.
+
+### Phase 2 — relayd MVP (HTTP + tunnel)  ✅ DONE
+
+**Lead commits:** `92c354b`, `37fb6a4`
+
+- ✅ `internal/api/types.go` DTOs + typed `HTTPClient` with `Is*` error
+  classification helpers (74.7% coverage, one contract consumed by relayd
+  and CLI).
+- ✅ `internal/relayd` Server: `/health`, `POST /register` (admin token),
+  `POST /:project` ingress (raw body + raw_headers preserved, 10MiB cap,
+  404 on unknown projects), `/admin/clients` (list/get/delete with
+  cascade), `/admin/projects` (list + reclaim with `--force`),
+  `/admin/projects/:p/webhooks` (paginated).
+- ✅ Auth: `requireAdmin` (X-Admin-Token constant-time compare) +
+  `authClientByBasic` on tunnel upgrade.
+- ✅ `GET /tunnel` WebSocket handler using `github.com/coder/websocket`,
+  `TunnelRegistry` with one live session per project, `pushIfTunnelAttached`
+  for live webhook delivery.
+- ✅ CLI subcommands in `internal/cli/relay.go` wrapping every admin route
+  (commit `b01b8b1`). Same DTOs as HTTP, so curl and `wiretap relay ...`
+  are interchangeable.
+- ✅ Integration test: register → ingress → tunnel PUSH → PC ACK →
+  `acked_seq` advanced — `TestTunnel_HappyPath` in
+  `internal/relayd/tunnel_test.go`.
+
+### Phase 3 — wiretap local (relay client + CLI)  ✅ DONE
+
+**Lead commits:** `8479067`, `b01b8b1`, `7af7334`
+
+- ✅ `internal/relayclient` dial/reconnect/recv loop
+  (84.8% coverage; `Dialer`/`Conn`/`Backoff` interfaces with fakes;
+  exponential backoff 1s→30s ±50% jitter; `INSERT OR IGNORE` makes
+  re-pushes after reconnect safe; `Callbacks` for TUI/GUI subscription).
+- ✅ Cursor loading/saving via `PCStore.LastSeq` per project; HELLO advertises
+  per-project cursor.
+- ✅ `wiretap relay register` (with `--save` for credentials file),
+  `wiretap relay clients list|get|delete`,
+  `wiretap relay projects list|reclaim`,
+  `wiretap relay webhooks list|replay`.
+- ✅ Credentials file `~/.config/wiretap/relay-credentials.json` (mode 0600);
+  `config.Manager.LoadCredentials` / `SaveCredentials`.
+- ✅ TUI stub: `wiretap tui` opens a Bubbletea dashboard that polls `PCStore`
+  every 500ms and renders the latest 100 webhooks (project/seq/method/path/
+  body bytes). `startTunnelBackground` runs a `relayclient` in a goroutine
+  using config + credentials (non-fatal when either is missing; the TUI
+  shows historical data).
+- ✅ Integration test across two in-memory SQLite DBs:
+  `TestClientRelay_HappyPath` and `TestClientRelay_OfflineIngressStreamsOnConnect`
+  in `internal/relayclient/integration_test.go`.
+
+### Phase 4 — Traffic interception  ⬜ NOT STARTED
+
+Next to build. See §7 of PLAN.md and `internal/intercept/shellscript/` which
+is already complete from Phase 1.
+
+- ⬜ `internal/intercept/castore` Linux impl (+ stubs for darwin/windows).
+- ⬜ `internal/intercept/proxy` MITM core using `net/http` + CONNECT.
+- ⬜ `internal/intercept` orchestration: write startup-file gated blocks,
   generate override-bin shims, spawn shell with `WIRETAP_ACTIVE=1`.
-- `wiretap intercept start` / `wiretap intercept stop`.
+- ⬜ `wiretap intercept start` / `wiretap intercept stop`.
+- ⬜ Local 127.0.0.1 control HTTP API for external scripts (`/local/webhooks`,
+  etc.). May land here or in its own commit.
 
-### Phase 5 — Wails GUI
-- `ui/` minimal Tailwind + a component skeleton.
-- Two tabs: Traffic (list of `traffic_captures`) and Webhooks (list of
+### Phase 5 — Wails GUI  ⬜ NOT STARTED
+
+- ⬜ `ui/` minimal Tailwind + a component skeleton.
+- ⬜ Two tabs: Traffic (list of `traffic_captures`) and Webhooks (list of
   `webhooks`), replay button.
-- Bindings call into `internal/app` (already tested).
+- ⬜ Bindings call into `internal/app` (already tested).
 
-### Phase 6 — Hardening
-- Playground for cross-platform CA on darwin/windows.
-- Relay token rotation, multi-client admin UI (CLI covers it already).
-- Docs + README.
+### Phase 6 — Hardening  ⬜ NOT STARTED
+
+- ⬜ Playground for cross-platform CA on darwin/windows.
+- ⬜ Relay token rotation, multi-client admin UI (CLI covers it already).
+- ⬜ Docs + README (README.md is currently untracked; revisit at the end).
 
 ---
 
