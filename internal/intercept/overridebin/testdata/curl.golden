@@ -1,0 +1,20 @@
+#!/bin/sh
+# wiretap curl shim — generated; do not edit by hand.
+__WT_OVERRIDE_DIR='/tmp/wiretap-override-001'
+__WT_resolve() {
+    ifs_save="$IFS"; IFS=:
+    for d in $PATH; do
+        [ "$d" = "$__WT_OVERRIDE_DIR" ] && continue
+        if [ -x "$d/curl" ]; then
+            printf '%s' "$d/curl"; IFS="$ifs_save"; return 0
+        fi
+    done
+    IFS="$ifs_save"
+    return 1
+}
+__WT_REAL=$(__WT_resolve) || __WT_REAL='curl'
+exec "$__WT_REAL" \
+    --proxy 'http://127.0.0.1:8888' \
+    --noproxy 'localhost,127.0.0.1' \
+    --cacert '/home/u/.config/wiretap/ca/wiretap-ca.crt' \
+    "$@"
