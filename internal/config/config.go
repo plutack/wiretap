@@ -27,12 +27,13 @@ type RelayConfig struct {
 	// URL is the WebSocket endpoint of the relay, e.g.
 	// "wss://relay.example.com/tunnel". Empty means the tunnel is disabled.
 	URL string `yaml:"url"`
-	// Projects is the set of project paths this PC claims on the relay.
-	// At least one is required when URL is set. (Multi-project per client.)
-	Projects []string `yaml:"projects"`
 	// CredsFile is the path to the client_id/client_token JSON written by
 	// `wiretap relay register`. Defaults to <config dir>/relay-credentials.json.
 	CredsFile string `yaml:"creds_file"`
+	// Note: the set of project paths is owned by the relay (which rejects
+	// ingress to unclaimed paths) and mirrored locally in relay-credentials.json
+	// (written by `wiretap relay register --save`). It is deliberately not a
+	// config field — keeping it here would create a third copy that drifts.
 }
 
 // StoreConfig points at the local SQLite database.
@@ -69,7 +70,6 @@ func Default() Config {
 		ListenAddr: "127.0.0.1:8888",
 		Relay: RelayConfig{
 			URL:       "",
-			Projects:  []string{"default"},
 			CredsFile: "",
 		},
 		Store: StoreConfig{Path: ""},

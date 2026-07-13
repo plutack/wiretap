@@ -342,6 +342,36 @@ func TestApp_CloseStopsTunnel(t *testing.T) {
 	}
 }
 
+// TestApp_ConnectedProjects_RoundTrip exercises the test seam that production
+// wires via the tunnel's OnConnect callback (defaultTunnelFactory).
+func TestApp_ConnectedProjects_RoundTrip(t *testing.T) {
+	t.Parallel()
+	a, _ := newTestApp(t)
+	t.Cleanup(func() { _ = a.Close() })
+
+	nilSnapshot := a.ConnectedProjects()
+	if nilSnapshot != nil {
+		t.Fatalf("initial ConnectedProjects = %v, want nil before any OnConnect", nilSnapshot)
+	}
+
+	a.SetConnectedProjects([]string{"nadbooks", "calculator"})
+	got := a.ConnectedProjects()
+	if len(got) != 2 || got[0] != "nadbooks" || got[1] != "calculator" {
+		t.Fatalf("ConnectedProjects = %v, want [nadbooks calculator]", got)
+	}
+
+	// Returned slice must be a copy: callers must not mutate the App's state.
+	got[0] = "mutated"
+	if a.ConnectedProjects()[0] != "nadbooks" {
+		t.Error("ConnectedProjects returned an alias to App state; want a copy")
+	}
+
+	a.SetConnectedProjects(nil)
+	if a.ConnectedProjects() != nil {
+		t.Error("after SetConnectedProjects(nil), want nil snapshot")
+	}
+}
+
 func TestApp_ErrorsBeforeOpen(t *testing.T) {
 	t.Parallel()
 	a, _ := newTestApp(t)

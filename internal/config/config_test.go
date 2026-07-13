@@ -16,7 +16,7 @@ func TestDefault(t *testing.T) {
 		want string
 	}{
 		{"listen_addr", cfg.ListenAddr, "127.0.0.1:8888"},
-		{"relay default project", cfg.Relay.Projects[0], "default"},
+		{"relay url (disabled by default)", cfg.Relay.URL, ""},
 		{"tui theme", cfg.TUI.Theme, "dark"},
 		{"intercept proxy_addr", cfg.Intercept.ProxyAddr, "127.0.0.1:8888"},
 		{"intercept local_api_addr", cfg.Intercept.LocalAPIAddr, "127.0.0.1:9876"},
@@ -110,8 +110,8 @@ func TestManager_Load_RoundTrip(t *testing.T) {
 	if cfg.ListenAddr != "127.0.0.1:8888" {
 		t.Errorf("ListenAddr = %q, want %q", cfg.ListenAddr, "127.0.0.1:8888")
 	}
-	if len(cfg.Relay.Projects) != 1 || cfg.Relay.Projects[0] != "default" {
-		t.Errorf("Relay.Projects = %v, want [default]", cfg.Relay.Projects)
+	if cfg.Relay.URL != "" {
+		t.Errorf("Relay.URL = %q, want empty (tunnel disabled by default)", cfg.Relay.URL)
 	}
 }
 

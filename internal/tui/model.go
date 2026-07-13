@@ -35,18 +35,35 @@ type WebhookRow struct {
 
 // Model is the Bubbletea state for the wiretap TUI.
 type Model struct {
-	store    *store.PCStore
-	rows     []WebhookRow
-	width    int
-	height   int
-	err      error
-	lastPoll time.Time
+	store       *store.PCStore
+	nowWatching func() []string // optional; nil → not surfaced
+	watching    []string        // snapshot of nowWatching() taken at refresh time
+	rows        []WebhookRow
+	width       int
+	height      int
+	err         error
+	lastPoll    time.Time
+}
+
+// Option configures a Model.
+type Option func(*Model)
+
+// WithConnectedProjects supplies a getter the refresh loop calls on every
+// poll to snapshot the projects the relay says this client owns. The wiretap
+// CLI passes app.App.ConnectedProjects here; tests pass nil (the default) so
+// the dashboard simply omits the "watching" status line.
+func WithConnectedProjects(fn func() []string) Option {
+	return func(m *Model) { m.nowWatching = fn }
 }
 
 // New builds a Model backed by the given PCStore. The store is consulted on
 // every tick to load the latest webhooks and on the initial View.
-func New(s *store.PCStore) Model {
-	return Model{store: s}
+func New(s *store.PCStore, opts ...Option) Model {
+	m := Model{store: s}
+	for _, o := range opts {
+		o(&m)
+	}
+	return m
 }
 
 // pollMsg is sent on every poll interval to trigger a store read.
@@ -86,9 +103,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// refresh reads the latest webhooks from the store.
+// refresh reads the latest webhooks from the store and re-snapshots the
+// connected-projects getter (if wired). Both are best-effort poll reads.
 func (m *Model) refresh(ctx context.Context) {
 	m.lastPoll = time.Now()
+	if m.nowWatching != nil {
+		m.watching = m.nowWatching()
+	}
 	rows, err := m.store.Webhooks(ctx, "", 100)
 	if err != nil {
 		m.err = err
@@ -129,10 +150,18 @@ func (m Model) View() string {
 	if m.err != nil {
 		status = fmt.Sprintf("error: %v", m.err)
 	}
+	watching := "watching: (none)"
+	if m.nowWatching != nil {
+		if len(m.watching) == 0 {
+			watching = "watching: (tunnel down)"
+		} else {
+			watching = fmt.Sprintf("watching: %s", strings.Join(m.watching, ", "))
+		}
+	}
 	statusLine := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("245")).
-		Render(fmt.Sprintf("%d webhooks  |  %s  |  press 'q' to quit",
-			len(m.rows), status))
+		Render(fmt.Sprintf("%d webhooks  |  %s  |  %s  |  press 'q' to quit",
+			len(m.rows), watching, status))
 	b.WriteString(statusLine)
 	b.WriteByte('\n')
 
