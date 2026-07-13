@@ -1,0 +1,21 @@
+#!/bin/sh
+# wiretap git shim — generated; do not edit by hand.
+__WT_OVERRIDE_DIR='/tmp/wiretap-override-001'
+__WT_resolve() {
+    ifs_save="$IFS"; IFS=:
+    for d in $PATH; do
+        [ "$d" = "$__WT_OVERRIDE_DIR" ] && continue
+        if [ -x "$d/git" ]; then
+            printf '%s' "$d/git"; IFS="$ifs_save"; return 0
+        fi
+    done
+    IFS="$ifs_save"
+    return 1
+}
+__WT_REAL=$(__WT_resolve) || __WT_REAL='git'
+exec "$__WT_REAL" \
+    -c 'http.proxy=http://127.0.0.1:8888' \
+    -c 'https.proxy=http://127.0.0.1:8888' \
+    -c 'http.sslCAInfo=/home/u/.config/wiretap/ca/wiretap-ca.crt' \
+    -- \
+    "$@"

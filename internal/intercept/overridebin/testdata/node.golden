@@ -1,0 +1,16 @@
+#!/bin/sh
+# wiretap node shim — generated; do not edit by hand.
+__WT_OVERRIDE_DIR='/tmp/wiretap-override-001'
+__WT_resolve() {
+    ifs_save="$IFS"; IFS=:
+    for d in $PATH; do
+        [ "$d" = "$__WT_OVERRIDE_DIR" ] && continue
+        if [ -x "$d/node" ]; then
+            printf '%s' "$d/node"; IFS="$ifs_save"; return 0
+        fi
+    done
+    IFS="$ifs_save"
+    return 1
+}
+__WT_REAL=$(__WT_resolve) || __WT_REAL='node'
+exec "$__WT_REAL" "$@"
