@@ -19,11 +19,10 @@ import (
 // EnsureCA can distinguish "first run" from real I/O errors.
 var errNoCA = errors.New("castore: no persisted CA")
 
-// LinuxInstaller persists the CA under ConfigDir and installs it into the
-// system trust store via /usr/local/share/ca-certificates + update-ca-cert
-// (the Debian/Ubuntu mechanism; works on most desktop Linux distros).
-// Installing needs root, so EnsureCA surfaces a clear error when it can't
-// write the trust file.
+// LinuxInstaller persists the CA under ConfigDir. The system trust store
+// install (TrustSystem) uses /usr/local/share/ca-certificates + update-ca-
+// certificates (the Debian/Ubuntu mechanism; works on most desktop Linux).
+// TrustSystem needs root; EnsureCA does not.
 //
 // LinuxInstaller is intentionally thin glue (file + one exec) and is not
 // unit-tested: exercising the real system trust store requires root and a
@@ -41,9 +40,13 @@ type LinuxInstaller struct {
 const trustCertPath = "/usr/local/share/ca-certificates/wiretap-ca.crt"
 
 // EnsureCA implements Installer. It reuses a persisted CA when present,
-// otherwise generates one, writes it under ConfigDir/ca, and installs the
-// cert into the system trust store.
-func (l *LinuxInstaller) EnsureCA(ctx context.Context) (*CA, error) {
+// otherwise generates one and writes it under ConfigDir/ca. It does NOT
+// install into the system trust store — call TrustSystem for that. This
+// means `wiretap intercept start` works zero-touch without root: the shims
+// pin the CA cert directly (--cacert, http.sslCAInfo, NODE_EXTRA_CA_CERTS,
+// SSL_CERT_FILE), so the system trust store is only needed for tools that
+// read it exclusively.
+func (l *LinuxInstaller) EnsureCA(_ context.Context) (*CA, error) {
 	caDir := filepath.Join(l.ConfigDir, "ca")
 	if err := os.MkdirAll(caDir, 0o755); err != nil {
 		return nil, fmt.Errorf("castore: mkdir %s: %w", caDir, err)
@@ -67,14 +70,27 @@ func (l *LinuxInstaller) EnsureCA(ctx context.Context) (*CA, error) {
 	if err := os.WriteFile(certPath, ca.CertPEM, 0o644); err != nil {
 		return nil, fmt.Errorf("castore: write CA cert: %w", err)
 	}
+	return ca, nil
+}
 
-	if err := os.WriteFile(trustCertPath, ca.CertPEM, 0o644); err != nil {
-		return nil, fmt.Errorf("castore: write trust store %s (need root?): %w", trustCertPath, err)
+// TrustSystem implements Installer. It copies the persisted CA cert into
+// /usr/local/share/ca-certificates/ and runs update-ca-certificates. Needs
+// root. Optional: the three supported tools (curl, git, node) + Python/Go
+// (via SSL_CERT_FILE) work without it. Call this once if you want other
+// tools (e.g. a system Python without SSL_CERT_FILE) to trust the CA too.
+func (l *LinuxInstaller) TrustSystem(ctx context.Context) error {
+	certPath := filepath.Join(l.ConfigDir, "ca", "wiretap-ca.crt")
+	certPEM, err := os.ReadFile(certPath)
+	if err != nil {
+		return fmt.Errorf("castore: read CA cert %s: %w (run `wiretap intercept start` first to generate it)", certPath, err)
+	}
+	if err := os.WriteFile(trustCertPath, certPEM, 0o644); err != nil {
+		return fmt.Errorf("castore: write trust store %s (need root?): %w", trustCertPath, err)
 	}
 	if err := runUpdateCA(ctx); err != nil {
-		return nil, fmt.Errorf("castore: %w", err)
+		return fmt.Errorf("castore: %w", err)
 	}
-	return ca, nil
+	return nil
 }
 
 // Uninstall implements Installer. It removes the system trust entry and

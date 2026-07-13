@@ -177,11 +177,23 @@ func randSerial(r io.Reader) (*big.Int, error) {
 // Production impls are build-tag-split (Linux now, darwin/windows as stubs);
 // tests substitute an in-memory FakeInstaller so dependents never touch the
 // real trust store or need root.
+//
+// The interface is split into two concerns so `wiretap intercept start` never
+// needs root: EnsureCA generates and persists the CA (user-writable config
+// dir only), and TrustSystem installs it into the OS trust store (needs root
+// on Linux). The shims pin the CA cert directly (--cacert, http.sslCAInfo,
+// NODE_EXTRA_CA_CERTS, SSL_CERT_FILE), so TrustSystem is optional — it only
+// matters for tools that read the system trust store exclusively.
 type Installer interface {
 	// EnsureCA returns the wiretap CA, generating and persisting it the first
-	// time it is called and installing it into the OS trust store. Repeat
-	// calls return the same CA and skip re-installation.
+	// time it is called. Does NOT install into the OS trust store — call
+	// TrustSystem separately for that. Repeat calls return the same CA.
 	EnsureCA(ctx context.Context) (*CA, error)
+	// TrustSystem installs the persisted CA into the OS trust store so tools
+	// that only read the system store (not env vars or --cacert flags) trust
+	// wiretap's MITM certs. Needs root on Linux. Optional: the three supported
+	// tools (curl, git, node) + Python/Go (via SSL_CERT_FILE) work without it.
+	TrustSystem(ctx context.Context) error
 	// Uninstall removes the CA from the OS trust store (best-effort). The
 	// persisted CA files remain on disk so EnsureCA can re-trust cheaply.
 	Uninstall(ctx context.Context) error
@@ -196,6 +208,9 @@ type unsupportedInstaller struct{}
 func (unsupportedInstaller) EnsureCA(context.Context) (*CA, error) {
 	return nil, ErrUnsupportedOS
 }
+
+// TrustSystem implements Installer.
+func (unsupportedInstaller) TrustSystem(context.Context) error { return ErrUnsupportedOS }
 
 // Uninstall implements Installer.
 func (unsupportedInstaller) Uninstall(context.Context) error { return ErrUnsupportedOS }

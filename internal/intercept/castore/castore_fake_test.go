@@ -17,11 +17,12 @@ type FakeInstaller struct {
 	// time.Now, which is fine for property-based assertions.
 	Now time.Time
 
-	mu          sync.Mutex
-	ca          *CA
-	ensured     int
-	uninstalled int
-	failWith    error
+	mu            sync.Mutex
+	ca            *CA
+	ensured       int
+	trustedSystem int
+	uninstalled   int
+	failWith      error
 }
 
 // Fail makes subsequent EnsureCA/Uninstall calls return err (still count the
@@ -46,6 +47,13 @@ func (f *FakeInstaller) UninstalledCount() int {
 	return f.uninstalled
 }
 
+// TrustedSystemCount returns how many times TrustSystem has been called.
+func (f *FakeInstaller) TrustedSystemCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.trustedSystem
+}
+
 // EnsureCA implements Installer.
 func (f *FakeInstaller) EnsureCA(_ context.Context) (*CA, error) {
 	f.mu.Lock()
@@ -66,6 +74,17 @@ func (f *FakeInstaller) EnsureCA(_ context.Context) (*CA, error) {
 		f.ca = ca
 	}
 	return f.ca, nil
+}
+
+// TrustSystem implements Installer.
+func (f *FakeInstaller) TrustSystem(_ context.Context) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.trustedSystem++
+	if f.failWith != nil {
+		return f.failWith
+	}
+	return nil
 }
 
 // Uninstall implements Installer.

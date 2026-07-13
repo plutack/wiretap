@@ -40,6 +40,8 @@ func (f *fakeInstaller) EnsureCA(context.Context) (*castore.CA, error) {
 	return f.ca, nil
 }
 
+func (f *fakeInstaller) TrustSystem(context.Context) error { return nil }
+
 func (f *fakeInstaller) Uninstall(context.Context) error {
 	f.uninstalled++
 	return nil
