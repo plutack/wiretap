@@ -19,8 +19,9 @@
 | 2 — relayd HTTP + tunnel | ✅ DONE | `92c354b`, `37fb6a4` |
 | 3 — PC relay client + CLI | ✅ DONE | `8479067`, `b01b8b1`, `7af7334` |
 | 4 — Traffic interception | ✅ DONE | `tbd` |
-| 5 — Wails GUI | ✅ DONE | `tbd` |
-| 6 — Hardening | ⬜ NOT STARTED | -- |
+| 5 — Wails GUI | ✅ DONE | `88693d8` |
+| 6 — Payload scripting, UI upgrade, project mgmt | ⬜ NOT STARTED | -- |
+| 7 — Hardening | ⬜ NOT STARTED | -- |
 
 Latest commit on `main`: `7af7334` (Phase 5 work uncommitted at time of
 writing). Calendar date July 2026 (this is just a reference; treat the commit
@@ -645,11 +646,162 @@ ignored) and clear the screen between rebuilds.
 All tests green under `go test -race -shuffle=on ./...`; both default and GUI
 builds (`make build`, `make gui`) clean.
 
-### Phase 6 — Hardening  ⬜ NOT STARTED
+### Phase 6 — Payload scripting, UI upgrade, and project management  ⬜ NOT STARTED
+
+> This is the feature phase: the core plumbing works, now we make wiretap
+> genuinely useful for real webhook development. The theme is **full control**:
+> edit any payload, script any transformation, manage projects from the GUI,
+> and find anything fast.
+
+#### 6.1 — JS scripting engine (goja)
+
+- ⬜ Embed [goja](https://github.com/dop251/goja) (pure Go ES5.1+/ES6
+  interpreter — no CGO, no external runtime to bundle, consistent with the
+  project's pure-Go CLI philosophy). Uniquely suited: it evaluates JS
+  in-process, supports arrows/classes/let/const/template literals/destructuring/
+  Maps/Sets/Promises, and has no V8/CGO dependency.
+- ⬜ `internal/scripting` package: wraps goja with a sandboxed runtime, built-in
+  helpers (`crypto.hmac`, `crypto.sha256`, `base64.encode/decode`, `json.parse/
+  stringify`, `regex.match/replace`), and a `Run(script, context)` API.
+- ⬜ Script types (stored in SQLite `scripts` table: name, trigger, body, enabled):
+  - `on_request` — runs in the interception proxy before the request goes
+    upstream. Can modify method, URL, headers, body.
+  - `on_response` — runs after the upstream responds, before the response is
+    returned to the client. Can modify status, headers, body.
+  - `on_replay` — runs when replaying a webhook, before re-POSTing. Can
+    modify the stored payload (e.g. regenerate a signature, update a
+    timestamp, swap a test token).
+  - `on_webhook` — runs when a webhook arrives from the relay, before it's
+    stored. Can validate, transform, or reject.
+- ⬜ Scripts are chainable (ordered by priority field), each receives the output
+  of the previous one. Errors are caught and surfaced in the GUI log pane —
+  one bad script never crashes the proxy.
+- ⬜ Script editor in the GUI (CodeMirror via CDN, ~150KB, no node_modules) with
+  JS syntax highlighting and a test-run button that evaluates against the
+  currently selected capture.
+
+**Why goja over alternatives:**
+
+| Engine | CGO? | ES version | Bundle size | Fit |
+|---|---|---|---|---|
+| **goja** | No | ES5.1 + most ES6 | Go lib (~2MB compiled) | Best — pure Go, in-process, no external deps |
+| v8go | Yes (V8) | Full ES2020+ | V8 runtime (~40MB) | Heavy, CGO breaks CLI portability |
+| quickjs-go | Yes | ES2020 | QuickJS (~1MB) | Decent but CGO |
+| otto | No | ES5 only | Go lib | No ES6, unmaintained |
+
+#### 6.2 — Full request/response editing
+
+- ⬜ Traffic detail pane: show full request headers, request body, response
+  headers, response body (currently only shows byte counts — the data is
+  already in `traffic_captures` and `proxy.Capture`, just not displayed).
+- ⬜ Editable payloads: user can modify headers + body in the detail pane, then
+  "re-send" the modified request through the proxy (or directly upstream).
+  The edited request is recorded as a new capture for comparison.
+- ⬜ Response editing: same surface — edit the response body/headers that the
+  proxy returns to the client. Useful for testing how a client handles
+  different responses without modifying the upstream server.
+- ⬜ `gui.Bindings.GetCapture(id)` — new binding that returns the full capture
+  with headers + bodies (currently `ListCaptures` returns summaries only).
+- ⬜ `gui.Bindings.ResendCapture(id, modifications)` — re-issues a capture with
+  optional header/body overrides.
+
+#### 6.3 — UI framework upgrade (Preact + htm)
+
+- ⬜ Replace vanilla JS with [Preact](https://preactjs.com/) +
+  [htm](https://github.com/developit/htm) (3KB + 1KB, same API as React hooks/
+  components, but no build step — works as ES modules from local files).
+  Consistent with the current no-node_modules, no-bundler approach.
+- ⬜ Component structure:
+  - `ui/app.js` — root component, routing, state
+  - `ui/components/sidebar.js` — project list + filters + scripts list
+  - `ui/components/webhook-list.js` — webhooks table with project filter
+  - `ui/components/webhook-detail.js` — headers + body + replay form
+  - `ui/components/traffic-list.js` — traffic table
+  - `ui/components/traffic-detail.js` — full req/resp editor
+  - `ui/components/script-editor.js` — JS script editor + test run
+  - `ui/components/status-bar.js` — tunnel status + connected projects
+  - `ui/components/search-bar.js` — full-text search input
+- ⬜ No JSX (avoids needing a transpiler). htm provides tagged template
+  literals for component markup.
+- ⬜ Keep Tailwind v4 (already set up); Preact renders into the same DOM.
+
+**Why Preact over React:**
+
+| | Preact + htm | React |
+|---|---|---|
+| Size | 4KB | 40KB+ |
+| Build step | None (ES modules) | Vite/webpack required |
+| node_modules | No | Yes |
+| API | Hooks, components | Same |
+| Fit | Consistent with no-bundler approach | Workable but adds tooling |
+
+#### 6.4 — Project management from GUI
+
+- ⬜ `+ New project` button in the sidebar. Opens a dialog: project name input
+  + "Add" button.
+- ⬜ `gui.Bindings.AddProject(name)` — new binding that calls `app.App.AddProject`.
+- ⬜ `app.App.AddProject(name)`:
+  1. POST to relay `/admin/projects/bind` (binds the path to this client_id;
+     needs admin token — see auth decision below).
+  2. Append `name` to `relay-credentials.json` `projects[]`.
+  3. Reconnect the tunnel so the new project is picked up live (cancel +
+     restart `StartTunnel`).
+  Three-sided write done atomically: relay binding + local creds + tunnel
+  reconnect. If any step fails, roll back the prior steps.
+- ⬜ `gui.Bindings.RemoveProject(name)` — unbind on relay + remove from creds +
+  reconnect. Optional for MVP; can defer.
+- ⬜ Relay endpoint: extend `handleReclaimProject` so a missing path creates a
+  binding (rather than 404ing), or add `POST /admin/projects/bind`. Reuse
+  `store.BindProject`. Conflict -> 409 if another client owns it; `force` to
+  take it.
+- ⬜ Admin token caching: `wiretap relay register --save` already writes
+  `relay-credentials.json` (mode 0600). Add an optional `admin_token` field
+  to the credentials file so the GUI can call admin routes without prompting.
+  Same trust boundary as the already-saved `client_token`.
+
+#### 6.5 — Sidebar + search + grouping
+
+- ⬜ Left sidebar (resizable):
+  - **Projects** section: lists `ConnectedProjects` from the tunnel. Click a
+    project to filter webhooks + traffic to that project. "All" shows
+    everything.
+  - **Scripts** section: lists saved JS scripts (from 6.1). Toggle
+    enable/disable per script. Click to edit.
+  - **Filters** section: by method (GET/POST/PUT/...), by status code range
+    (2xx/3xx/4xx/5xx), by body size threshold.
+- ⬜ Search bar (top, full-width): full-text search across method, URL, path,
+  request headers, request body, response headers, response body. Uses
+  SQLite FTS5 (add a virtual table + triggers to keep it in sync). Debounced
+  300ms; results update live.
+- ⬜ Group by: project (default), method, host, or status code. Toggle in the
+  sidebar.
+
+#### 6.6 — Plugin system
+
+- ⬜ Plugins are JS scripts (from 6.1) with metadata: name, description,
+  trigger, priority, enabled. Stored in SQLite `plugins` table.
+- ⬜ Built-in plugin library (shipped as JS files in `ui/plugins/`, embedded):
+  - `faker.js` — generate fake data (names, emails, UUIDs, addresses) for
+    request bodies. Wraps the [faker](https://fakerjs.dev/) API (loaded from
+    CDN or vendored locally as a single JS file).
+  - `signature.js` — compute HMAC-SHA256 signatures for webhook payloads.
+    User provides the secret; the plugin injects the signature header.
+  - `timestamp.js` — update `X-Timestamp` or `Date` headers on replay.
+  - `validate.js` — JSON schema validation for incoming webhooks.
+- ⬜ Plugin import/export: download as `.json` (name + script + metadata),
+  import via file picker or drag-and-drop. Shareable between wiretap users.
+- ⬜ Plugin chaining: multiple plugins with the same trigger run in priority
+  order; each receives the output of the previous one.
+
+---
+
+### Phase 7 — Hardening  ⬜ NOT STARTED
 
 - ⬜ Playground for cross-platform CA on darwin/windows.
 - ⬜ Relay token rotation, multi-client admin UI (CLI covers it already).
 - ⬜ Docs + README (README.md is currently untracked; revisit at the end).
+- ⬜ Cross-distro GUI release builds (webkit2_40 + webkit2_41 variants via
+  containerized builds).
 
 ---
 
@@ -677,6 +829,12 @@ builds (`make build`, `make gui`) clean.
 | Testing | stdlib + minimal `internal/testutil`; table-driven; real SQLite; httptest |
 | GUI build tags | `gui,production,webkit2_41` — `gui` is our gate; `production` is Wails' real-app gate; `webkit2_41` selects the webkit2gtk-4.1 API (use `webkit2_40` on older systems). `make gui` sets all three |
 | Dev workflow | `air` (via `.air.toml`) for GUI live-reload; `air -c .air.cli.toml` for CLI/TUI. `make watch` / `make watch-cli` are convenience wrappers. Makefile targets remain for one-shot builds |
+| JS scripting engine | **goja** (pure Go ES5.1+/ES6, no CGO, no external runtime). Scripts run in the interception proxy pipeline + on replay. Chosen over v8go (CGO) and quickjs-go (CGO) to keep the CLI portable |
+| Frontend framework | **Preact + htm** (4KB, no build step, no node_modules). Same hooks/components API as React. Chosen over React (needs Vite/webpack) to keep the no-bundler approach |
+| Script editor | **CodeMirror** via CDN (~150KB, no node_modules). JS syntax highlighting + test-run button |
+| Plugin system | JS scripts stored in SQLite with trigger/priority/enabled metadata. Chainable. Built-in library: faker, signature, timestamp, validate |
+| Full-text search | **SQLite FTS5** virtual table + triggers to keep in sync with captures/webhooks. Debounced 300ms in the GUI |
+| Admin token in GUI | Cache `admin_token` in `relay-credentials.json` (mode 0600) on `relay register --save`. GUI calls admin routes without prompting. Same trust boundary as `client_token` |
 | GUI launch | `wiretap gui` subcommand (not a separate binary); launcher in `internal/cli/gui.go` |
 
 ## 12. Open questions (resolved)
