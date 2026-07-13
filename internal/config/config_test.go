@@ -18,6 +18,9 @@ func TestDefault(t *testing.T) {
 		{"listen_addr", cfg.ListenAddr, "127.0.0.1:8888"},
 		{"relay default project", cfg.Relay.Projects[0], "default"},
 		{"tui theme", cfg.TUI.Theme, "dark"},
+		{"intercept proxy_addr", cfg.Intercept.ProxyAddr, "127.0.0.1:8888"},
+		{"intercept local_api_addr", cfg.Intercept.LocalAPIAddr, "127.0.0.1:9876"},
+		{"intercept shell", cfg.Intercept.Shell, ""},
 	}
 	for _, tc := range tests {
 		tc := tc
