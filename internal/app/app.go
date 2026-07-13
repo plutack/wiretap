@@ -63,10 +63,11 @@ type App struct {
 	db    *sql.DB
 	store *store.PCStore
 
-	mu           sync.Mutex
-	tunnelCtx    context.Context
-	tunnelCancel context.CancelFunc
-	tunnelDone   chan struct{}
+	mu                sync.Mutex
+	tunnelCtx         context.Context
+	tunnelCancel      context.CancelFunc
+	tunnelDone        chan struct{}
+	connectedProjects []string // projects the relay says this client owns (set via OnConnect); nil when no tunnel attached
 }
 
 // TunnelConfig is the resolved relay connection parameters passed to the
@@ -112,9 +113,9 @@ func New(mgr *config.Manager, opts ...Option) *App {
 	a := &App{
 		mgr:             mgr,
 		clock:           testutil.SystemClock{},
-		tunnelFactory:   defaultTunnelFactory,
 		replayTransport: http.DefaultTransport.(*http.Transport).Clone(),
 	}
+	a.tunnelFactory = a.defaultTunnelFactory // method value; closes over a so OnConnect can write back
 	for _, o := range opts {
 		o(a)
 	}
@@ -242,6 +243,39 @@ func (a *App) StartTunnel(ctx context.Context) error {
 	return nil
 }
 
+// TunnelRunning reports whether the background relay tunnel goroutine is
+// active. Used by the GUI status bar (read-only, lock-guarded).
+func (a *App) TunnelRunning() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.tunnelCancel != nil
+}
+
+// ConnectedProjects returns a snapshot of the project paths the relay says this
+// client owns, set by the tunnel's OnConnect callback. Returns nil when no
+// tunnel is attached (or before the first OK arrives). The GUI/TUI show this in
+// their status bars so the user can see what the relay is actually routing to
+// them — without having to trust the local credentials file.
+func (a *App) ConnectedProjects() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.connectedProjects == nil {
+		return nil
+	}
+	out := make([]string, len(a.connectedProjects))
+	copy(out, a.connectedProjects)
+	return out
+}
+
+// SetConnectedProjects overrides the cached "connected projects" snapshot. It
+// is the write path used by the tunnel's OnConnect (production) and by tests
+// that inject a noop tunnel which will never fire OnConnect.
+func (a *App) SetConnectedProjects(p []string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.connectedProjects = p
+}
+
 // StopTunnel cancels the background tunnel and waits for it to exit. Safe to
 // call when not running or after Close.
 func (a *App) StopTunnel() {
@@ -333,8 +367,11 @@ func (a *App) ReplayWebhook(ctx context.Context, project string, seq int64, targ
 // --- helpers -----------------------------------------------------------
 
 // defaultTunnelFactory wires relayclient.Client. It is the production default
-// for the tunnelFactory seam.
-func defaultTunnelFactory(cfg TunnelConfig, st *store.PCStore) TunnelRunner {
+// for the tunnelFactory seam. Because it is a method on *App, the relayclient
+// callbacks can write back into App state: OnConnect gives us the list of
+// projects the relay says this client owns (so the GUI/TUI can show it without
+// re-reading the credentials file), and OnDisconnect clears it.
+func (a *App) defaultTunnelFactory(cfg TunnelConfig, st *store.PCStore) TunnelRunner {
 	return relayclient.New(
 		relayclient.Config{
 			URL:         cfg.URL,
@@ -344,6 +381,10 @@ func defaultTunnelFactory(cfg TunnelConfig, st *store.PCStore) TunnelRunner {
 		},
 		st,
 		relayclient.WithClock(testutil.SystemClock{}),
+		relayclient.WithCallbacks(relayclient.Callbacks{
+			OnConnect:    func(projects []string) { a.SetConnectedProjects(projects) },
+			OnDisconnect: func(_ error) { a.SetConnectedProjects(nil) },
+		}),
 	)
 }
 
