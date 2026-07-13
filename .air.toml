@@ -1,0 +1,71 @@
+# air config for GUI development. Watches .go + ui/ files, recompiles Tailwind
+# before each rebuild, builds with the GUI build tags, and launches the window.
+#
+#   air                    # uses this file by default
+#   make watch             # same thing via make
+#
+# Requires the GUI toolchain (webkit2gtk-4.1, CGO) — same deps as `make gui`.
+# Tailwind binary: this calls `tailwindcss-extra` (the name on this system).
+# If your Tailwind binary is just `tailwindcss`, edit pre_cmd below.
+#
+# For CLI/TUI-only dev without the GUI deps, use `.air.cli.toml`:
+#   air -c .air.cli.toml
+#   make watch-cli
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  args_bin = []
+  bin = "./tmp/wiretap-gui"
+  # Build with the three tags `make gui` uses: gui (our gate), production
+  # (Wails' real-app gate), webkit2_41 (webkit API selector — use webkit2_40
+  # on systems with webkit2gtk-4.0).
+  cmd = "go build -tags 'gui,production,webkit2_41' -o ./tmp/wiretap-gui ./cmd/wiretap"
+  delay = 1000
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", "node_modules", "build", "docs", ".git"]
+  exclude_file = []
+  exclude_regex = ["_test.go"]
+  exclude_unchanged = false
+  follow_symlink = false
+  # Run the binary with `gui` to launch the Wails window.
+  full_bin = "./tmp/wiretap-gui gui"
+  include_dir = ["cmd", "internal", "ui"]
+  # Watch Go source + frontend files. Frontend changes (html/js/css) trigger a
+  # rebuild because the assets are embedded via //go:embed at build time.
+  include_ext = ["go", "html", "js", "css", "yaml", "toml"]
+  include_file = []
+  kill_delay = "0s"
+  log = "tmp/build-errors.log"
+  poll = false
+  poll_interval = 0
+  post_cmd = []
+  # Recompile Tailwind before each Go build so ui/output.css is fresh when the
+  # embed runs. If this fails, the build still proceeds with the last CSS.
+  pre_cmd = ["tailwindcss-extra -i ui/input.css -o ui/output.css --minify"]
+  rerun = false
+  rerun_delay = 500
+  # SIGINT for graceful shutdown (lets app.App.Close run via OnShutdown).
+  send_interrupt = true
+  stop_on_error = false
+
+[color]
+  app = ""
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[log]
+  main_only = false
+  silent = false
+  time = false
+
+[misc]
+  # Remove tmp/ on exit so stale binaries don't linger.
+  clean_on_exit = true
+
+[screen]
+  # Clear the terminal between rebuilds — easier to spot the latest run.
+  clear_on_rebuild = true
+  keep_scroll = true

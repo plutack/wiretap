@@ -1,5 +1,6 @@
 # Binaries
 /wiretap
+/wiretap-gui
 /wiretap-relay
 /bin/
 /dist/
@@ -10,11 +11,18 @@
 coverage.out
 coverage.txt
 
+# air (live-reload dev tool)
+/tmp/
+build-errors.log
+
 # Wails / frontend
-/ui/frontend/node_modules/
-/ui/frontend/dist/
-/ui/frontend/wailsjs/
+# The frontend lives directly in ./ui (not ./ui/frontend). The compiled
+# output.css and the auto-generated wailsjs bindings are committed so
+# `go build -tags gui` works without a separate frontend build step or the
+# wails CLI. Wails build output dir:
 /build/
+# If a node_modules ever lands under ui/ (e.g. for a richer frontend), ignore it:
+/ui/node_modules/
 
 # Node deps (commitlint + future lint tooling). package.json and
 # package-lock.json are committed; node_modules is per-developer.

@@ -1,0 +1,59 @@
+# air config for CLI/TUI development. Lighter than .air.toml: no GUI build
+# tags, no Tailwind pre-build, no webkit/CGO dependency. Watches .go files and
+# launches `wiretap tui`.
+#
+#   air -c .air.cli.toml
+#   make watch-cli
+#
+# For GUI development (with the Wails window), use the default .air.toml:
+#   air
+#   make watch
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  args_bin = []
+  bin = "./tmp/wiretap"
+  cmd = "go build -o ./tmp/wiretap ./cmd/wiretap"
+  delay = 1000
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", "node_modules", "build", "docs", ".git", "ui"]
+  exclude_file = []
+  exclude_regex = ["_test.go"]
+  exclude_unchanged = false
+  follow_symlink = false
+  # Run the TUI by default. Change to "./tmp/wiretap" for a plain CLI shell,
+  # or "./tmp/wiretap intercept start --no-shell" to test interception.
+  full_bin = "./tmp/wiretap tui"
+  include_dir = ["cmd", "internal"]
+  include_ext = ["go", "yaml", "toml"]
+  include_file = []
+  kill_delay = "0s"
+  log = "tmp/build-errors.log"
+  poll = false
+  poll_interval = 0
+  post_cmd = []
+  pre_cmd = []
+  rerun = false
+  rerun_delay = 500
+  send_interrupt = true
+  stop_on_error = false
+
+[color]
+  app = ""
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[log]
+  main_only = false
+  silent = false
+  time = false
+
+[misc]
+  clean_on_exit = true
+
+[screen]
+  clear_on_rebuild = true
+  keep_scroll = true

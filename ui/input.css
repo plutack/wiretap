@@ -1,0 +1,5 @@
+@import "tailwindcss";
+
+/* wiretap GUI — minimal Tailwind v4 entry. The standalone `tailwindcss` CLI
+   compiles this to ./output.css (see wails.json frontend:build). The compiled
+   output is committed so the app runs without a build step. */

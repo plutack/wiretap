@@ -40,6 +40,7 @@ module.exports = {
       'always',
       [
         'api',
+        'app',
         'cli',
         'config',
         'intercept',
@@ -49,6 +50,7 @@ module.exports = {
         'store',
         'shellscript',
         'castore',
+        'gui',
         'tui',
         'testutil',
         'wiretap',
