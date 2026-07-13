@@ -1,9 +1,8 @@
 // Package shellscript generates the sourceable shell scripts that wiretap
 // injects into a spawned terminal to route its HTTP/HTTPS traffic through
-// the local MITM proxy. This is the Go port of httptoolkit's
-// terminal-scripts.ts, adapted to wiretap's naming (WIRETAP_ACTIVE,
-// WIRETAP_OVERRIDE_BIN) and with a wiretap_stop_interception function
-// injected into every shell — not just PowerShell as in the original.
+// the local interception proxy. The scripts use wiretap's own naming
+// (WIRETAP_ACTIVE, WIRETAP_OVERRIDE_BIN) and inject a
+// wiretap_stop_interception function into every supported shell.
 //
 // The package is pure: every generator is a function (Env) -> string. There
 // is no I/O, no filesystem, no clock. This makes the output trivially
@@ -18,7 +17,7 @@ package shellscript
 // map 1:1 to environment variables used by the proxy and its override-bin
 // shims (git/curl/node wrappers that respect the proxy).
 type Env struct {
-	// ProxyAddr is the host:port of the local MITM proxy, e.g. "127.0.0.1:8888".
+	// ProxyAddr is the host:port of the local interception proxy, e.g. "127.0.0.1:8888".
 	ProxyAddr string
 	// OverrideBinPath is the absolute path to the directory containing shim
 	// scripts. Prepended to PATH so the shell finds our wrappers first.

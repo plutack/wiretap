@@ -148,7 +148,7 @@ func Fish(env Env) string {
 
 // PowerShell returns the script for Windows PowerShell. It sets env vars,
 // overrides Invoke-WebRequest defaults, and defines the Stop-Interception
-// function (adapted from httptoolkit with our naming).
+// function with wiretap's naming.
 func PowerShell(env Env) string {
 	var b strings.Builder
 	b.WriteString("    $Env:WIRETAP_ACTIVE = \"1\"\n")

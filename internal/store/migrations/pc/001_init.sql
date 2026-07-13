@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS webhooks (
     PRIMARY KEY (project, seq)
 );
 
--- Outbound HTTP captures from the MITM proxy. One row per request/response
+-- Outbound HTTP captures from the interception proxy. One row per request/response
 -- pair. id is autoincrement so the UI can show a stable monotonic order.
 CREATE TABLE IF NOT EXISTS traffic_captures (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,

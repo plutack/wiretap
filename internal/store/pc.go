@@ -10,9 +10,9 @@ import (
 
 // PCStore is the local storage layer used by the wiretap app on a user's
 // machine. It caches webhooks pushed by the relay, holds traffic captures
-// from the MITM proxy, and keeps the authoritative per-project cursor sent
-// in HELLO on tunnel reconnect. Like RelayStore, it owns only a *sql.DB
-// handle and stays free of wire-protocol imports.
+// from the interception proxy, and keeps the authoritative per-project
+// cursor sent in HELLO on tunnel reconnect. Like RelayStore, it owns only a
+// *sql.DB handle and stays free of wire-protocol imports.
 type PCStore struct {
 	db *sql.DB
 }
