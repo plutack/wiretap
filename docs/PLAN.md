@@ -18,7 +18,7 @@
 | 1 — Cross-cutting cores | ✅ DONE | `7683597`, `0bf277a`, `171325c` |
 | 2 — relayd HTTP + tunnel | ✅ DONE | `92c354b`, `37fb6a4` |
 | 3 — PC relay client + CLI | ✅ DONE | `8479067`, `b01b8b1`, `7af7334` |
-| 4 — Traffic interception | ⬜ NOT STARTED | -- |
+| 4 — Traffic interception | ✅ DONE | `tbd` |
 | 5 — Wails GUI | ⬜ NOT STARTED | -- |
 | 6 — Hardening | ⬜ NOT STARTED | -- |
 
@@ -37,6 +37,11 @@ All tests pass under `go test -race -shuffle=on ./...`. Coverage per package:
 | `internal/config` | 74.6% | Includes credentials round-trip |
 | `internal/store` | 64.4% | Real `:memory:` SQLite |
 | `internal/relayd` | 70.9% | httptest + real WebSocket |
+| `internal/intercept` | 64.4% | Orchestration + Capture→PCStore adapter; `Cleanup` covered via cli tests |
+| `internal/intercept/castore` | 34.0% | Pure CA tested; OS trust-store glue needs root |
+| `internal/intercept/proxy` | 76.7% | Interception against in-process tls upstream |
+| `internal/intercept/overridebin` | 91.7% | Golden-file tested |
+| `internal/intercept/localapi` | 100.0% | httptest + fake Querier |
 | `internal/tui` | 64.7% | Polls PCStore, truncate tested |
 | `internal/testutil` | 36.4% | Golden helper + fake clock/idgen |
 | `cmd/wiretap-relay` | 21.4% | HTTP handler + graceful shutdown |
@@ -52,8 +57,8 @@ the project. Don't stage it via `git add -A` without excluding it.
 
 ### Goals (MVP)
 
-1. Intercept outbound HTTP/HTTPS traffic from a spawned shell via an MITM proxy
-   (httptoolkit-style env injection), with `stop_interception` for **every** shell.
+1. Intercept outbound HTTP/HTTPS traffic from a spawned shell via a local
+   interception proxy (env injection), with `stop_interception` for **every** shell.
 2. Capture inbound webhooks over the internet using a self-hosted relay (`relayd`)
    on your VPS, with store-and-forward so the local PC never misses a webhook while
    offline.
@@ -141,7 +146,7 @@ wiretap/
       relay_test.go
       testutil_test.go                   # helpers for opening an isolated SQLite
     intercept/                           # traffic interception
-      proxy/                             # MITM proxy core (pluggable transport)
+      proxy/                             # interception proxy core (pluggable transport)
       shellscript/                       # per-shell script generators
         bash.go bash_test.go
         fish.go fish_test.go
@@ -490,18 +495,38 @@ Each phase ends with a green test suite for its packages before moving on.
   `TestClientRelay_HappyPath` and `TestClientRelay_OfflineIngressStreamsOnConnect`
   in `internal/relayclient/integration_test.go`.
 
-### Phase 4 — Traffic interception  ⬜ NOT STARTED
+### Phase 4 — Traffic interception  ✅ DONE
 
-Next to build. See §7 of PLAN.md and `internal/intercept/shellscript/` which
-is already complete from Phase 1.
+- ✅ `internal/intercept/castore` pure ECDSA P-256 CA (`GenerateCA` +
+  `CA.LeafCert`) verified against the issuing root, with build-tag-split
+  `Installer` (Linux `update-ca-certificates` glue, darwin/windows stubs
+  returning `ErrUnsupportedOS`) and an in-memory `FakeInstaller` (build-tag-
+  split `NewInstaller`). Coverage 34% — the pure crypto is tested; the OS
+  trust-store glue needs root, like `cmd/wiretap-relay` is lightly covered.
+- ✅ `internal/intercept/proxy` interception core: standard forward-proxy protocol;
+  CONNECT terminates, signs a per-host leaf on the fly, re-issues the request
+  upstream over a separate TLS dial, records each exchange. Tested end-to-end
+  against an in-process `httptest` TLS upstream with a real CA. Coverage 76.7%.
+- ✅ `internal/intercept/overridebin` POSIX `#!/bin/sh` shim generators for
+  git/curl/node (resolve the real binary by skipping the override dir on PATH,
+  then exec with proxy/CA pins). Golden files + table tests. Coverage 91.7%.
+- ✅ `internal/intercept` orchestration: `Start` (ensure CA → write override-bin
+  → append guarded `# --wiretap-intercept--` block to startup files → start
+  proxy → start local control API), `Session.Stop`, `Session.SpawnShell`, and
+  `Cleanup` (for `wiretap intercept stop` crash recovery). Pure helpers
+  (`GuardBlock`, `Inject/RemoveStartupBlock`, `startupFilesFor`, `ShellCommand`)
+  are unit-tested; `SpawnShell` is interactive glue.
+- ✅ `internal/intercept/localapi` 127.0.0.1 control HTTP API: `GET
+  /local/health`, `GET /local/webhooks?project=&limit=`, `GET /local/captures
+  ?limit=` with limit clamping. Coverage 100%.
+- ✅ `wiretap intercept start` (`--shell`, `--no-shell`) and `wiretap intercept
+  stop` cobra subcommands in `internal/cli/intercept.go`, with `detectShellKind`
+  (flag → config → `$SHELL`). Seams (`interceptStart`/`interceptSpawn`/
+  `interceptCleanup`) keep the CLI testable without binding ports / spawning shells.
+- ✅ `internal/config`: added `Intercept` section (`proxy_addr`, `local_api_addr`,
+  `shell`) with defaults `127.0.0.1:8888` / `127.0.0.1:9876` / `""`.
 
-- ⬜ `internal/intercept/castore` Linux impl (+ stubs for darwin/windows).
-- ⬜ `internal/intercept/proxy` MITM core using `net/http` + CONNECT.
-- ⬜ `internal/intercept` orchestration: write startup-file gated blocks,
-  generate override-bin shims, spawn shell with `WIRETAP_ACTIVE=1`.
-- ⬜ `wiretap intercept start` / `wiretap intercept stop`.
-- ⬜ Local 127.0.0.1 control HTTP API for external scripts (`/local/webhooks`,
-  etc.). May land here or in its own commit.
+All tests green under `go test -race -shuffle=on ./...`.
 
 ### Phase 5 — Wails GUI  ⬜ NOT STARTED
 
@@ -551,6 +576,6 @@ is already complete from Phase 1.
    hyphens); the binary lives in `cmd/wiretap-relay` and is named
    `wiretap-relay` so it is clearly part of the wiretap family.
 3. **`wiretap intercept start` behaviour** — **spawn an interactive shell**
-   (httptoolkit-style). Implemented in Phase 4. *(Interpreted as "spawn" from the
+   (env-injection style). Implemented in Phase 4. *(Interpreted as "spawn" from the
    reply; revisit before Phase 4 if this is wrong.)*
 4. **Wails version** — **v2** (stable). Migrate to v3 later if it matures.
