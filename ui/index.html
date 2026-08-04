@@ -5,87 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>wiretap</title>
     <link rel="stylesheet" href="./output.css" />
+
+    <!-- CodeMirror 5 (UMD global window.CodeMirror; loaded as classic scripts,
+         not ES modules). Used by the script editor. -->
+    <link rel="stylesheet" href="./vendor/codemirror/codemirror.css" />
+    <script src="./vendor/codemirror/codemirror.js"></script>
+    <script src="./vendor/codemirror/mode/javascript/javascript.js"></script>
+
+    <!-- Import map: bare specifiers used by the vendored Preact + htm modules.
+         Supported in WebKitGTK 2.41+ (the Wails webview). -->
+    <script type="importmap">
+      {
+        "imports": {
+          "preact": "./vendor/preact/preact.module.js",
+          "preact/hooks": "./vendor/preact/hooks.module.js",
+          "htm": "./vendor/htm/htm.module.js"
+        }
+      }
+    </script>
   </head>
   <body class="h-full bg-neutral-950 text-neutral-200 font-sans">
-    <div id="app" class="flex h-full flex-col">
-      <!-- Header / status bar -->
-      <header class="flex items-center gap-4 border-b border-neutral-800 px-4 py-2">
-        <h1 class="text-base font-semibold tracking-tight text-neutral-100">
-          wiretap
-        </h1>
-        <div id="status" class="flex items-center gap-3 text-xs text-neutral-400">
-          <span id="status-version" class="rounded bg-neutral-800 px-1.5 py-0.5 font-mono">v?</span>
-          <span id="status-store" class="hidden">store: <b class="text-neutral-200">open</b></span>
-          <span id="status-relay" class="hidden truncate max-w-[40ch]"></span>
-          <span id="status-tunnel" class="hidden"></span>
-          <span id="status-watching" class="hidden truncate max-w-[60ch]"></span>
-        </div>
-        <div class="ml-auto flex items-center gap-2">
-          <button id="refresh" class="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800">
-            Refresh
-          </button>
-        </div>
-      </header>
-
-      <!-- Tab bar -->
-      <nav class="flex gap-1 border-b border-neutral-800 px-2">
-        <button data-tab="webhooks" class="tab-btn border-b-2 border-sky-500 px-3 py-2 text-sm text-sky-400">
-          Webhooks
-        </button>
-        <button data-tab="traffic" class="tab-btn border-b-2 border-transparent px-3 py-2 text-sm text-neutral-400 hover:text-neutral-200">
-          Traffic
-        </button>
-      </nav>
-
-      <!-- Main: list + detail -->
-      <main class="flex min-h-0 flex-1">
-        <section class="min-w-0 flex-1 overflow-auto">
-          <table id="webhooks-table" class="w-full text-sm">
-            <thead class="sticky top-0 bg-neutral-900 text-left text-xs uppercase text-neutral-500">
-              <tr>
-                <th class="px-3 py-1.5">Project</th>
-                <th class="px-3 py-1.5">Seq</th>
-                <th class="px-3 py-1.5">Method</th>
-                <th class="px-3 py-1.5">Path</th>
-                <th class="px-3 py-1.5">Received</th>
-                <th class="px-3 py-1.5 text-right">Body</th>
-              </tr>
-            </thead>
-            <tbody id="webhooks-body" class="divide-y divide-neutral-900"></tbody>
-          </table>
-
-          <table id="traffic-table" class="hidden w-full text-sm">
-            <thead class="sticky top-0 bg-neutral-900 text-left text-xs uppercase text-neutral-500">
-              <tr>
-                <th class="px-3 py-1.5">#</th>
-                <th class="px-3 py-1.5">Method</th>
-                <th class="px-3 py-1.5">URL</th>
-                <th class="px-3 py-1.5">Status</th>
-                <th class="px-3 py-1.5">At</th>
-                <th class="px-3 py-1.5 text-right">Req / Resp</th>
-              </tr>
-            </thead>
-            <tbody id="traffic-body" class="divide-y divide-neutral-900"></tbody>
-          </table>
-
-          <p id="empty" class="hidden px-4 py-8 text-sm text-neutral-500">
-            Nothing captured yet.
-          </p>
-        </section>
-
-        <!-- Detail pane -->
-        <aside id="detail" class="hidden w-1/2 min-w-[28rem] flex-col overflow-auto border-l border-neutral-800 bg-neutral-900/40">
-          <div class="flex items-center gap-2 border-b border-neutral-800 px-4 py-2">
-            <h2 id="detail-title" class="text-sm font-semibold text-neutral-100">Detail</h2>
-            <button id="detail-close" class="ml-auto text-neutral-500 hover:text-neutral-200">✕</button>
-          </div>
-          <div id="detail-body" class="flex-1 overflow-auto px-4 py-3 text-sm"></div>
-        </aside>
-      </main>
-
-      <footer id="toast" class="hidden border-t border-neutral-800 px-4 py-1.5 text-xs text-neutral-400"></footer>
-    </div>
-
+    <div id="app" class="h-full"></div>
     <script type="module" src="./app.js"></script>
   </body>
 </html>

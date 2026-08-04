@@ -44,6 +44,108 @@ export namespace gui {
 	        this.status = source["status"];
 	    }
 	}
+	export class ScriptView {
+	    id: number;
+	    name: string;
+	    trigger: string;
+	    body: string;
+	    priority: number;
+	    enabled: boolean;
+	    created_at: string;
+	    updated_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ScriptView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.trigger = source["trigger"];
+	        this.body = source["body"];
+	        this.priority = source["priority"];
+	        this.enabled = source["enabled"];
+	        this.created_at = source["created_at"];
+	        this.updated_at = source["updated_at"];
+	    }
+	}
+	export class ScriptInput {
+	    id: number;
+	    name: string;
+	    trigger: string;
+	    body: string;
+	    priority: number;
+	    enabled: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ScriptInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.trigger = source["trigger"];
+	        this.body = source["body"];
+	        this.priority = source["priority"];
+	        this.enabled = source["enabled"];
+	    }
+	}
+	export class ScriptTestRequest {
+	    body: string;
+	    method: string;
+	    url: string;
+	    headers: Record<string, string>;
+	    req_body: string;
+	    status: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ScriptTestRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.body = source["body"];
+	        this.method = source["method"];
+	        this.url = source["url"];
+	        this.headers = source["headers"];
+	        this.req_body = source["req_body"];
+	        this.status = source["status"];
+	    }
+	}
+	export class ScriptTestView {
+	    method: string;
+	    url: string;
+	    req_headers: Record<string, Array<string>>;
+	    req_body: string;
+	    status: number;
+	    resp_headers: Record<string, Array<string>>;
+	    resp_body: string;
+	    logs: Array<string>;
+	    rejected: boolean;
+	    reject_reason?: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ScriptTestView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.method = source["method"];
+	        this.url = source["url"];
+	        this.req_headers = source["req_headers"];
+	        this.req_body = source["req_body"];
+	        this.status = source["status"];
+	        this.resp_headers = source["resp_headers"];
+	        this.resp_body = source["resp_body"];
+	        this.logs = source["logs"];
+	        this.rejected = source["rejected"];
+	        this.reject_reason = source["reject_reason"];
+	        this.error = source["error"];
+	    }
+	}
 	export class StatusView {
 	    version: string;
 	    store_open: boolean;
