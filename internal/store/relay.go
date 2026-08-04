@@ -238,7 +238,7 @@ func (s *RelayStore) NextWebhookSeq(ctx context.Context, project string) (int64,
 	if err != nil {
 		return 0, fmt.Errorf("NextWebhookSeq %q begin: %w", project, err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer tx.Rollback()
 
 	var nextSeq int64
 	if err := tx.QueryRowContext(ctx,
@@ -397,7 +397,7 @@ func (s *RelayStore) MarkDelivered(ctx context.Context, project string, upToSeq 
 	if err != nil {
 		return fmt.Errorf("MarkDelivered %q begin: %w", project, err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer tx.Rollback()
 
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE webhooks SET delivered = 1, delivered_at = ?

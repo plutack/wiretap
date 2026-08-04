@@ -370,7 +370,7 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	if err := clientTLS.HandshakeContext(context.Background()); err != nil {
 		return
 	}
-	defer func() { _ = clientTLS.Close() }()
+	defer clientTLS.Close()
 
 	upstreamTLS, ok := upstream.(*tls.Conn)
 	if !ok {
@@ -531,7 +531,7 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "wiretap: upstream error: "+err.Error(), http.StatusBadGateway)
 		return
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
 

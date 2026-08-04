@@ -68,7 +68,7 @@ func runGUI(parent context.Context, version string) error {
 	if err := a.Open(parent); err != nil {
 		return fmt.Errorf("gui: open store: %w", err)
 	}
-	defer func() { _ = a.Close() }()
+	defer a.Close()
 
 	// Connect the relay tunnel in the background (no-op when relay URL or
 	// credentials are missing — the dashboard still shows historical data).

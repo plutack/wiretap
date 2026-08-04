@@ -321,7 +321,7 @@ func TestStartStopLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /local/captures: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("captures status = %d, want 200", resp.StatusCode)
 	}
