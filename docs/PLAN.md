@@ -20,7 +20,7 @@
 | 3 — PC relay client + CLI | ✅ DONE | `8479067`, `b01b8b1`, `7af7334` |
 | 4 — Traffic interception | ✅ DONE | `tbd` |
 | 5 — Wails GUI | ✅ DONE | `88693d8` |
-| 6 — Payload scripting, UI upgrade, project mgmt | ⬜ NOT STARTED | -- |
+| 6 — Payload scripting, UI upgrade, project mgmt | 🚧 IN PROGRESS | -- |
 | 7 — Hardening | ⬜ NOT STARTED | -- |
 
 Latest commit on `main`: `7af7334` (Phase 5 work uncommitted at time of
@@ -32,6 +32,7 @@ All tests pass under `go test -race -shuffle=on ./...`. Coverage per package:
 | Package | Coverage | Notes |
 |---|---|---|
 | `internal/relayproto` | 97.6% | Sealed Message union |
+| `internal/scripting` | 86.4% | goja sandbox + builtins + chain runner (Phase 6.1) |
 | `internal/intercept/shellscript` | 99.1% | Golden-file tested |
 | `internal/relayclient` | 84.8% | Dialer/Conn/Backoff fakes |
 | `internal/cli` | ~73% | Relay subcommands + TUI seam |
@@ -646,7 +647,7 @@ ignored) and clear the screen between rebuilds.
 All tests green under `go test -race -shuffle=on ./...`; both default and GUI
 builds (`make build`, `make gui`) clean.
 
-### Phase 6 — Payload scripting, UI upgrade, and project management  ⬜ NOT STARTED
+### Phase 6 — Payload scripting, UI upgrade, and project management  🚧 IN PROGRESS
 
 > This is the feature phase: the core plumbing works, now we make wiretap
 > genuinely useful for real webhook development. The theme is **full control**:
@@ -655,15 +656,26 @@ builds (`make build`, `make gui`) clean.
 
 #### 6.1 — JS scripting engine (goja)
 
-- ⬜ Embed [goja](https://github.com/dop251/goja) (pure Go ES5.1+/ES6
+- ✅ Embed [goja](https://github.com/dop251/goja) (pure Go ES5.1+/ES6
   interpreter — no CGO, no external runtime to bundle, consistent with the
   project's pure-Go CLI philosophy). Uniquely suited: it evaluates JS
   in-process, supports arrows/classes/let/const/template literals/destructuring/
-  Maps/Sets/Promises, and has no V8/CGO dependency.
-- ⬜ `internal/scripting` package: wraps goja with a sandboxed runtime, built-in
-  helpers (`crypto.hmac`, `crypto.sha256`, `base64.encode/decode`, `json.parse/
-  stringify`, `regex.match/replace`), and a `Run(script, context)` API.
-- ⬜ Script types (stored in SQLite `scripts` table: name, trigger, body, enabled):
+  Maps/Sets/Promises, and has no V8/CGO dependency. Added as a direct dep.
+- ✅ `internal/scripting` package: wraps goja with a fresh-per-run sandboxed
+  runtime, built-in helpers (`crypto.hmac`, `crypto.sha256`, `crypto.sha1`,
+  `base64.encode/decode`, `json.parse/stringify`, `regex.match/replace`,
+  `console.log/error` captured to a log slice), a `reject(reason)` hook, and a
+  `Run(ctx, script, *Exchange) (Result, error)` API. The `Exchange` exposes
+  `request` (method/url/headers/body) and `response` (status/headers/body) as
+  JS globals that scripts mutate in place; headers are flattened to
+  single-valued maps for JS ergonomics with `flattenHeader`/`expandHeader`
+  helpers to round-trip `http.Header`. A per-run timeout (goja `Interrupt`) and
+  ctx cancellation guarantee one runaway script never wedges the caller.
+  86.4% coverage.
+- ✅ Script types stored in SQLite `scripts` table (id, name, trigger, body,
+  priority, enabled, created_at, updated_at) via PC migration `002_scripts.sql`
+  and `PCStore` CRUD (`InsertScript`, `UpdateScript`, `SetScriptEnabled`,
+  `DeleteScript`, `ScriptByID`, `Scripts`, `ScriptsByTrigger`). Triggers:
   - `on_request` — runs in the interception proxy before the request goes
     upstream. Can modify method, URL, headers, body.
   - `on_response` — runs after the upstream responds, before the response is
@@ -673,12 +685,19 @@ builds (`make build`, `make gui`) clean.
     timestamp, swap a test token).
   - `on_webhook` — runs when a webhook arrives from the relay, before it's
     stored. Can validate, transform, or reject.
-- ⬜ Scripts are chainable (ordered by priority field), each receives the output
-  of the previous one. Errors are caught and surfaced in the GUI log pane —
-  one bad script never crashes the proxy.
-- ⬜ Script editor in the GUI (CodeMirror via CDN, ~150KB, no node_modules) with
-  JS syntax highlighting and a test-run button that evaluates against the
-  currently selected capture.
+- ✅ Scripts are chainable via `Engine.RunChain(ctx, trigger, scripts, *Exchange)`
+  (enabled + matching trigger, ordered by ascending priority), threading the
+  same Exchange so each receives the previous one's mutations. A `reject()`
+  short-circuits the chain; a script error is recorded per-script in
+  `ChainResult.Results` but does NOT stop the chain — one bad script never
+  crashes the pipeline. GUI log-pane surfacing is pending the GUI wiring.
+- ⬜ Wire `RunChain` into the interception proxy (on_request/on_response), the
+  replayer (on_replay), and the relay-webhook ingest path (on_webhook). The
+  engine + store are done; the call sites are the remaining backend work.
+- ⬜ Script editor in the GUI (CodeMirror 5, ~150KB, vendored offline under
+  `ui/vendor/codemirror/` — no CDN, no node_modules; embedded via
+  `//go:embed all:ui`) with JS syntax highlighting and a test-run button that
+  evaluates against the currently selected capture.
 
 **Why goja over alternatives:**
 
