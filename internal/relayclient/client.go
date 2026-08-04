@@ -49,17 +49,37 @@ type Callbacks struct {
 	OnDisconnect func(err error)
 }
 
+// WebhookTransformer optionally rewrites — or rejects — an incoming webhook
+// before it is persisted to the local store. It is the seam the JavaScript
+// scripting engine plugs into for the on_webhook trigger; the client
+// deliberately does not import internal/scripting (the app layer supplies an
+// adapter). A nil transformer means "store as received".
+//
+// Returning ErrWebhookRejected (or an error wrapping it) drops the webhook: it
+// is still ACKed so the relay advances its cursor and stops re-pushing within
+// the session, but it is neither stored nor surfaced via OnWebhook. Any other
+// error is treated as non-fatal — the original row is stored unchanged — so a
+// broken script never wedges ingestion.
+type WebhookTransformer interface {
+	TransformWebhook(ctx context.Context, row store.WebhookRow) (store.WebhookRow, error)
+}
+
+// ErrWebhookRejected signals that an on_webhook transformer chose to drop the
+// webhook. See WebhookTransformer for the storage/ack semantics.
+var ErrWebhookRejected = errors.New("relayclient: webhook rejected by on_webhook script")
+
 // Client dials and runs the tunnel protocol against a wiretap-relay. Call
 // Run once with a long-lived context; cancel it to shut down. Reconnects
 // with exponential backoff (1s -> 30s, +/=50 percent jitter) until ctx is
 // cancelled.
 type Client struct {
-	cfg       Config
-	store     *store.PCStore
-	clock     testutil.Clock
-	dialer    Dialer
-	backoff   Backoff
-	callbacks Callbacks
+	cfg         Config
+	store       *store.PCStore
+	clock       testutil.Clock
+	dialer      Dialer
+	backoff     Backoff
+	callbacks   Callbacks
+	transformer WebhookTransformer
 }
 
 // Option configures a Client. Passed to New.
@@ -81,6 +101,13 @@ func WithBackoff(b Backoff) Option { return func(c2 *Client) { c2.backoff = b } 
 
 // WithCallbacks subscribes to lifecycle events. See Callbacks docs.
 func WithCallbacks(cb Callbacks) Option { return func(c2 *Client) { c2.callbacks = cb } }
+
+// WithWebhookTransformer installs the on_webhook rewrite/reject seam (the
+// scripting engine plugs in here). Defaults to nil, meaning webhooks are
+// stored exactly as received.
+func WithWebhookTransformer(t WebhookTransformer) Option {
+	return func(c2 *Client) { c2.transformer = t }
+}
 
 // New builds a Client. store is required; it is consulted on every dial to
 // load the per-project cursor sent in HELLO and used to persist incoming
@@ -225,10 +252,18 @@ func (c *Client) reader(ctx context.Context, conn Conn, ackCh chan<- relayproto.
 			continue
 		}
 		row := pushToRow(push)
-		inserted, err := c.store.StoreWebhook(ctx, row, c.clock.Now())
-		if err != nil {
-			// Storage error is the only thing that ends the session.
-			return fmt.Errorf("store webhook %s/%d: %w", push.Project, push.Seq, err)
+		// Run the on_webhook transformer (if any) before persisting. A rejection
+		// drops the row but still ACKs; any other transform error is non-fatal
+		// and leaves the original row intact (see WebhookTransformer).
+		row, rejected := c.transformWebhook(ctx, row)
+		var inserted bool
+		if !rejected {
+			var err error
+			inserted, err = c.store.StoreWebhook(ctx, row, c.clock.Now())
+			if err != nil {
+				// Storage error is the only thing that ends the session.
+				return fmt.Errorf("store webhook %s/%d: %w", push.Project, push.Seq, err)
+			}
 		}
 		// Always ack, even if duplicated: the relay uses the ack to advance
 		// acked_seq; an idempotent store + redundant ack is the safe pair.
@@ -246,6 +281,25 @@ func (c *Client) reader(ctx context.Context, conn Conn, ackCh chan<- relayproto.
 			c.callbacks.OnWebhook(row)
 		}
 	}
+}
+
+// transformWebhook applies the configured WebhookTransformer to row. It reports
+// rejected == true when the transformer returned ErrWebhookRejected (the caller
+// then drops the row but still ACKs). With no transformer, or any non-reject
+// transform error, it returns the input row unchanged and rejected == false so
+// ingestion always makes progress.
+func (c *Client) transformWebhook(ctx context.Context, row store.WebhookRow) (store.WebhookRow, bool) {
+	if c.transformer == nil {
+		return row, false
+	}
+	out, err := c.transformer.TransformWebhook(ctx, row)
+	if err != nil {
+		if errors.Is(err, ErrWebhookRejected) {
+			return row, true
+		}
+		return row, false
+	}
+	return out, false
 }
 
 // writer drains ackCh and writes ACKs to the wire. Cancelling ctx lets the
