@@ -5,6 +5,24 @@ import (
 	"strings"
 )
 
+// bashSnapshot captures the pre-interception values of every env var we are
+// about to overwrite, so wiretap_stop_interception can restore them exactly.
+// It MUST be emitted before bashExports runs — otherwise the snapshot would
+// capture the wiretap values themselves and "stopping" would restore the proxy
+// config rather than remove it.
+func bashSnapshot(env Env) string {
+	var b strings.Builder
+	b.WriteString("    __WIRETAP_OLD_PATH=\"$PATH\"\n")
+	b.WriteString("    __WIRETAP_OLD_HTTP_PROXY=\"${HTTP_PROXY:-}\"\n")
+	b.WriteString("    __WIRETAP_OLD_HTTPS_PROXY=\"${HTTPS_PROXY:-}\"\n")
+	b.WriteString("    __WIRETAP_OLD_NO_PROXY=\"${NO_PROXY:-}\"\n")
+	if env.CACertPath != "" {
+		b.WriteString("    __WIRETAP_OLD_SSL_CERT_FILE=\"${SSL_CERT_FILE:-}\"\n")
+		b.WriteString("    __WIRETAP_OLD_NODE_EXTRA_CA_CERTS=\"${NODE_EXTRA_CA_CERTS:-}\"\n")
+	}
+	return b.String()
+}
+
 // bashExports produces the export lines for sh-compatible shells (bash,
 // zsh, dash, ksh, sh). Each env value is shell-escaped: only double quotes
 // and backslashes need escaping inside double-quoted context in POSIX sh.
@@ -25,27 +43,18 @@ func bashExports(env Env) string {
 }
 
 // bashStopFn returns the wiretap_stop_interception function for sh-compatible
-// shells. It restores every env var we set (by snapshotting the old values
-// before interception) and unsets WIRETAP_ACTIVE so future shells launched
-// from this one are clean. The snapshot+restore pattern is critical: simply
-// unsetting would lose any pre-existing proxy config the user had.
+// shells. It restores every env var we set (from the snapshot bashSnapshot
+// captured before interception) and unsets WIRETAP_ACTIVE so future shells
+// launched from this one are clean. The snapshot+restore pattern is critical:
+// simply unsetting would lose any pre-existing proxy config the user had.
 func bashStopFn(env Env) string {
-	snapshot := ""
 	restore := ""
 	if env.CACertPath != "" {
-		snapshot += `
-    __WIRETAP_OLD_SSL_CERT_FILE="${SSL_CERT_FILE:-}"
-    __WIRETAP_OLD_NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-}"`
 		restore += `
         export SSL_CERT_FILE="$__WIRETAP_OLD_SSL_CERT_FILE"
         export NODE_EXTRA_CA_CERTS="$__WIRETAP_OLD_NODE_EXTRA_CA_CERTS"`
 	}
 	return `
-    __WIRETAP_OLD_PATH="$PATH"
-    __WIRETAP_OLD_HTTP_PROXY="${HTTP_PROXY:-}"
-    __WIRETAP_OLD_HTTPS_PROXY="${HTTPS_PROXY:-}"
-    __WIRETAP_OLD_NO_PROXY="${NO_PROXY:-}"` + snapshot + `
-
     wiretap_stop_interception() {
         export PATH="$__WIRETAP_OLD_PATH"
         export HTTP_PROXY="$__WIRETAP_OLD_HTTP_PROXY"
@@ -70,6 +79,9 @@ func stopOldExtrasUnset(env Env) string {
 func Bash(env Env) string {
 	var b strings.Builder
 	b.WriteString("    export WIRETAP_ACTIVE=1\n")
+	// Snapshot the user's original env BEFORE we overwrite it, so the stop
+	// function restores their real values rather than wiretap's.
+	b.WriteString(bashSnapshot(env))
 	b.WriteString(bashExports(env))
 	b.WriteString(bashStopFn(env))
 	if env.CallbackURL != "" {
@@ -98,11 +110,35 @@ func toPosixPath(p string) string {
 	return "/" + drive + rest
 }
 
+// fishRestoreOrErase emits a fish snippet that restores an exported variable
+// from its __WIRETAP_OLD_<name> snapshot, or erases it when the snapshot is
+// empty (the user had no such variable before interception). `set -q var[1]`
+// is false for a global set to zero elements, which is what the snapshot
+// captures when the original was unset. Uses `set -gx` so the change reaches
+// the interactive shell rather than staying local to the stop function.
+func fishRestoreOrErase(name string) string {
+	return fmt.Sprintf("        if set -q __WIRETAP_OLD_%[1]s[1]\n"+
+		"            set -gx %[1]s $__WIRETAP_OLD_%[1]s\n"+
+		"        else\n"+
+		"            set -e %[1]s\n"+
+		"        end\n", name)
+}
+
 // Fish returns the script for the fish shell. Fish uses set -x for exports
 // and function/endfunction for function definitions.
 func Fish(env Env) string {
 	var b strings.Builder
 	b.WriteString("    set -x WIRETAP_ACTIVE 1\n")
+	// Snapshot the user's original env BEFORE we overwrite it, so the stop
+	// function restores their real values rather than wiretap's.
+	b.WriteString("    set -g __WIRETAP_OLD_PATH $PATH\n")
+	b.WriteString("    set -g __WIRETAP_OLD_HTTP_PROXY $HTTP_PROXY\n")
+	b.WriteString("    set -g __WIRETAP_OLD_HTTPS_PROXY $HTTPS_PROXY\n")
+	b.WriteString("    set -g __WIRETAP_OLD_NO_PROXY $NO_PROXY\n")
+	if env.CACertPath != "" {
+		b.WriteString("    set -g __WIRETAP_OLD_SSL_CERT_FILE $SSL_CERT_FILE\n")
+		b.WriteString("    set -g __WIRETAP_OLD_NODE_EXTRA_CA_CERTS $NODE_EXTRA_CA_CERTS\n")
+	}
 	fmt.Fprintf(&b, "    set -x HTTP_PROXY %q\n", "http://"+env.ProxyAddr)
 	fmt.Fprintf(&b, "    set -x HTTPS_PROXY %q\n", "http://"+env.ProxyAddr)
 	fmt.Fprintf(&b, "    set -x NO_PROXY %q\n", "localhost,127.0.0.1")
@@ -113,30 +149,27 @@ func Fish(env Env) string {
 	if env.OverrideBinPath != "" {
 		fmt.Fprintf(&b, "    set -x PATH %q $PATH\n", env.OverrideBinPath)
 	}
-	// Snapshot old values
-	b.WriteString("    set -g __WIRETAP_OLD_PATH $PATH\n")
-	b.WriteString("    set -g __WIRETAP_OLD_HTTP_PROXY $HTTP_PROXY\n")
-	b.WriteString("    set -g __WIRETAP_OLD_HTTPS_PROXY $HTTPS_PROXY\n")
-	b.WriteString("    set -g __WIRETAP_OLD_NO_PROXY $NO_PROXY\n")
-	if env.CACertPath != "" {
-		b.WriteString("    set -g __WIRETAP_OLD_SSL_CERT_FILE $SSL_CERT_FILE\n")
-		b.WriteString("    set -g __WIRETAP_OLD_NODE_EXTRA_CA_CERTS $NODE_EXTRA_CA_CERTS\n")
-	}
-	// Define stop function
+	// Define stop function. Restores run with `set -gx` on purpose: a bare
+	// `set -x` inside a fish function is scoped to the function body and would
+	// vanish on return, so the shell would keep wiretap's proxy config. Each
+	// proxy var is restored only if the user actually had one; otherwise it is
+	// erased so no empty variable lingers. PATH is always restored (never
+	// erased). The function erases itself last so `stop` leaves no trace.
 	b.WriteString("    function wiretap_stop_interception\n")
-	b.WriteString("        set -x PATH $__WIRETAP_OLD_PATH\n")
-	b.WriteString("        set -x HTTP_PROXY $__WIRETAP_OLD_HTTP_PROXY\n")
-	b.WriteString("        set -x HTTPS_PROXY $__WIRETAP_OLD_HTTPS_PROXY\n")
-	b.WriteString("        set -x NO_PROXY $__WIRETAP_OLD_NO_PROXY\n")
+	b.WriteString("        set -gx PATH $__WIRETAP_OLD_PATH\n")
+	b.WriteString(fishRestoreOrErase("HTTP_PROXY"))
+	b.WriteString(fishRestoreOrErase("HTTPS_PROXY"))
+	b.WriteString(fishRestoreOrErase("NO_PROXY"))
 	if env.CACertPath != "" {
-		b.WriteString("        set -x SSL_CERT_FILE $__WIRETAP_OLD_SSL_CERT_FILE\n")
-		b.WriteString("        set -x NODE_EXTRA_CA_CERTS $__WIRETAP_OLD_NODE_EXTRA_CA_CERTS\n")
+		b.WriteString(fishRestoreOrErase("SSL_CERT_FILE"))
+		b.WriteString(fishRestoreOrErase("NODE_EXTRA_CA_CERTS"))
 		b.WriteString("        set -e __WIRETAP_OLD_SSL_CERT_FILE\n")
 		b.WriteString("        set -e __WIRETAP_OLD_NODE_EXTRA_CA_CERTS\n")
 	}
 	b.WriteString("        set -e __WIRETAP_OLD_PATH __WIRETAP_OLD_HTTP_PROXY __WIRETAP_OLD_HTTPS_PROXY __WIRETAP_OLD_NO_PROXY\n")
 	b.WriteString("        set -e WIRETAP_ACTIVE\n")
 	b.WriteString("        echo 'wiretap: interception disabled in this shell'\n")
+	b.WriteString("        functions -e wiretap_stop_interception\n")
 	b.WriteString("    end\n")
 	if env.CallbackURL != "" {
 		fmt.Fprintf(&b, "    if command -v curl >/dev/null 2>&1\n        curl --noproxy '*' -X POST %q >/dev/null 2>&1 &\n    end\n", env.CallbackURL)
@@ -151,6 +184,10 @@ func Fish(env Env) string {
 // function with wiretap's naming.
 func PowerShell(env Env) string {
 	var b strings.Builder
+	// Snapshot the current env BEFORE we set anything (including WIRETAP_ACTIVE)
+	// so Stop-Interception restores the user's real values and does not leave
+	// WIRETAP_ACTIVE behind.
+	b.WriteString("    $__WIRETAP_OLD_ENV = Get-ChildItem Env:\n")
 	b.WriteString("    $Env:WIRETAP_ACTIVE = \"1\"\n")
 	fmt.Fprintf(&b, "    $Env:HTTP_PROXY = %q\n", "http://"+env.ProxyAddr)
 	fmt.Fprintf(&b, "    $Env:HTTPS_PROXY = %q\n", "http://"+env.ProxyAddr)
@@ -162,8 +199,6 @@ func PowerShell(env Env) string {
 	if env.OverrideBinPath != "" {
 		fmt.Fprintf(&b, "    $Env:PATH = %q + \";\" + $Env:PATH\n", env.OverrideBinPath)
 	}
-	// Snapshot the current env so Stop-Interception can restore it.
-	b.WriteString("    $__WIRETAP_OLD_ENV = Get-ChildItem Env:\n")
 	// Override Invoke-WebRequest defaults to use the proxy and skip cert
 	// checks (the proxy handles HTTPS upstream).
 	b.WriteString("    $PSDefaultParameterValues[\"invoke-webrequest:proxy\"] = $Env:HTTP_PROXY\n")

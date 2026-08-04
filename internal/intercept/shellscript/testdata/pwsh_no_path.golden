@@ -3,7 +3,8 @@
     $Env:HTTP_PROXY = "http://127.0.0.1:8888"
     $Env:HTTPS_PROXY = "http://127.0.0.1:8888"
     $Env:NO_PROXY = "localhost,127.0.0.1"
-    $Env:PATH = "/home/user/.local/share/wiretap/override-bin" + ";" + $Env:PATH
+    $Env:SSL_CERT_FILE = "/home/user/.local/share/wiretap/ca.crt"
+    $Env:NODE_EXTRA_CA_CERTS = "/home/user/.local/share/wiretap/ca.crt"
     $PSDefaultParameterValues["invoke-webrequest:proxy"] = $Env:HTTP_PROXY
     $PSDefaultParameterValues["invoke-webrequest:SkipCertificateCheck"] = $True
 
