@@ -454,6 +454,16 @@ func (e *ReplayRejectedError) Error() string {
 // projects the relay says this client owns (so the GUI/TUI can show it without
 // re-reading the credentials file), and OnDisconnect clears it.
 func (a *App) defaultTunnelFactory(cfg TunnelConfig, st *store.PCStore) TunnelRunner {
+	opts := []relayclient.Option{
+		relayclient.WithClock(testutil.SystemClock{}),
+		relayclient.WithCallbacks(relayclient.Callbacks{
+			OnConnect:    func(projects []string) { a.SetConnectedProjects(projects) },
+			OnDisconnect: func(_ error) { a.SetConnectedProjects(nil) },
+		}),
+	}
+	if wt := newWebhookTransformer(a.scriptEngine, st, a.onScriptError); wt != nil {
+		opts = append(opts, relayclient.WithWebhookTransformer(wt))
+	}
 	return relayclient.New(
 		relayclient.Config{
 			URL:         cfg.URL,
@@ -462,11 +472,7 @@ func (a *App) defaultTunnelFactory(cfg TunnelConfig, st *store.PCStore) TunnelRu
 			Projects:    cfg.Projects,
 		},
 		st,
-		relayclient.WithClock(testutil.SystemClock{}),
-		relayclient.WithCallbacks(relayclient.Callbacks{
-			OnConnect:    func(projects []string) { a.SetConnectedProjects(projects) },
-			OnDisconnect: func(_ error) { a.SetConnectedProjects(nil) },
-		}),
+		opts...,
 	)
 }
 
