@@ -10,6 +10,7 @@ import (
 
 	"github.com/plutack/wiretap/internal/app"
 	"github.com/plutack/wiretap/internal/config"
+	"github.com/plutack/wiretap/internal/scripting"
 	"github.com/plutack/wiretap/internal/store"
 )
 
@@ -294,6 +295,171 @@ func TestBindings_ReplayWebhook_MissingRow(t *testing.T) {
 	}
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
+
+// newBindingsWithEngine mirrors newBindings but installs a real scripting
+// engine, so TestScript can evaluate JS. Used by the script test-run tests.
+func newBindingsWithEngine(t *testing.T) (*Bindings, *app.App) {
+	t.Helper()
+	base := t.TempDir()
+	mgr := config.NewManager(config.WithBaseDir(base))
+	a := app.New(mgr,
+		app.WithTunnelFactory(func(app.TunnelConfig, *store.PCStore) app.TunnelRunner {
+			t.Fatalf("tunnel factory should not be called (no creds in tests)")
+			return nil
+		}),
+		app.WithScriptEngine(scripting.New(), nil),
+	)
+	if err := a.Open(context.Background()); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = a.Close() })
+	return New(a, WithVersion("test")), a
+}
+
+func TestBindings_Scripts_SaveListGetDelete(t *testing.T) {
+	t.Parallel()
+	b, _ := newBindings(t)
+
+	// Create via SaveScript (ID == 0).
+	id, err := b.SaveScript(ScriptInput{
+		Name: "sig", Trigger: string(scripting.OnRequest),
+		Body: `request.headers["X-Sig"] = "abc";`, Priority: 5, Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("SaveScript (create): %v", err)
+	}
+	if id == 0 {
+		t.Fatal("SaveScript returned id 0 for a new script")
+	}
+
+	// List reflects the single row.
+	list, err := b.ListScripts()
+	if err != nil {
+		t.Fatalf("ListScripts: %v", err)
+	}
+	if len(list) != 1 || list[0].Name != "sig" || !list[0].Enabled || list[0].Priority != 5 {
+		t.Errorf("ListScripts = %+v", list)
+	}
+
+	// Get by id returns the full body.
+	got, err := b.GetScript(id)
+	if err != nil {
+		t.Fatalf("GetScript: %v", err)
+	}
+	if got.Body != `request.headers["X-Sig"] = "abc";` {
+		t.Errorf("GetScript body = %q", got.Body)
+	}
+
+	// Update via SaveScript (non-zero ID), then disable via SetScriptEnabled.
+	if _, err := b.SaveScript(ScriptInput{
+		ID: id, Name: "sig2", Trigger: string(scripting.OnResponse),
+		Body: "response.status = 418;", Priority: 1, Enabled: true,
+	}); err != nil {
+		t.Fatalf("SaveScript (update): %v", err)
+	}
+	if err := b.SetScriptEnabled(id, false); err != nil {
+		t.Fatalf("SetScriptEnabled: %v", err)
+	}
+	got, err = b.GetScript(id)
+	if err != nil {
+		t.Fatalf("GetScript after update: %v", err)
+	}
+	if got.Name != "sig2" || got.Trigger != string(scripting.OnResponse) ||
+		got.Priority != 1 || got.Enabled {
+		t.Errorf("GetScript after update = %+v", got)
+	}
+
+	// Delete removes the row; subsequent Get wraps ErrNotFound.
+	if err := b.DeleteScript(id); err != nil {
+		t.Fatalf("DeleteScript: %v", err)
+	}
+	if _, err := b.GetScript(id); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("GetScript after delete err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestBindings_SaveScript_RejectsInvalidTrigger(t *testing.T) {
+	t.Parallel()
+	b, _ := newBindings(t)
+	if _, err := b.SaveScript(ScriptInput{
+		Name: "x", Trigger: "on_bogus", Body: "",
+	}); err == nil {
+		t.Error("SaveScript with bad trigger: want error, got nil")
+	}
+}
+
+func TestBindings_TestScript_MutatesAndReturnsLogs(t *testing.T) {
+	t.Parallel()
+	b, _ := newBindingsWithEngine(t)
+	out, err := b.TestScript(ScriptTestRequest{
+		Body: `
+			console.log("was " + request.method);
+			request.method = "PUT";
+			request.headers["X-New"] = "yes";
+			request.body = request.body + "!";
+		`,
+		Method:  "POST",
+		URL:     "https://api.test/hook",
+		Headers: map[string]string{"X-Old": "1"},
+		ReqBody: `{"n":1}`,
+	})
+	if err != nil {
+		t.Fatalf("TestScript: %v", err)
+	}
+	if out.Error != "" {
+		t.Errorf("Error = %q, want empty", out.Error)
+	}
+	if out.Method != "PUT" {
+		t.Errorf("Method = %q, want PUT", out.Method)
+	}
+	if out.ReqBody != `{"n":1}!` {
+		t.Errorf("ReqBody = %q", out.ReqBody)
+	}
+	// The mutated header is added by the script directly; treat the map as an
+	// http.Header so the lookup is case-insensitive (canonical form).
+	reqHeaders := http.Header(out.ReqHeaders)
+	if reqHeaders.Get("X-New") != "yes" {
+		t.Errorf("X-New = %q, want yes", reqHeaders.Get("X-New"))
+	}
+	if len(out.Logs) != 1 || out.Logs[0] != "was POST" {
+		t.Errorf("Logs = %v", out.Logs)
+	}
+}
+
+func TestBindings_TestScript_RejectReportsReason(t *testing.T) {
+	t.Parallel()
+	b, _ := newBindingsWithEngine(t)
+	out, err := b.TestScript(ScriptTestRequest{
+		Body: `reject("bad payload");`,
+	})
+	if err != nil {
+		t.Fatalf("TestScript: %v", err)
+	}
+	if !out.Rejected || out.RejectReason != "bad payload" {
+		t.Errorf("Rejected=%v reason=%q, want true/\"bad payload\"", out.Rejected, out.RejectReason)
+	}
+}
+
+func TestBindings_TestScript_SyntaxErrorInErrorField(t *testing.T) {
+	t.Parallel()
+	b, _ := newBindingsWithEngine(t)
+	out, err := b.TestScript(ScriptTestRequest{Body: `this is not js`})
+	if err != nil {
+		t.Fatalf("TestScript: %v (a syntax error is surfaced in the view, not as a Go error)", err)
+	}
+	if out.Error == "" {
+		t.Errorf("Error field empty for syntax error: %+v", out)
+	}
+}
+
+func TestBindings_TestScript_NoEngine(t *testing.T) {
+	t.Parallel()
+	b, _ := newBindings(t) // no engine
+	_, err := b.TestScript(ScriptTestRequest{Body: "1"})
+	if !errors.Is(err, app.ErrScriptEngineUnavailable) {
+		t.Errorf("err = %v, want ErrScriptEngineUnavailable", err)
 	}
 }
 
