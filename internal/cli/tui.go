@@ -33,7 +33,7 @@ func newTUICmd() *cobra.Command {
 			if err := a.Open(cmd.Context()); err != nil {
 				return fmt.Errorf("tui: open store: %w", err)
 			}
-			defer func() { _ = a.Close() }()
+			defer a.Close()
 
 			// Start the relay tunnel in the background (no-op when relay
 			// URL or credentials are missing — the dashboard still shows

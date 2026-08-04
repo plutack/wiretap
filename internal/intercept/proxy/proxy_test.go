@@ -119,7 +119,7 @@ func TestProxy_InterceptsHTTPS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("client.Post: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
@@ -220,7 +220,7 @@ func TestProxy_PlaintextForwarding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("client.Post: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusTeapot {
 		t.Fatalf("status = %d, want 418", resp.StatusCode)
 	}

@@ -56,7 +56,7 @@ func run(addr, dbPath, adminToken string) error {
 	if err != nil {
 		return fmt.Errorf("wiretap-relay: open database %s: %w", dbPath, err)
 	}
-	defer func() { _ = db.Close() }()
+	defer db.Close()
 
 	if err := store.MigrateRelay(ctx, db); err != nil {
 		return fmt.Errorf("wiretap-relay: migrate database: %w", err)
