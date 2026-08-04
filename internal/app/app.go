@@ -32,6 +32,7 @@ import (
 
 	"github.com/plutack/wiretap/internal/config"
 	"github.com/plutack/wiretap/internal/relayclient"
+	"github.com/plutack/wiretap/internal/scripting"
 	"github.com/plutack/wiretap/internal/store"
 	"github.com/plutack/wiretap/internal/testutil"
 )
@@ -59,6 +60,13 @@ type App struct {
 	// a short-timeout transport that skips the interception proxy (replays go
 	// direct, not through the MITM). Tests inject a stub.
 	replayTransport http.RoundTripper
+
+	// scriptEngine, when set, runs on_replay scripts against a webhook before it
+	// is re-POSTed by ReplayWebhook (e.g. regenerate a signature, bump a
+	// timestamp). Nil disables scripting. onScriptError, when set, receives any
+	// script run error.
+	scriptEngine  *scripting.Engine
+	onScriptError func(trigger scripting.Trigger, name string, err error)
 
 	db    *sql.DB
 	store *store.PCStore
@@ -104,6 +112,16 @@ func WithTunnelFactory(f func(cfg TunnelConfig, st *store.PCStore) TunnelRunner)
 // (test seam). Production uses a direct, short-timeout transport.
 func WithReplayTransport(rt http.RoundTripper) Option {
 	return func(a *App) { a.replayTransport = rt }
+}
+
+// WithScriptEngine installs the JS scripting engine used to run on_replay
+// scripts inside ReplayWebhook. onError (optional) receives per-script run
+// errors so the GUI/TUI can surface them.
+func WithScriptEngine(e *scripting.Engine, onError func(scripting.Trigger, string, error)) Option {
+	return func(a *App) {
+		a.scriptEngine = e
+		a.onScriptError = onError
+	}
 }
 
 // New builds an App wired to the given config manager. The manager is the path
@@ -341,20 +359,34 @@ func (a *App) ReplayWebhook(ctx context.Context, project string, seq int64, targ
 	if err != nil {
 		return 0, err
 	}
-	req, err := http.NewRequestWithContext(ctx, wh.Method, targetURL, bytes.NewReader(wh.Body))
-	if err != nil {
-		return 0, fmt.Errorf("app: build replay request: %w", err)
-	}
-	// Re-apply the stored headers (Content-Length is set by NewReaderBody).
-	// Skip Hop-by-hop headers that don't belong on a fresh outbound request.
+
+	// Assemble the replay request from the stored webhook, dropping hop-by-hop
+	// headers that don't belong on a fresh outbound request.
+	method := wh.Method
+	headers := http.Header{}
 	for k, vs := range parseHeaders(wh.HeadersJSON) {
 		if isHopByHop(k) {
 			continue
 		}
 		for _, v := range vs {
-			req.Header.Add(k, v)
+			headers.Add(k, v)
 		}
 	}
+	body := wh.Body
+
+	// Run on_replay scripts before re-POSTing so users can regenerate a
+	// signature, bump a timestamp, or swap a token. A rejection aborts the
+	// replay; a script error is reported but non-fatal.
+	method, targetURL, headers, body, err = a.runReplayScripts(ctx, method, targetURL, headers, body)
+	if err != nil {
+		return 0, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, targetURL, bytes.NewReader(body))
+	if err != nil {
+		return 0, fmt.Errorf("app: build replay request: %w", err)
+	}
+	req.Header = headers
 	client := &http.Client{Transport: a.replayTransport, Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -362,6 +394,56 @@ func (a *App) ReplayWebhook(ctx context.Context, project string, seq int64, targ
 	}
 	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
 	return resp.StatusCode, nil
+}
+
+// runReplayScripts runs enabled on_replay scripts against the outbound replay
+// request, returning the (possibly rewritten) method/url/headers/body. With no
+// engine or no scripts it returns the inputs unchanged. A reject() surfaces as
+// a *ReplayRejectedError; per-script errors go to onScriptError and are
+// otherwise swallowed so one bad script never blocks a replay.
+func (a *App) runReplayScripts(ctx context.Context, method, url string, h http.Header, body []byte) (string, string, http.Header, []byte, error) {
+	if a.scriptEngine == nil || a.store == nil {
+		return method, url, h, body, nil
+	}
+	rows, err := a.store.ScriptsByTrigger(ctx, string(scripting.OnReplay), true)
+	if err != nil {
+		if a.onScriptError != nil {
+			a.onScriptError(scripting.OnReplay, "", err)
+		}
+		return method, url, h, body, nil
+	}
+	if len(rows) == 0 {
+		return method, url, h, body, nil
+	}
+	scripts := make([]scripting.Script, len(rows))
+	for i, r := range rows {
+		scripts[i] = scripting.Script{Name: r.Name, Trigger: scripting.OnReplay, Body: r.Body, Priority: r.Priority, Enabled: r.Enabled}
+	}
+
+	ex := &scripting.Exchange{}
+	ex.SetRequest(method, url, h, body)
+	chain := a.scriptEngine.RunChain(ctx, scripting.OnReplay, scripts, ex)
+	if a.onScriptError != nil {
+		for _, r := range chain.Results {
+			if r.Err != nil {
+				a.onScriptError(scripting.OnReplay, r.Name, r.Err)
+			}
+		}
+	}
+	if chain.Rejected {
+		return method, url, h, body, &ReplayRejectedError{Reason: chain.RejectReason}
+	}
+	outMethod, outURL, outHeaders, outBody := ex.RequestParts()
+	return outMethod, outURL, outHeaders, outBody, nil
+}
+
+// ReplayRejectedError is returned by ReplayWebhook when an on_replay script
+// calls reject(reason), so the caller can distinguish a policy block from a
+// transport failure.
+type ReplayRejectedError struct{ Reason string }
+
+func (e *ReplayRejectedError) Error() string {
+	return fmt.Sprintf("app: on_replay script rejected the webhook: %s", e.Reason)
 }
 
 // --- helpers -----------------------------------------------------------
