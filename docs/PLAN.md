@@ -691,9 +691,16 @@ builds (`make build`, `make gui`) clean.
   short-circuits the chain; a script error is recorded per-script in
   `ChainResult.Results` but does NOT stop the chain — one bad script never
   crashes the pipeline. GUI log-pane surfacing is pending the GUI wiring.
-- ⬜ Wire `RunChain` into the interception proxy (on_request/on_response), the
-  replayer (on_replay), and the relay-webhook ingest path (on_webhook). The
-  engine + store are done; the call sites are the remaining backend work.
+- ✅ Wire `RunChain` into the interception proxy (on_request/on_response), the
+  replayer (on_replay), and the relay-webhook ingest path (on_webhook). Each
+  trigger plugs into its call site via a decoupled seam so the low-level
+  packages stay scripting-free: `proxy.Transformer` (adapter in
+  `internal/intercept`), `app.ReplayWebhook` runs `on_replay` directly, and
+  `relayclient.WebhookTransformer` (adapter in `internal/app`) runs `on_webhook`
+  before storage — a `reject()` there drops the row but still ACKs so the relay
+  advances its cursor. The engine is loaded in all three CLI composition roots
+  (`intercept start`, `gui`, `tui`) with a stderr error sink; scripts load
+  per-trigger from the local store at run time.
 - ⬜ Script editor in the GUI (CodeMirror 5, ~150KB, vendored offline under
   `ui/vendor/codemirror/` — no CDN, no node_modules; embedded via
   `//go:embed all:ui`) with JS syntax highlighting and a test-run button that
