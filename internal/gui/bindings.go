@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/plutack/wiretap/internal/app"
@@ -103,6 +104,58 @@ type ReplayResult struct {
 	Status int `json:"status"`
 }
 
+// ScriptView is the GUI + wailsjs DTO for a stored script. It mirrors
+// store.ScriptRow with JSON-friendly field names; timestamps are RFC3339 UTC.
+type ScriptView struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Trigger   string `json:"trigger"`
+	Body      string `json:"body"`
+	Priority  int    `json:"priority"`
+	Enabled   bool   `json:"enabled"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// ScriptInput is the payload the editor sends to SaveScript. ID == 0 means
+// "create"; a non-zero ID updates that row.
+type ScriptInput struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Trigger  string `json:"trigger"`
+	Body     string `json:"body"`
+	Priority int    `json:"priority"`
+	Enabled  bool   `json:"enabled"`
+}
+
+// ScriptTestRequest is the test-run payload: the script body plus a sample
+// exchange (usually filled from the selected capture/webhook).
+type ScriptTestRequest struct {
+	Body    string            `json:"body"`
+	Method  string            `json:"method"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
+	ReqBody string            `json:"req_body"`
+	Status  int               `json:"status"`
+}
+
+// ScriptTestView is the test-run outcome the editor renders: the mutated
+// request/response plus console logs and rejection state. Error, when set, is
+// the script exception message (logs are still populated up to the failure).
+type ScriptTestView struct {
+	Method       string              `json:"method"`
+	URL          string              `json:"url"`
+	ReqHeaders   map[string][]string `json:"req_headers"`
+	ReqBody      string              `json:"req_body"`
+	Status       int                 `json:"status"`
+	RespHeaders  map[string][]string `json:"resp_headers"`
+	RespBody     string              `json:"resp_body"`
+	Logs         []string            `json:"logs"`
+	Rejected     bool                `json:"rejected"`
+	RejectReason string              `json:"reject_reason,omitempty"`
+	Error        string              `json:"error,omitempty"`
+}
+
 // --- Bound methods -------------------------------------------------------
 
 // ListWebhooks returns the most recent webhooks, newest-first, optionally
@@ -168,6 +221,105 @@ func (b *Bindings) Status() StatusView {
 	return v
 }
 
+// --- scripts -------------------------------------------------------------
+
+// ListScripts returns every stored script (all triggers) for the editor
+// sidebar, ordered by trigger then priority.
+func (b *Bindings) ListScripts() ([]ScriptView, error) {
+	rows, err := b.app.Scripts(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("list scripts: %w", err)
+	}
+	out := make([]ScriptView, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, scriptView(r))
+	}
+	return out, nil
+}
+
+// GetScript returns one script by id (the editor loads the full body on
+// selection). Wraps store.ErrNotFound when absent.
+func (b *Bindings) GetScript(id int64) (ScriptView, error) {
+	sc, err := b.app.ScriptByID(context.Background(), id)
+	if err != nil {
+		return ScriptView{}, fmt.Errorf("get script %d: %w", id, err)
+	}
+	return scriptView(*sc), nil
+}
+
+// SaveScript creates (ID == 0) or updates a script and returns its id. The
+// frontend calls this from the editor's Save button.
+func (b *Bindings) SaveScript(in ScriptInput) (int64, error) {
+	row := store.ScriptRow{
+		ID:       in.ID,
+		Name:     in.Name,
+		Trigger:  in.Trigger,
+		Body:     in.Body,
+		Priority: in.Priority,
+		Enabled:  in.Enabled,
+	}
+	if in.ID == 0 {
+		id, err := b.app.CreateScript(context.Background(), row)
+		if err != nil {
+			return 0, fmt.Errorf("create script: %w", err)
+		}
+		return id, nil
+	}
+	if err := b.app.UpdateScript(context.Background(), row); err != nil {
+		return 0, fmt.Errorf("update script %d: %w", in.ID, err)
+	}
+	return in.ID, nil
+}
+
+// SetScriptEnabled toggles the enabled flag on one script (sidebar checkbox).
+func (b *Bindings) SetScriptEnabled(id int64, enabled bool) error {
+	if err := b.app.SetScriptEnabled(context.Background(), id, enabled); err != nil {
+		return fmt.Errorf("set script %d enabled=%v: %w", id, enabled, err)
+	}
+	return nil
+}
+
+// DeleteScript removes a script by id.
+func (b *Bindings) DeleteScript(id int64) error {
+	if err := b.app.DeleteScript(context.Background(), id); err != nil {
+		return fmt.Errorf("delete script %d: %w", id, err)
+	}
+	return nil
+}
+
+// TestScript runs a script body once against a sample exchange and returns the
+// mutated result + logs. It never persists or touches live traffic. A script
+// exception is returned in the view's Error field (not as a Go error) so the
+// editor can render logs alongside the failure.
+func (b *Bindings) TestScript(req ScriptTestRequest) (ScriptTestView, error) {
+	out, err := b.app.TestScript(context.Background(), req.Body, app.ScriptTestInput{
+		Method:  req.Method,
+		URL:     req.URL,
+		Headers: expandHeaders(req.Headers),
+		Body:    req.ReqBody,
+		Status:  req.Status,
+	})
+	if errors.Is(err, app.ErrScriptEngineUnavailable) {
+		return ScriptTestView{}, err
+	}
+	v := ScriptTestView{
+		Method:       out.Method,
+		URL:          out.URL,
+		ReqHeaders:   out.ReqHeaders,
+		ReqBody:      out.ReqBody,
+		Status:       out.Status,
+		RespHeaders:  out.RespHeaders,
+		RespBody:     out.RespBody,
+		Logs:         out.Logs,
+		Rejected:     out.Rejected,
+		RejectReason: out.RejectReason,
+	}
+	if err != nil {
+		v.Error = err.Error()
+	}
+	return v, nil
+}
+
 // --- converters ---------------------------------------------------------
 
 func webhookSummary(rows []store.WebhookRow) []WebhookView {
@@ -200,6 +352,23 @@ func webhookDetail(w *store.WebhookRow) WebhookView {
 	}
 }
 
+// scriptView converts a stored script row into the JSON-friendly DTO the
+// frontend renders. Timestamps use RFC3339 UTC for consistency with the other
+// views; the body is passed through verbatim (the editor displays/saves it as
+// text, not a structured object).
+func scriptView(r store.ScriptRow) ScriptView {
+	return ScriptView{
+		ID:        r.ID,
+		Name:      r.Name,
+		Trigger:   r.Trigger,
+		Body:      r.Body,
+		Priority:  r.Priority,
+		Enabled:   r.Enabled,
+		CreatedAt: r.CreatedAt.Format(time.RFC3339),
+		UpdatedAt: r.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
 func captureSummary(rows []store.TrafficCaptureRow) []CaptureView {
 	out := make([]CaptureView, 0, len(rows))
 	for _, r := range rows {
@@ -214,6 +383,19 @@ func captureSummary(rows []store.TrafficCaptureRow) []CaptureView {
 		})
 	}
 	return out
+}
+
+// expandHeaders converts the single-valued map the frontend sends into
+// http.Header (canonicalized values). The editor emits at most one value per
+// header name, so a missing slice entry is treated as a single-element header.
+// Names are canonicalized via http.Header.Set so lookups by the standard form
+// (e.g. "Content-Type") work regardless of how the user typed them in the UI.
+func expandHeaders(in map[string]string) http.Header {
+	h := http.Header{}
+	for k, v := range in {
+		h.Set(k, v)
+	}
+	return h
 }
 
 // parseHeaders decodes the JSON http.Header stored in the row. Returns an empty
