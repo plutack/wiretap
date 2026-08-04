@@ -453,9 +453,15 @@ func (p *Proxy) bridge(clientTLS, upstreamTLS *tls.Conn, host string) {
 			return
 		}
 
+		// Decode transport compression (gzip/deflate/br) so the recorded body,
+		// the scripting transformer, and the client all see the readable
+		// payload. Content-Encoding/Content-Length are stripped from the
+		// header clone that flows into the capture and back to the client.
+		respHeader, respBody := decodeAndNormalize(resp.Header, respBody)
+
 		// Let the transformer rewrite the response before it returns to the
 		// client.
-		status, respHeaders, respBody, err := p.transformResp(p.ctx(), resp.StatusCode, resp.Header.Clone(), respBody)
+		status, respHeaders, respBody, err := p.transformResp(p.ctx(), resp.StatusCode, respHeader, respBody)
 		if err != nil {
 			return
 		}
@@ -535,8 +541,13 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 
 	respBody, _ := io.ReadAll(resp.Body)
 
+	// Decode transport compression (gzip/deflate/br) so the recorded body
+	// and the scripting transformer see the readable payload. Harmless no-op
+	// if the RoundTripper already decompressed (Content-Encoding absent).
+	respHeader, respBody := decodeAndNormalize(resp.Header, respBody)
+
 	// Let the transformer rewrite the response before it returns to the client.
-	status, respHeaders, respBody, err := p.transformResp(ctx, resp.StatusCode, resp.Header.Clone(), respBody)
+	status, respHeaders, respBody, err := p.transformResp(ctx, resp.StatusCode, respHeader, respBody)
 	if err != nil {
 		http.Error(w, "wiretap: response transform: "+err.Error(), http.StatusBadGateway)
 		return
