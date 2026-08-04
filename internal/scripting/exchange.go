@@ -42,6 +42,40 @@ func (ex *Exchange) normalize() {
 	}
 }
 
+// SetRequest loads the request half of ex from HTTP primitives. Headers are
+// flattened to single-valued entries (see flattenHeader) and the body is
+// converted to a string — adequate for the JSON/webhook payloads scripts touch,
+// though a binary body that isn't valid UTF-8 may not round-trip byte-exact.
+func (ex *Exchange) SetRequest(method, url string, h http.Header, body []byte) {
+	ex.Request = Request{
+		Method:  method,
+		URL:     url,
+		Headers: flattenHeader(h),
+		Body:    string(body),
+	}
+}
+
+// RequestParts returns the (possibly script-mutated) request half as HTTP
+// primitives: method, url, canonicalised headers, and body bytes.
+func (ex *Exchange) RequestParts() (method, url string, h http.Header, body []byte) {
+	return ex.Request.Method, ex.Request.URL, expandHeader(ex.Request.Headers), []byte(ex.Request.Body)
+}
+
+// SetResponse loads the response half of ex from HTTP primitives.
+func (ex *Exchange) SetResponse(status int, h http.Header, body []byte) {
+	ex.Response = Response{
+		Status:  status,
+		Headers: flattenHeader(h),
+		Body:    string(body),
+	}
+}
+
+// ResponseParts returns the (possibly script-mutated) response half as HTTP
+// primitives: status, canonicalised headers, and body bytes.
+func (ex *Exchange) ResponseParts() (status int, h http.Header, body []byte) {
+	return ex.Response.Status, expandHeader(ex.Response.Headers), []byte(ex.Response.Body)
+}
+
 // flattenHeader collapses an http.Header (canonicalised, multi-valued) into a
 // single-valued map, joining duplicate values with ", " per RFC 7230 §3.2.2.
 func flattenHeader(h http.Header) map[string]string {
