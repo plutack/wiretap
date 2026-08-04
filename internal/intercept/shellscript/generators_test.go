@@ -30,8 +30,11 @@ func TestGenerate_Table(t *testing.T) {
 		{"bash_no_ca", ShellBash, "bash_no_ca.golden"},
 		{"bash_no_path", ShellBash, "bash_no_path.golden"},
 		{"fish_full", ShellFish, "fish_full.golden"},
+		{"fish_no_ca", ShellFish, "fish_no_ca.golden"},
+		{"fish_no_path", ShellFish, "fish_no_path.golden"},
 		{"pwsh_full", ShellPowerShell, "pwsh_full.golden"},
 		{"pwsh_no_ca", ShellPowerShell, "pwsh_no_ca.golden"},
+		{"pwsh_no_path", ShellPowerShell, "pwsh_no_path.golden"},
 		{"gitbash_windows_path", ShellGitBash, "gitbash_windows_path.golden"},
 	}
 
@@ -43,9 +46,9 @@ func TestGenerate_Table(t *testing.T) {
 			// temp dirs mentally, but the golden files are physically on disk.
 			env := fullEnv()
 			switch tc.name {
-			case "bash_no_ca", "pwsh_no_ca":
+			case "bash_no_ca", "fish_no_ca", "pwsh_no_ca":
 				env.CACertPath = ""
-			case "bash_no_path":
+			case "bash_no_path", "fish_no_path", "pwsh_no_path":
 				env.OverrideBinPath = ""
 			case "gitbash_windows_path":
 				env.OverrideBinPath = "C:\\Users\\dev\\wiretap\\override-bin"

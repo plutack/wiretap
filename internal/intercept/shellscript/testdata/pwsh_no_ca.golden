@@ -1,9 +1,9 @@
+    $__WIRETAP_OLD_ENV = Get-ChildItem Env:
     $Env:WIRETAP_ACTIVE = "1"
     $Env:HTTP_PROXY = "http://127.0.0.1:8888"
     $Env:HTTPS_PROXY = "http://127.0.0.1:8888"
     $Env:NO_PROXY = "localhost,127.0.0.1"
     $Env:PATH = "/home/user/.local/share/wiretap/override-bin" + ";" + $Env:PATH
-    $__WIRETAP_OLD_ENV = Get-ChildItem Env:
     $PSDefaultParameterValues["invoke-webrequest:proxy"] = $Env:HTTP_PROXY
     $PSDefaultParameterValues["invoke-webrequest:SkipCertificateCheck"] = $True
 
