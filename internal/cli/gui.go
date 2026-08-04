@@ -61,7 +61,7 @@ func newGUICmd(version string) *cobra.Command {
 // It owns the *app.App lifecycle for the duration of the window.
 func runGUI(parent context.Context, version string) error {
 	mgr := config.NewManager()
-	a := app.New(mgr)
+	a := app.New(mgr, app.WithScriptEngine(newScriptEngine(), logScriptError))
 
 	// Open the local store before serving any view; the GUI is read-only w.r.t.
 	// the store except for replay, which targets an external URL.

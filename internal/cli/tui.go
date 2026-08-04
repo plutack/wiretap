@@ -29,7 +29,7 @@ func newTUICmd() *cobra.Command {
 		Use:   "tui",
 		Short: "Live dashboard of captured webhooks",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			a := app.New(newConfigManager())
+			a := app.New(newConfigManager(), app.WithScriptEngine(newScriptEngine(), logScriptError))
 			if err := a.Open(cmd.Context()); err != nil {
 				return fmt.Errorf("tui: open store: %w", err)
 			}

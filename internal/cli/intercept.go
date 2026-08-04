@@ -138,13 +138,15 @@ func resolveInterceptDeps(m *config.Manager, cfg *config.Config, kind shellscrip
 	}
 
 	return intercept.Deps{
-		ConfigDir:    configDir,
-		ProxyAddr:    cfg.Intercept.ProxyAddr,
-		LocalAPIAddr: cfg.Intercept.LocalAPIAddr,
-		ShellKind:    kind,
-		Installer:    castore.NewInstaller(configDir),
-		PCStore:      store.NewPCStore(db),
-		Version:      version,
+		ConfigDir:     configDir,
+		ProxyAddr:     cfg.Intercept.ProxyAddr,
+		LocalAPIAddr:  cfg.Intercept.LocalAPIAddr,
+		ShellKind:     kind,
+		Installer:     castore.NewInstaller(configDir),
+		PCStore:       store.NewPCStore(db),
+		Version:       version,
+		ScriptEngine:  newScriptEngine(),
+		OnScriptError: logScriptError,
 	}, nil
 }
 
