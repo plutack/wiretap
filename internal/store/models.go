@@ -45,6 +45,21 @@ type WebhookRow struct {
 	DeliveredAt time.Time // PC side always zero
 }
 
+// ScriptRow is a row in the local PC's scripts table: a user-authored
+// JavaScript payload transformation executed by internal/scripting. Trigger is
+// one of on_request/on_response/on_replay/on_webhook; Priority orders chained
+// scripts sharing a trigger (lower runs first).
+type ScriptRow struct {
+	ID        int64
+	Name      string
+	Trigger   string
+	Body      string
+	Priority  int
+	Enabled   bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 // TrafficCaptureRow is a row in the local PC's traffic_captures table.
 type TrafficCaptureRow struct {
 	ID              int64
