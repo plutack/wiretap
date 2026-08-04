@@ -39,6 +39,7 @@ import (
 	"github.com/plutack/wiretap/internal/intercept/overridebin"
 	"github.com/plutack/wiretap/internal/intercept/proxy"
 	"github.com/plutack/wiretap/internal/intercept/shellscript"
+	"github.com/plutack/wiretap/internal/scripting"
 	"github.com/plutack/wiretap/internal/store"
 	"github.com/plutack/wiretap/internal/testutil"
 )
@@ -55,6 +56,13 @@ type Deps struct {
 	PCStore      *store.PCStore        // capture sink + local API backing
 	Clock        testutil.Clock        // optional; defaults to SystemClock
 	Version      string                // surfaced via /local/health
+	// ScriptEngine, when set, runs on_request/on_response scripts (loaded from
+	// PCStore) against live intercepted traffic. Nil disables scripting — the
+	// proxy then passes traffic through unmodified.
+	ScriptEngine *scripting.Engine
+	// OnScriptError, when set, receives every script load/run error so the
+	// caller (GUI log pane, CLI stderr) can surface it. Optional.
+	OnScriptError func(trigger scripting.Trigger, name string, err error)
 	// StartupFiles overrides the auto-detected list (mainly for tests). Empty
 	// means "resolve from the user's home for ShellKind".
 	StartupFiles []string
@@ -112,7 +120,11 @@ func Start(ctx context.Context, deps Deps) (*Session, error) {
 	}
 
 	recorder := &storeRecorder{st: deps.PCStore, clock: clock}
-	prox := proxy.New(deps.ProxyAddr, proxy.NewCastoreSigner(ca), recorder, proxy.WithClock(clock))
+	proxyOpts := []proxy.Option{proxy.WithClock(clock)}
+	if transformer := newScriptTransformer(deps.ScriptEngine, deps.PCStore, deps.OnScriptError); transformer != nil {
+		proxyOpts = append(proxyOpts, proxy.WithTransformer(transformer))
+	}
+	prox := proxy.New(deps.ProxyAddr, proxy.NewCastoreSigner(ca), recorder, proxyOpts...)
 	if _, err := prox.StartAsync(); err != nil {
 		return nil, fmt.Errorf("intercept: start proxy: %w", err)
 	}

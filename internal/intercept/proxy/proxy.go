@@ -26,6 +26,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	neturl "net/url"
 	"sync"
 	"time"
 
@@ -51,6 +52,39 @@ type Capture struct {
 // in-process and assert on the recorded values.
 type Recorder interface {
 	Record(ctx context.Context, c Capture) error
+}
+
+// ReqEdit is the mutable request state a Transformer may rewrite before the
+// request is re-issued upstream.
+type ReqEdit struct {
+	Method  string
+	URL     string
+	Headers http.Header
+	Body    []byte
+}
+
+// RespEdit is the mutable response state a Transformer may rewrite before the
+// response is written back to the client.
+type RespEdit struct {
+	Status  int
+	Headers http.Header
+	Body    []byte
+}
+
+// Transformer optionally rewrites the request before it goes upstream and the
+// response before it returns to the client — the seam the JavaScript scripting
+// engine plugs into (on_request / on_response). The proxy deliberately does not
+// import internal/scripting; the intercept layer supplies an adapter. A nil
+// Transformer means "identity" (no rewrites). A non-nil error from either
+// method aborts the exchange (the client sees a dropped connection), so an
+// adapter that wants a request blocked can surface a rejection as an error.
+//
+// Note: rewriting the request Host does not re-route the upstream dial in the
+// interception MVP — the TCP/TLS connection is already established to the
+// CONNECT target. Method, path/query, header, and body edits take effect.
+type Transformer interface {
+	TransformRequest(ctx context.Context, in ReqEdit) (ReqEdit, error)
+	TransformResponse(ctx context.Context, in RespEdit) (RespEdit, error)
 }
 
 // CertSigner mints a TLS leaf certificate for a host on demand during the TLS
@@ -120,12 +154,13 @@ func (d *tlsDialer) Dial(ctx context.Context, network, addr string) (net.Conn, e
 // resolved address, serves in a goroutine). Stop cancels serving and closes
 // in-flight client connections.
 type Proxy struct {
-	addr      string
-	signer    CertSigner
-	recorder  Recorder
-	dialer    UpstreamDialer
-	clock     testutil.Clock
-	roundTrip http.RoundTripper // for plain-HTTP forward proxying
+	addr        string
+	signer      CertSigner
+	recorder    Recorder
+	transformer Transformer
+	dialer      UpstreamDialer
+	clock       testutil.Clock
+	roundTrip   http.RoundTripper // for plain-HTTP forward proxying
 
 	mu      sync.Mutex
 	ln      net.Listener
@@ -140,6 +175,10 @@ type Option func(*Proxy)
 // WithClock injects a clock used to timestamp captures. Defaults to
 // testutil.SystemClock.
 func WithClock(c testutil.Clock) Option { return func(p *Proxy) { p.clock = c } }
+
+// WithTransformer installs the request/response rewrite seam (the scripting
+// engine plugs in here). Defaults to nil, meaning no rewrites.
+func WithTransformer(t Transformer) Option { return func(p *Proxy) { p.transformer = t } }
 
 // WithUpstreamDialer overrides the default TLS dialer (tests inject a fake
 // that doesn't touch the network or that trusts a test CA pool).
@@ -377,6 +416,22 @@ func (p *Proxy) bridge(clientTLS, upstreamTLS *tls.Conn, host string) {
 			return
 		}
 
+		// Let the transformer (scripting engine) rewrite the request before it
+		// goes upstream. A transformer error aborts the exchange.
+		method, urlStr, reqHeaders, reqBody, err := p.transformReq(p.ctx(), req.Method, u.String(), req.Header.Clone(), reqBody)
+		if err != nil {
+			return
+		}
+		req.Method = method
+		req.Header = reqHeaders
+		// The upstream TLS connection is already pinned to the CONNECT target, so
+		// only the path/query (origin form) is re-applied; host/scheme edits do
+		// not re-route in the MVP.
+		if parsed, perr := neturl.Parse(urlStr); perr == nil {
+			req.URL.Path = parsed.Path
+			req.URL.RawQuery = parsed.RawQuery
+		}
+
 		// Re-issue the request upstream in origin form.
 		req.Body = io.NopCloser(bytes.NewReader(reqBody))
 		req.ContentLength = int64(len(reqBody))
@@ -398,16 +453,27 @@ func (p *Proxy) bridge(clientTLS, upstreamTLS *tls.Conn, host string) {
 			return
 		}
 
+		// Let the transformer rewrite the response before it returns to the
+		// client.
+		status, respHeaders, respBody, err := p.transformResp(p.ctx(), resp.StatusCode, resp.Header.Clone(), respBody)
+		if err != nil {
+			return
+		}
+		resp.StatusCode = status
+		resp.Header = respHeaders
+
 		// Record before writing back to the client so the capture is durable
-		// by the time the caller observes the response.
+		// by the time the caller observes the response. The recorded values are
+		// the post-transform request/response — i.e. what actually crossed the
+		// wire.
 		p.record(p.ctx(), Capture{
 			At:          p.clock.Now(),
-			Method:      req.Method,
-			URL:         u.String(),
-			ReqHeaders:  req.Header.Clone(),
+			Method:      method,
+			URL:         urlStr,
+			ReqHeaders:  reqHeaders.Clone(),
 			ReqBody:     append([]byte(nil), reqBody...),
-			Status:      resp.StatusCode,
-			RespHeaders: resp.Header.Clone(),
+			Status:      status,
+			RespHeaders: respHeaders.Clone(),
 			RespBody:    append([]byte(nil), respBody...),
 		})
 
@@ -441,7 +507,20 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	reqBody, _ := io.ReadAll(r.Body)
 	_ = r.Body.Close()
 
+	// Let the transformer rewrite the request before it goes upstream.
+	method, urlStr, reqHeaders, reqBody, err := p.transformReq(ctx, r.Method, r.URL.String(), r.Header.Clone(), reqBody)
+	if err != nil {
+		http.Error(w, "wiretap: request transform: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+
 	outReq := r.Clone(ctx)
+	outReq.Method = method
+	outReq.Header = reqHeaders
+	if parsed, perr := neturl.Parse(urlStr); perr == nil {
+		outReq.URL = parsed
+		outReq.Host = parsed.Host
+	}
 	outReq.RequestURI = "" // round-trippers reject a set RequestURI
 	outReq.Body = io.NopCloser(bytes.NewReader(reqBody))
 	outReq.ContentLength = int64(len(reqBody))
@@ -456,24 +535,64 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 
 	respBody, _ := io.ReadAll(resp.Body)
 
+	// Let the transformer rewrite the response before it returns to the client.
+	status, respHeaders, respBody, err := p.transformResp(ctx, resp.StatusCode, resp.Header.Clone(), respBody)
+	if err != nil {
+		http.Error(w, "wiretap: response transform: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+
 	p.record(ctx, Capture{
 		At:          p.clock.Now(),
-		Method:      r.Method,
-		URL:         r.URL.String(),
-		ReqHeaders:  r.Header.Clone(),
+		Method:      method,
+		URL:         urlStr,
+		ReqHeaders:  reqHeaders.Clone(),
 		ReqBody:     append([]byte(nil), reqBody...),
-		Status:      resp.StatusCode,
-		RespHeaders: resp.Header.Clone(),
+		Status:      status,
+		RespHeaders: respHeaders.Clone(),
 		RespBody:    append([]byte(nil), respBody...),
 	})
 
-	for k, vs := range resp.Header {
+	for k, vs := range respHeaders {
 		for _, v := range vs {
 			w.Header().Add(k, v)
 		}
 	}
-	w.WriteHeader(resp.StatusCode)
+	w.WriteHeader(status)
 	_, _ = w.Write(respBody)
+}
+
+// transformReq runs the request half of the transformer, returning the
+// (possibly rewritten) method, url, headers, and body. With no transformer it
+// returns the inputs unchanged.
+func (p *Proxy) transformReq(ctx context.Context, method, url string, h http.Header, body []byte) (string, string, http.Header, []byte, error) {
+	if p.transformer == nil {
+		return method, url, h, body, nil
+	}
+	out, err := p.transformer.TransformRequest(ctx, ReqEdit{Method: method, URL: url, Headers: h, Body: body})
+	if err != nil {
+		return method, url, h, body, err
+	}
+	if out.Headers == nil {
+		out.Headers = http.Header{}
+	}
+	return out.Method, out.URL, out.Headers, out.Body, nil
+}
+
+// transformResp runs the response half of the transformer, returning the
+// (possibly rewritten) status, headers, and body.
+func (p *Proxy) transformResp(ctx context.Context, status int, h http.Header, body []byte) (int, http.Header, []byte, error) {
+	if p.transformer == nil {
+		return status, h, body, nil
+	}
+	out, err := p.transformer.TransformResponse(ctx, RespEdit{Status: status, Headers: h, Body: body})
+	if err != nil {
+		return status, h, body, err
+	}
+	if out.Headers == nil {
+		out.Headers = http.Header{}
+	}
+	return out.Status, out.Headers, out.Body, nil
 }
 
 func (p *Proxy) record(ctx context.Context, c Capture) {
