@@ -1,5 +1,5 @@
 -- Scripts: user-authored JavaScript payload transformations executed by
--- internal/scripting. One row per script. See docs/PLAN.md §6.1.
+-- internal/scripting. One row per script.
 --
 -- "trigger" is quoted throughout because it is a reserved SQLite keyword; the
 -- value is one of on_request / on_response / on_replay / on_webhook.

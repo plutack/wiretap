@@ -37,7 +37,8 @@ node_modules/
 .vscode/
 *.swp
 
-# Local data
+# Local data and private working notes
+/docs/PLAN.md
 *.db
 *.db-journal
 *.db-wal

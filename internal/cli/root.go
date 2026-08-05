@@ -37,8 +37,8 @@ func NewRootCmd(version string) *cobra.Command {
 	root.AddCommand(newRelayCmd())
 	root.AddCommand(newTUICmd())
 	root.AddCommand(newInterceptCmd(version))
-		root.AddCommand(newGUICmd(version))
-return root
+	root.AddCommand(newGUICmd(version))
+	return root
 }
 
 // newVersionCmd prints the embedded build version.
@@ -68,9 +68,8 @@ func newConfigCmd() *cobra.Command {
 // rather than by calling config.NewManager() directly. This is the only
 // piece of package-level mutable state in cli and exists solely as a test
 // seam: cli_test.go swaps it for a temp-dir-backed manager and restores it
-// via t.Cleanup. (The "no package-level mutable state" rule in PLAN.md
-// targets runtime config like clocks/ids that affect logic; a documented
-// test-hook var is the idiomatic Go exception.)
+// via t.Cleanup. Runtime configuration remains instance-owned; this documented
+// variable is only a test hook.
 func newConfigInitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",

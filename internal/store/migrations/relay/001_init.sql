@@ -1,5 +1,4 @@
 -- relay schema (wiretap-relay.db) — authoritative registry + webhook buffer.
--- See docs/PLAN.md §6 for the rationale.
 
 -- Registered wiretap clients (one per machine).
 CREATE TABLE IF NOT EXISTS clients (

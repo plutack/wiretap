@@ -12,9 +12,9 @@ import (
 	"strings"
 )
 
-// HTTPClient is the typed client for the wiretap-relay admin HTTP API. It
-// mirrors the routes in PLAN.md §8 and is the only piece of HTTP machinery
-// the CLI subcommands touch; tests point it at httptest.Server.
+// HTTPClient is the typed client for the wiretap-relay admin HTTP API. It is
+// the only piece of HTTP machinery the CLI subcommands touch; tests point it
+// at httptest.Server.
 //
 // Ingress (POST /:project) is intentionally NOT a client method: real
 // webhook senders do plain HTTP POST with arbitrary bodies and content
