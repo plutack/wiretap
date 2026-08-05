@@ -20,7 +20,7 @@ module.exports = {
       [
         'feat',     // new feature
         'fix',      // bug fix
-        'docs',     // docs only (PLAN.md, README, CONTRIBUTING)
+        'docs',     // documentation-only change
         'style',    // formatting, no code change
         'refactor', // code change that neither adds a feature nor fixes a bug
         'perf',     // performance improvement

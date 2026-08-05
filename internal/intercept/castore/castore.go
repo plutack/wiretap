@@ -6,7 +6,7 @@
 // The pure crypto (GenerateCA / CA.LeafCert) lives in this build-tag-free
 // file so it is unit-testable on every platform. The OS-specific trust-store
 // mutation is split via build tags and surfaces ErrUnsupportedOS on platforms
-// not yet implemented (darwin/windows initially), per PLAN.md §11.
+// where trust-store integration is not implemented.
 //
 // Consumer-side interfaces (Installer, CertSigner in the proxy package) keep
 // production code decoupled from real trust stores and let tests substitute

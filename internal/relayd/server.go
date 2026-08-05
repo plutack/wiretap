@@ -64,8 +64,8 @@ func NewServer(st *store.RelayStore, opts ...Option) *Server {
 	return s
 }
 
-// projectPathRE enforces the project name format from PLAN.md §11:
-// lowercase alphanumerics and hyphens, length 2-63. Reserved roots
+// projectPathRE accepts lowercase alphanumerics and hyphens, length 2-63.
+// Reserved roots
 // (tunnel/register/admin/health) are filtered at the mux level so they
 // never collide with ingress.
 var projectPathRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,62}$`)
@@ -153,8 +153,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleIngress receives a webhook. The first path segment names the project;
-// any trailing path is preserved as the webhook's path field. Capturing the
-// raw body and headers byte-exact is the invariant from PLAN.md §6.
+// any trailing path is preserved as the webhook's path field. The raw body and
+// headers are captured byte-exact for faithful replay.
 //
 // We never require auth on ingress: webhook senders don't carry our tokens.
 // The project must exist and be owned by some registered client; otherwise

@@ -49,8 +49,8 @@ type TUIConfig struct {
 
 // InterceptConfig holds the traffic-interception settings consumed by the
 // `wiretap intercept` commands: the local interception proxy listen address,
-// the local 127.0.0.1 control HTTP API address (see PLAN.md open question #1),
-// and an optional shell override (auto-detected from $SHELL when empty).
+// the local 127.0.0.1 control HTTP API address, and an optional shell
+// override (auto-detected from $SHELL when empty).
 type InterceptConfig struct {
 	// ProxyAddr is the host:port the interception proxy listens on. Clients
 	// point HTTP_PROXY/HTTPS_PROXY here.

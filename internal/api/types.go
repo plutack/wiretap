@@ -3,10 +3,9 @@
 // the relay over HTTP.
 //
 // The package contains no I/O: only the JSON request/response types used by
-// relayd's HTTP handlers and the typed HTTP client in client.go. Keeping
-// the contract in one place is the "one API, multiple frontends"
-// invariant from docs/PLAN.md §5 — relayd, the CLI, the GUI, and external
-// scripts all share these DTOs.
+// relayd's HTTP handlers and the typed HTTP client in client.go. Keeping the
+// contract in one place ensures relayd, the CLI, the GUI, and external scripts
+// all share these DTOs.
 package api
 
 // RegisterRequest is the body of POST /register. The admin_token authenticates

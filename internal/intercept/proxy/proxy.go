@@ -10,9 +10,8 @@
 // the core flow can be exercised against an in-process httptest TLS upstream
 // with fakes for the cert signer, the capture sink, and the upstream dial.
 //
-// Out of scope for the MVP (see PLAN.md §1 non-goals): non-HTTP/1.1 tunnels,
-// plain-HTTP-on-port-80 capture beyond basic forward proxying, and
-// hop-by-hop/chunked edge cases (deferred to Phase 6 hardening).
+// Currently unsupported: non-HTTP/1.1 tunnels, plain HTTP capture beyond basic
+// forward proxying, and some hop-by-hop or chunked edge cases.
 package proxy
 
 import (

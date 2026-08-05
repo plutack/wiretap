@@ -1,6 +1,5 @@
 -- PC schema (wiretap.db) — local cache of received webhooks + traffic
 -- captures + the authoritative per-project cursor sent in HELLO.
--- See docs/PLAN.md §6 for the rationale.
 
 -- Webhooks pushed to this PC by the relay. (project, seq) is the natural
 -- dedup key: a reconnect re-pushes rows the PC already has, so inserts are

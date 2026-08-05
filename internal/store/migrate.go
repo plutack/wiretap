@@ -59,9 +59,9 @@ func Open(path string) (*sql.DB, error) {
 // isolated database and multiple connections within the same test see the
 // same data. The caller is responsible for Close.
 //
-// We deliberately don't auto-generate the name with a package counter: that
-// would be package-level mutable state, which PLAN.md keeps out of runtime
-// code. Passing the name in keeps the helper pure.
+// We deliberately don't auto-generate the name with a package counter because
+// that would add package-level mutable runtime state. Passing the name in keeps
+// the helper pure.
 func OpenInMemory(name string) (*sql.DB, error) {
 	return Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", name))
 }

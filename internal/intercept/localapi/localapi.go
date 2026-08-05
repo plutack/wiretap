@@ -1,7 +1,6 @@
 // Package localapi is the 127.0.0.1 control HTTP API that wiretap exposes so
-// external scripts (and the future GUI) can query captured webhooks and
-// intercepted traffic. It answers the "everything is an HTTP API" theme from
-// PLAN.md §5: the local app is queryable the same way the relayd admin API is.
+// external scripts and the GUI can query captured webhooks and intercepted
+// traffic without reading SQLite directly.
 //
 // The handlers are thin and read-only: they translate a Querier (the local
 // PCStore) into JSON. Mutations happen through the proxy (captures) and the
