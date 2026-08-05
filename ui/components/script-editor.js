@@ -1,5 +1,4 @@
-// ScriptEditor is the JS script editor from PLAN.md §6.1/§6.3. It uses
-// CodeMirror 5 (loaded as the UMD global window.CodeMirror via a <script> tag in
+// ScriptEditor uses CodeMirror 5 (loaded as the UMD global window.CodeMirror via a <script> tag in
 // index.html, NOT an ES module) for the body, plus fields for name/trigger/
 // priority/enabled and a test-run panel backed by TestScript.
 //
@@ -11,6 +10,7 @@
 //   onClose  — () → void
 import { html } from "../vendor/preact/index.js";
 import { useEffect, useRef, useState } from "../vendor/preact/index.js";
+import { copyText, pasteText } from "../lib/clipboard.js";
 
 const TRIGGERS = ["on_request", "on_response", "on_replay", "on_webhook"];
 
@@ -42,7 +42,7 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
       indentUnit: 2,
     });
     cmRef.current.setValue(script.body || "");
-    cmRef.current.setSize("100%", 260);
+    cmRef.current.setSize("100%", null);
     return () => {
       if (cmRef.current) {
         cmRef.current.toTextArea();
@@ -68,6 +68,34 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
 
   const currentBody = () =>
     cmRef.current ? cmRef.current.getValue() : taRef.current?.value || "";
+
+  const handleCopyBody = async () => {
+    try {
+      await copyText(currentBody());
+      setSaveState({ msg: "script copied" });
+    } catch (e) {
+      setSaveState({ error: `copy failed: ${String(e)}` });
+    }
+  };
+
+  const handlePasteBody = async () => {
+    try {
+      const text = await pasteText();
+      if (cmRef.current) {
+        cmRef.current.replaceSelection(text, "around");
+        cmRef.current.focus();
+      } else if (taRef.current) {
+        const textarea = taRef.current;
+        const start = textarea.selectionStart ?? textarea.value.length;
+        const end = textarea.selectionEnd ?? start;
+        textarea.setRangeText(text, start, end, "end");
+        textarea.focus();
+      }
+      setSaveState({ msg: "clipboard pasted" });
+    } catch (e) {
+      setSaveState({ error: `paste failed: ${String(e)}` });
+    }
+  };
 
   const handleSave = async () => {
     setSaveState({ msg: "saving…" });
@@ -119,23 +147,17 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
     }
   };
 
-  return html`<aside
-    class="flex w-1/2 min-w-[32rem] flex-col overflow-auto border-l border-neutral-800 bg-neutral-900/40"
-  >
-    <div class="flex items-center gap-2 border-b border-neutral-800 px-4 py-2">
-      <h2 class="text-sm font-semibold text-neutral-100">
-        ${script.id ? `Script #${script.id}` : "New script"}
-      </h2>
-      <button
-        onClick=${onClose}
-        class="ml-auto text-neutral-500 hover:text-neutral-200"
-      >
-        ✕
-      </button>
+  return html`<aside class="script-editor-pane">
+    <div class="inspector-head">
+      <div class="inspector-identity">
+        <div class="inspector-title">${script.id ? `transform/${script.id}` : "transform/new"}</div>
+        <div class="inspector-subtitle">goja · local sandbox · 5s timeout</div>
+      </div>
+      <button class="refresh-button inspector-close" title="Close editor" aria-label="Close editor" onClick=${onClose}>×</button>
     </div>
 
-    <div class="flex-1 overflow-auto px-4 py-3 text-sm">
-      <div class="mb-3 grid grid-cols-2 gap-3">
+    <div class="inspector-body text-sm">
+      <div class="mb-4 grid grid-cols-2 gap-3 rounded-lg border border-neutral-800 bg-neutral-950/40 p-3">
         <label class="block text-xs">
           <span class="mb-1 block text-neutral-400">Name</span>
           <input
@@ -175,28 +197,44 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
       </div>
 
       <div class="mb-3">
-        <span class="mb-1 block text-xs text-neutral-400">Body</span>
+        <div class="inspector-label mb-2">
+          <span>Program</span>
+          <button
+            type="button"
+            onClick=${handleCopyBody}
+            class="ml-auto rounded px-1.5 py-0.5 text-[11px] text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+          >
+            Copy
+          </button>
+          <button
+            type="button"
+            onClick=${handlePasteBody}
+            class="rounded px-1.5 py-0.5 text-[11px] text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+          >
+            Paste
+          </button>
+        </div>
         <div class="overflow-hidden rounded border border-neutral-700">
-          <textarea ref=${taRef}></textarea>
+          <textarea class="script-program-fallback" ref=${taRef}></textarea>
         </div>
       </div>
 
-      <div class="mb-3 flex items-center gap-2">
+      <div class="mb-4 flex items-center gap-2 border-b border-neutral-800 pb-4">
         <button
           onClick=${handleSave}
-          class="rounded bg-sky-600 px-3 py-1 text-sm font-medium text-white hover:bg-sky-500"
+          class="btn btn-primary"
         >
           Save
         </button>
         <button
           onClick=${handleTest}
-          class="rounded border border-neutral-700 px-3 py-1 text-sm hover:bg-neutral-800"
+          class="btn btn-ghost"
         >
           Test run
         </button>
         <button
           onClick=${handleDelete}
-          class="ml-auto rounded border border-rose-800 px-3 py-1 text-sm text-rose-400 hover:bg-rose-900/40"
+          class="btn btn-danger ml-auto"
         >
           ${script.id ? "Delete" : "Cancel"}
         </button>
@@ -228,7 +266,7 @@ function TestPanel({ result }) {
   return html`<section
     class="rounded border border-neutral-800 bg-neutral-950 p-2 text-xs"
   >
-    <h3 class="mb-2 text-xs uppercase text-neutral-500">Test result</h3>
+    <div class="inspector-label mb-3">Test result</div>
     ${result.rejected &&
     html`<p class="mb-2 text-rose-400">
       rejected${result.reject_reason ? `: ${result.reject_reason}` : ""}

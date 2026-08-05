@@ -22,21 +22,21 @@ export function TrafficDetail({ capture, onClose }) {
   const respCT = headerValue(capture.resp_headers, "content-type");
 
   return html`<${DetailPane}
-    title=${html`Capture <span class="text-neutral-500">#${capture.id}</span>`}
+    title=${html`capture/${capture.id}`}
     onClose=${onClose}
   >
     <${DetailBody}>
-      <div class="card p-3">
+      <div class="exchange-hero">
         <div class="flex flex-wrap items-center gap-2">
           <${MethodBadge} method=${capture.method} />
           <${StatusBadge} status=${capture.status} />
           <span class="ml-auto text-xs text-neutral-500">${fmtTime(capture.at)}</span>
         </div>
-        <p class="mt-2 font-mono text-xs break-all text-neutral-200">${capture.url}</p>
+        <p class="exchange-url">${capture.url}</p>
       </div>
 
-      <section>
-        <h3 class="section-label mb-1.5">Request headers</h3>
+      <section class="inspector-section">
+        <div class="inspector-label">Request headers</div>
         <${HeaderTable} headers=${capture.req_headers} />
       </section>
 
@@ -47,8 +47,8 @@ export function TrafficDetail({ capture, onClose }) {
         <${CodeBlock} body=${capture.req_body} contentType=${reqCT} />
       </>
 
-      <section>
-        <h3 class="section-label mb-1.5">Response headers</h3>
+      <section class="inspector-section">
+        <div class="inspector-label">Response headers</div>
         <${HeaderTable} headers=${capture.resp_headers} />
       </section>
 

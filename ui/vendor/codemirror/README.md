@@ -1,7 +1,7 @@
 # Vendored CodeMirror 5
 
-These files are the JavaScript editor used by the GUI script editor (PLAN.md
-§6.1). They are vendored (committed to the repo) rather than loaded from a CDN
+These files provide the JavaScript editor used by the GUI script editor. They
+are vendored (committed to the repo) rather than loaded from a CDN
 so the GUI works fully offline and has no runtime network dependency —
 consistent with wiretap's no-node_modules, no-bundler frontend approach. The
 whole tree is embedded into the binary via `//go:embed all:ui` (see

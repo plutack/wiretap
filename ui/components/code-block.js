@@ -6,10 +6,11 @@
 import { html } from "../vendor/preact/index.js";
 import { useMemo, useState } from "../vendor/preact/index.js";
 import { prettyBody, highlightJSON, escapeHTML } from "../lib/format.js";
+import { copyText } from "../lib/clipboard.js";
 
 export function CodeBlock({ body, contentType, maxHeightClass = "max-h-72" }) {
   const [raw, setRaw] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState("idle");
 
   const { text, isJSON } = useMemo(
     () => prettyBody(body, contentType),
@@ -28,12 +29,13 @@ export function CodeBlock({ body, contentType, maxHeightClass = "max-h-72" }) {
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(rendered);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch {
-      /* clipboard may be unavailable in the webview; ignore */
+      await copyText(rendered);
+      setCopyState("copied");
+    } catch (error) {
+      console.error("copy body:", error);
+      setCopyState("failed");
     }
+    setTimeout(() => setCopyState("idle"), 1600);
   };
 
   return html`<div class="overflow-hidden rounded-md border border-neutral-800 bg-neutral-950">
@@ -54,7 +56,7 @@ export function CodeBlock({ body, contentType, maxHeightClass = "max-h-72" }) {
           onClick=${copy}
           class="rounded px-1.5 py-0.5 text-[11px] text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
         >
-          ${copied ? "Copied" : "Copy"}
+          ${copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
         </button>
       </div>
     </div>

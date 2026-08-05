@@ -6,6 +6,8 @@ export function DeleteScript(arg1:number):Promise<void>;
 
 export function GetScript(arg1:number):Promise<gui.ScriptView>;
 
+export function GetCapture(arg1:number):Promise<gui.CaptureView>;
+
 export function GetWebhook(arg1:string,arg2:number):Promise<gui.WebhookView>;
 
 export function ListCaptures():Promise<Array<gui.CaptureView>>;

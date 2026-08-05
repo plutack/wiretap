@@ -169,6 +169,17 @@ func (b *Bindings) ListWebhooks(project string) ([]WebhookView, error) {
 	return webhookSummary(rows), nil
 }
 
+// GetCapture returns one traffic capture with request/response headers and
+// bodies populated for the detail pane. Returns an error when the row is
+// absent (errors.Is, store.ErrNotFound).
+func (b *Bindings) GetCapture(id int64) (CaptureView, error) {
+	c, err := b.app.CaptureByID(context.Background(), id)
+	if err != nil {
+		return CaptureView{}, fmt.Errorf("get capture %d: %w", id, err)
+	}
+	return captureDetail(c), nil
+}
+
 // ListCaptures returns the most recent traffic captures, newest-first. Bodies
 // and full header maps are omitted (use GetCapture for the detail payload).
 func (b *Bindings) ListCaptures() ([]CaptureView, error) {
@@ -383,6 +394,25 @@ func captureSummary(rows []store.TrafficCaptureRow) []CaptureView {
 		})
 	}
 	return out
+}
+
+// captureDetail converts one capture row into the full DTO: headers parsed from
+// their stored JSON and bodies rendered as UTF-8 best-effort strings (byte-exact
+// data stays in the store; the GUI only shows text).
+func captureDetail(c *store.TrafficCaptureRow) CaptureView {
+	return CaptureView{
+		ID:          c.ID,
+		At:          c.At.Format(time.RFC3339),
+		Method:      c.Method,
+		URL:         c.URL,
+		Status:      c.Status,
+		ReqHeaders:  parseHeaders(c.ReqHeadersJSON),
+		ReqBody:     string(c.ReqBody),
+		ReqBodyLen:  len(c.ReqBody),
+		RespHeaders: parseHeaders(c.RespHeadersJSON),
+		RespBody:    string(c.RespBody),
+		RespBodyLen: len(c.RespBody),
+	}
 }
 
 // expandHeaders converts the single-valued map the frontend sends into

@@ -1,34 +1,29 @@
-// Sidebar renders project filters, script list, and client-side filter controls
-// (method, status range). It's a pure view over state passed down from the root.
 import { html } from "../vendor/preact/index.js";
-import { Section, Select, Field } from "./ui.js";
 
-const METHOD_OPTIONS = [
-  { value: "", label: "All methods" },
-  { value: "GET", label: "GET" },
-  { value: "POST", label: "POST" },
-  { value: "PUT", label: "PUT" },
-  { value: "PATCH", label: "PATCH" },
-  { value: "DELETE", label: "DELETE" },
-];
-
+const METHOD_OPTIONS = ["", "GET", "POST", "PUT", "PATCH", "DELETE"];
 const STATUS_OPTIONS = [
-  { value: "", label: "All statuses" },
-  { value: "2xx", label: "2xx · success" },
-  { value: "3xx", label: "3xx · redirect" },
-  { value: "4xx", label: "4xx · client error" },
-  { value: "5xx", label: "5xx · server error" },
+  ["", "All status families"],
+  ["2xx", "2xx · success"],
+  ["3xx", "3xx · redirect"],
+  ["4xx", "4xx · client error"],
+  ["5xx", "5xx · server error"],
 ];
 
-function ProjectButton({ label, active, onClick }) {
-  return html`<button
-    onClick=${onClick}
-    class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors ${active
-      ? "bg-brand-500/15 text-brand-200 ring-1 ring-brand-500/30"
-      : "text-neutral-300 hover:bg-neutral-800"}"
-  >
-    <span class="h-1.5 w-1.5 flex-shrink-0 rounded-full ${active ? "bg-brand-400" : "bg-neutral-600"}"></span>
-    <span class="min-w-0 flex-1 truncate">${label}</span>
+function NavSection({ title, count, action, children }) {
+  return html`<section class="nav-section">
+    <div class="nav-heading">
+      <span>${title}</span>
+      ${action || (count != null ? html`<span class="nav-count">${count}</span>` : null)}
+    </div>
+    ${children}
+  </section>`;
+}
+
+function ProjectItem({ label, active, onClick, all = false }) {
+  return html`<button class="nav-item ${active ? "active" : ""}" onClick=${onClick}>
+    <span class="nav-glyph">${all ? "∞" : label.slice(0, 2).toUpperCase()}</span>
+    <span class="nav-label">${label}</span>
+    ${active ? html`<span class="live-dot online"></span>` : null}
   </button>`;
 }
 
@@ -45,83 +40,103 @@ export function Sidebar({
   statusFilter,
   onStatusFilterChange,
 }) {
-  return html`<aside
-    class="flex w-60 flex-shrink-0 flex-col overflow-y-auto border-r border-neutral-800 bg-neutral-900/30"
-  >
-    <${Section} title="Projects" class="border-b border-neutral-800 p-3">
-      <div class="space-y-0.5">
-        <${ProjectButton}
+  const enabledScripts = scripts.filter((script) => script.enabled).length;
+
+  return html`<aside class="navigator">
+    <div class="navigator-scroll">
+      <${NavSection} title="Sources" count=${projects.length}>
+        <${ProjectItem}
           label="All projects"
+          all=${true}
           active=${selectedProject === ""}
           onClick=${() => onSelectProject("")}
         />
         ${projects.map(
-          (p) => html`<${ProjectButton}
-            key=${p}
-            label=${p}
-            active=${selectedProject === p}
-            onClick=${() => onSelectProject(p)}
+          (project) => html`<${ProjectItem}
+            key=${project}
+            label=${project}
+            active=${selectedProject === project}
+            onClick=${() => onSelectProject(project)}
           />`,
         )}
-      </div>
-    </>
+        ${projects.length === 0
+          ? html`<p class="px-2 py-2 text-[10px] leading-relaxed text-neutral-600">
+              Connect a relay to discover project sources.
+            </p>`
+          : null}
+      </>
 
-    <${Section}
-      title="Scripts"
-      class="border-b border-neutral-800 p-3"
-      action=${html`<button
-        onClick=${onNewScript}
-        class="btn btn-primary btn-xs"
+      <${NavSection}
+        title="Transforms"
+        count=${enabledScripts + "/" + scripts.length}
+        action=${html`<button class="new-script-button" title="New transform" aria-label="New transform" onClick=${onNewScript}>＋</button>`}
       >
-        + New
-      </button>`}
-    >
-      ${scripts.length === 0
-        ? html`<p class="px-1 py-2 text-xs text-neutral-600">No scripts yet.</p>`
-        : html`<div class="space-y-0.5">
-            ${scripts.map(
-              (s) => html`<div
-                key=${s.id}
-                class="group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-neutral-800"
-              >
-                <input
-                  type="checkbox"
-                  checked=${s.enabled}
-                  onChange=${(e) => onScriptToggle(s.id, e.target.checked)}
-                  class="checkbox"
-                  title=${s.enabled ? "Enabled" : "Disabled"}
-                />
-                <button
-                  onClick=${() => onScriptSelect(s)}
-                  class="min-w-0 flex-1 truncate text-left ${s.enabled ? "text-neutral-200" : "text-neutral-500"}"
-                >
-                  ${s.name || "(unnamed)"}
-                </button>
-                <span class="chip bg-neutral-800 text-neutral-500 opacity-0 group-hover:opacity-100">
-                  ${(s.trigger || "").replace("on_", "")}
-                </span>
-              </div>`,
-            )}
-          </div>`}
-    </>
+        ${scripts.map(
+          (script) => html`<div key=${script.id} class="nav-item">
+            <input
+              class="script-switch"
+              type="checkbox"
+              checked=${script.enabled}
+              title=${script.enabled ? "Disable transform" : "Enable transform"}
+              onChange=${(event) => onScriptToggle(script.id, event.target.checked)}
+            />
+            <button
+              class="nav-label nav-label-button"
+              title=${script.name || "Unnamed transform"}
+              onClick=${() => onScriptSelect(script)}
+            >
+              ${script.name || "Unnamed transform"}
+            </button>
+            <span class="nav-count">${(script.trigger || "").replace("on_", "")}</span>
+          </div>`,
+        )}
+        ${scripts.length === 0
+          ? html`<button class="nav-item" onClick=${onNewScript}>
+              <span class="nav-glyph">JS</span>
+              <span class="nav-label">Create first transform</span>
+            </button>`
+          : null}
+      </>
 
-    <${Section} title="Filters" class="p-3">
-      <div class="space-y-3">
-        <${Field} label="Method">
-          <${Select}
-            value=${methodFilter}
-            onChange=${(e) => onMethodFilterChange(e.target.value)}
-            options=${METHOD_OPTIONS}
-          />
-        </>
-        <${Field} label="Status">
-          <${Select}
-            value=${statusFilter}
-            onChange=${(e) => onStatusFilterChange(e.target.value)}
-            options=${STATUS_OPTIONS}
-          />
-        </>
-      </div>
-    </>
+      <${NavSection} title="Lens">
+        <select
+          class="nav-select"
+          aria-label="Filter by method"
+          value=${methodFilter}
+          onChange=${(event) => onMethodFilterChange(event.target.value)}
+        >
+          ${METHOD_OPTIONS.map(
+            (method) => html`<option key=${method} value=${method}>${method || "All methods"}</option>`,
+          )}
+        </select>
+        <select
+          class="nav-select"
+          aria-label="Filter by status"
+          value=${statusFilter}
+          onChange=${(event) => onStatusFilterChange(event.target.value)}
+        >
+          ${STATUS_OPTIONS.map(
+            ([value, label]) => html`<option key=${value} value=${value}>${label}</option>`,
+          )}
+        </select>
+        ${(methodFilter || statusFilter)
+          ? html`<button
+              class="nav-item"
+              onClick=${() => {
+                onMethodFilterChange("");
+                onStatusFilterChange("");
+              }}
+            >
+              <span class="nav-glyph">×</span>
+              <span class="nav-label">Clear lens</span>
+            </button>`
+          : null}
+      </>
+    </div>
+
+    <footer class="navigator-footer">
+      <div>${projects.length ? `${projects.length} relay source${projects.length === 1 ? "" : "s"}` : "local mode"}</div>
+      <div>${enabledScripts} active transform${enabledScripts === 1 ? "" : "s"}</div>
+    </footer>
   </aside>`;
 }

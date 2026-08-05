@@ -35,17 +35,17 @@ export function WebhookDetail({ webhook, onReplay, onClose }) {
   const ct = headerValue(webhook.headers, "content-type");
 
   return html`<${DetailPane}
-    title=${html`Webhook <span class="font-mono text-brand-300">${webhook.project}/${webhook.seq}</span>`}
+    title=${html`${webhook.project}/${webhook.seq}`}
     onClose=${onClose}
   >
     <${DetailBody}>
-      <div class="card flex items-center gap-2 p-3">
+      <div class="exchange-hero">
         <${MethodBadge} method=${webhook.method} />
-        <span class="font-mono text-xs break-all text-neutral-200">${webhook.path}</span>
+        <span class="exchange-url mt-0">${webhook.path}</span>
       </div>
 
-      <section>
-        <h3 class="section-label mb-1.5">Headers</h3>
+      <section class="inspector-section">
+        <div class="inspector-label">Headers</div>
         <${HeaderTable} headers=${webhook.headers} />
       </section>
 
@@ -53,8 +53,8 @@ export function WebhookDetail({ webhook, onReplay, onClose }) {
         <${CodeBlock} body=${webhook.body} contentType=${ct} />
       </>
 
-      <section class="border-t border-neutral-800 pt-4">
-        <h3 class="section-label mb-2">Replay to local target</h3>
+      <section class="inspector-section border-t border-neutral-800 pt-4">
+        <div class="inspector-label">Replay to local target</div>
         <div class="flex gap-2">
           <${Input}
             type="text"

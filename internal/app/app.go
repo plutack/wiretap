@@ -332,6 +332,15 @@ func (a *App) Captures(ctx context.Context, limit int) ([]store.TrafficCaptureRo
 	return a.store.TrafficCaptures(ctx, limit)
 }
 
+// CaptureByID loads one traffic capture with its full headers and bodies
+// populated. Returns store.ErrNotFound (wrapped) when absent.
+func (a *App) CaptureByID(ctx context.Context, id int64) (*store.TrafficCaptureRow, error) {
+	if a.store == nil {
+		return nil, errors.New("app: store not open")
+	}
+	return a.store.TrafficCaptureByID(ctx, id)
+}
+
 // WebhookBySeq loads one webhook by (project, seq). Returns store.ErrNotFound
 // (wrapped) when absent.
 func (a *App) WebhookBySeq(ctx context.Context, project string, seq int64) (*store.WebhookRow, error) {
