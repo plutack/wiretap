@@ -171,3 +171,28 @@ func (s *PCStore) TrafficCaptures(ctx context.Context, limit int) ([]TrafficCapt
 	}
 	return out, nil
 }
+
+// TrafficCaptureByID returns a single traffic capture with its request/response
+// headers and bodies populated (the detail view). Returns ErrNotFound when no
+// row has that id.
+func (s *PCStore) TrafficCaptureByID(ctx context.Context, id int64) (*TrafficCaptureRow, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, at, COALESCE(method, ''), COALESCE(url, ''), COALESCE(req_headers, ''), COALESCE(req_body, ''), status, COALESCE(resp_headers, ''), COALESCE(resp_body, '')
+		 FROM traffic_captures WHERE id = ?`,
+		id,
+	)
+	var c TrafficCaptureRow
+	var at int64
+	var status sql.NullInt64
+	if err := row.Scan(&c.ID, &at, &c.Method, &c.URL, &c.ReqHeadersJSON, &c.ReqBody, &status, &c.RespHeadersJSON, &c.RespBody); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("PCStore.TrafficCaptureByID %d: %w", id, ErrNotFound)
+		}
+		return nil, fmt.Errorf("PCStore.TrafficCaptureByID %d: %w", id, err)
+	}
+	c.At = time.Unix(at, 0).UTC()
+	if status.Valid {
+		c.Status = int(status.Int64)
+	}
+	return &c, nil
+}

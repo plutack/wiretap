@@ -1,7 +1,7 @@
 // wiretap GUI root. Composes the Preact + htm component tree, owns app state
 // (active tab, polled status, fetched rows, filters, selection) and wires the
 // Wails bindings through lib/api.js. No build step: everything loads as ES
-// modules, htm provides the tagged-template markup (see PLAN.md §6.3).
+// modules, htm provides the tagged-template markup.
 import { html, render } from "./vendor/preact/index.js";
 import { useEffect, useRef, useState } from "./vendor/preact/index.js";
 import { api } from "./lib/api.js";
@@ -16,28 +16,34 @@ import { ScriptEditor } from "./components/script-editor.js";
 
 function Toast({ message }) {
   if (!message) return null;
-  return html`<div class="pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
-    <div class="pointer-events-auto rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-xs text-neutral-100 shadow-lg shadow-black/40">
-      ${message}
-    </div>
-  </div>`;
+  return html`<div class="workbench-toast">${message}</div>`;
 }
 
-function TabBar({ activeTab, onChange, counts }) {
-  const tab = (id, label) => html`<button
+function CommandDeck({ activeTab, onChange, counts, onSearch, project, filtered }) {
+  const tab = (id, label, glyph) => html`<button
     onClick=${() => onChange(id)}
-    class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm transition-colors ${activeTab === id
-      ? "border-brand-500 text-brand-300"
-      : "border-transparent text-neutral-400 hover:text-neutral-200"}"
+    class="mode-tab ${activeTab === id ? "active" : ""}"
   >
-    ${label}
-    <span class="chip ${activeTab === id ? "bg-brand-500/15 text-brand-300" : "bg-neutral-800 text-neutral-500"}">
-      ${counts[id] ?? 0}
-    </span>
+    <span aria-hidden="true">${glyph}</span>
+    <span>${label}</span>
+    <span class="mode-count">${counts[id] ?? 0}</span>
   </button>`;
-  return html`<nav class="flex gap-1 border-b border-neutral-800 px-2">
-    ${tab("webhooks", "Webhooks")} ${tab("traffic", "Traffic")}
-  </nav>`;
+
+  return html`<div class="command-deck">
+    <div class="command-topline">
+      <nav class="mode-tabs" aria-label="Signal stream">
+        ${tab("webhooks", "Ingress", "↘")}
+        ${tab("traffic", "Traffic", "⇄")}
+      </nav>
+      <${SearchBar}
+        onSearch=${onSearch}
+        placeholder=${activeTab === "webhooks" ? "Filter source, method, or route…" : "Filter method, host, or URL…"}
+      />
+      <div class="workspace-summary">
+        ${project ? `source:${project} · ` : ""}${filtered} visible
+      </div>
+    </div>
+  </div>`;
 }
 
 function App() {
@@ -107,6 +113,16 @@ function App() {
     const t = setInterval(tick, 2000);
     return () => clearInterval(t);
   }, [activeTab, project]);
+
+  useEffect(() => {
+    if (!selection) return undefined;
+
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setSelection(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [selection]);
 
   // --- selection handlers ------------------------------------------------
   const openWebhook = async (proj, seq) => {
@@ -206,7 +222,12 @@ function App() {
     return null;
   };
 
-  return html`<div class="flex h-full flex-col">
+  const changeTab = (tab) => {
+    setActiveTab(tab);
+    setSelection(null);
+  };
+
+  return html`<div class="workbench">
     <${StatusBar}
       status=${status}
       onRefresh=${() => {
@@ -215,7 +236,7 @@ function App() {
         activeTab === "webhooks" ? loadWebhooks() : loadCaptures();
       }}
     />
-    <div class="flex min-h-0 flex-1">
+    <div class="workbench-body">
       <${Sidebar}
         projects=${(status && status.connected_projects) || []}
         selectedProject=${project}
@@ -229,15 +250,17 @@ function App() {
         statusFilter=${statusFilter}
         onStatusFilterChange=${setStatusFilter}
       />
-      <div class="flex min-w-0 flex-1 flex-col">
-        <${TabBar}
+      <div class="workspace">
+        <${CommandDeck}
           activeTab=${activeTab}
-          onChange=${setActiveTab}
+          onChange=${changeTab}
           counts=${{ webhooks: visibleWebhooks.length, traffic: visibleCaptures.length }}
+          onSearch=${setSearch}
+          project=${project}
+          filtered=${activeTab === "webhooks" ? visibleWebhooks.length : visibleCaptures.length}
         />
-        <${SearchBar} onSearch=${setSearch} />
-        <main class="flex min-h-0 flex-1">
-          <section class="min-w-0 flex-1 overflow-auto">
+        <main class="workspace-main">
+          <section class="event-stage">
             ${activeTab === "webhooks"
               ? html`<${WebhookList}
                   webhooks=${visibleWebhooks}

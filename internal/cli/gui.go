@@ -83,12 +83,13 @@ func runGUI(parent context.Context, version string) error {
 		Title: "wiretap",
 		// Wails finds ui/index.html inside the embed.FS and strips the "ui/"
 		// prefix automatically (see guiassets.go).
-		Assets:    guiassets.Assets,
-		Width:     1024,
-		Height:    720,
-		MinWidth:  720,
-		MinHeight: 480,
-		Bind:      []any{bindings},
+		Assets:                   guiassets.Assets,
+		Width:                    1024,
+		Height:                   720,
+		MinWidth:                 720,
+		MinHeight:                480,
+		EnableDefaultContextMenu: true,
+		Bind:                     []any{bindings},
 		OnShutdown: func(ctx context.Context) {
 			_ = a.Close()
 		},

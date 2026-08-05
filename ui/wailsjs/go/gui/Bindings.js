@@ -10,6 +10,10 @@ export function GetScript(arg1) {
   return window['go']['gui']['Bindings']['GetScript'](arg1);
 }
 
+export function GetCapture(arg1) {
+  return window['go']['gui']['Bindings']['GetCapture'](arg1);
+}
+
 export function GetWebhook(arg1, arg2) {
   return window['go']['gui']['Bindings']['GetWebhook'](arg1, arg2);
 }

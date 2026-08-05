@@ -1,6 +1,6 @@
 // Local entry that wires Preact + htm together so every component imports the
 // framework from one place. htm.bind(h) returns a tagged-template `html` that
-// renders Preact vnodes with no JSX and no build step (see PLAN.md §6.3).
+// renders Preact vnodes with no JSX and no build step.
 //
 // The bare specifiers "preact" and "preact/hooks" resolve via the import map in
 // index.html; htm ships as a self-contained module. All three are vendored

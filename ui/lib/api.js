@@ -5,6 +5,7 @@
 import {
   DeleteScript,
   GetScript,
+  GetCapture,
   GetWebhook,
   ListCaptures,
   ListScripts,
@@ -21,6 +22,7 @@ export const api = {
   getWebhook: (project, seq) => GetWebhook(project, seq),
   replayWebhook: (project, seq, targetURL) => ReplayWebhook(project, seq, targetURL),
   listCaptures: () => ListCaptures(),
+  getCapture: (id) => GetCapture(id),
   status: () => Status(),
   listScripts: () => ListScripts(),
   getScript: (id) => GetScript(id),

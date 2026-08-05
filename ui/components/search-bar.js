@@ -1,11 +1,9 @@
-// SearchBar is a debounced client-side search input. It calls onSearch with the
-// trimmed query 300ms after the user stops typing (NOT FTS5 — the parent filters
-// already-loaded rows by substring; PLAN.md §6.5's FTS5 needs a Go layer).
 import { html } from "../vendor/preact/index.js";
 import { useEffect, useRef, useState } from "../vendor/preact/index.js";
 
-export function SearchBar({ onSearch }) {
+export function SearchBar({ onSearch, placeholder = "Filter the current signal stream…" }) {
   const [value, setValue] = useState("");
+  const inputRef = useRef(null);
   const timer = useRef(null);
 
   useEffect(() => {
@@ -14,30 +12,42 @@ export function SearchBar({ onSearch }) {
     return () => clearTimeout(timer.current);
   }, [value]);
 
-  return html`<div class="border-b border-neutral-800 px-3 py-2">
-    <div class="relative">
-      <span class="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-neutral-500">
-        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-          <circle cx="9" cy="9" r="6" />
-          <path d="M14 14l3.5 3.5" />
-        </svg>
-      </span>
-      <input
-        type="search"
-        placeholder="Search method, path, url…"
-        value=${value}
-        onInput=${(e) => setValue(e.target.value)}
-        class="input pl-8"
-      />
-      ${value
-        ? html`<button
-            onClick=${() => setValue("")}
-            class="absolute inset-y-0 right-2 flex items-center text-neutral-500 hover:text-neutral-300"
-            aria-label="Clear search"
-          >
-            ✕
-          </button>`
-        : null}
-    </div>
+  useEffect(() => {
+    const shortcut = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        inputRef.current?.focus();
+      }
+      if (event.key === "Escape" && document.activeElement === inputRef.current) {
+        setValue("");
+        inputRef.current.blur();
+      }
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, []);
+
+  return html`<div class="search-shell">
+    <span class="search-icon" aria-hidden="true">
+      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+        <circle cx="8.5" cy="8.5" r="5.5" />
+        <path d="m13 13 4 4" />
+      </svg>
+    </span>
+    <input
+      ref=${inputRef}
+      type="search"
+      value=${value}
+      placeholder=${placeholder}
+      onInput=${(event) => setValue(event.target.value)}
+      aria-label="Filter signal stream"
+    />
+    ${value
+      ? html`<button
+          class="search-clear"
+          onClick=${() => setValue("")}
+          aria-label="Clear filter"
+        >×</button>`
+      : html`<span class="search-key">Ctrl K</span>`}
   </div>`;
 }

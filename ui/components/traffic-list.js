@@ -1,50 +1,64 @@
-// TrafficList renders a table of captured HTTP exchanges (id, method, url,
-// status, time, req/resp byte counts). Clicking a row calls onSelect(id).
 import { html } from "../vendor/preact/index.js";
 import { MethodBadge, StatusBadge } from "./badges.js";
-import { EmptyState } from "./ui.js";
-import { fmtTime } from "../lib/format.js";
+import { fmtTime, fmtBytes } from "../lib/format.js";
+
+function splitURL(rawURL) {
+  try {
+    const url = new URL(rawURL);
+    return { host: url.host, path: url.pathname + url.search };
+  } catch {
+    return { host: "captured request", path: rawURL || "/" };
+  }
+}
 
 export function TrafficList({ captures, onSelect, selectedId }) {
   if (captures.length === 0) {
-    return html`<${EmptyState}
-      icon="⇅"
-      title="No traffic captured yet"
-      hint="Start interception and route an app through the proxy to see exchanges here."
-    />`;
+    return html`<div class="empty-workspace">
+      <div class="empty-card">
+        <div class="empty-radar">⇄</div>
+        <h2>No local traffic in the stream</h2>
+        <p>
+          Start <code>wiretap intercept start</code>, then make requests from the spawned shell to record exchanges.
+        </p>
+      </div>
+    </div>`;
   }
 
-  return html`<table class="w-full border-collapse text-sm">
-    <thead class="sticky top-0 z-10 bg-neutral-900 text-left">
-      <tr class="text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
-        <th class="px-3 py-2 font-semibold">#</th>
-        <th class="px-3 py-2 font-semibold">Method</th>
-        <th class="px-3 py-2 font-semibold">URL</th>
-        <th class="px-3 py-2 font-semibold">Status</th>
-        <th class="px-3 py-2 font-semibold">At</th>
-        <th class="px-3 py-2 text-right font-semibold">Req / Resp</th>
+  return html`<table class="signal-table">
+    <colgroup>
+      <col style="width: 82px" />
+      <col />
+      <col style="width: 78px" />
+      <col style="width: 112px" />
+      <col style="width: 76px" />
+    </colgroup>
+    <thead>
+      <tr>
+        <th>Method</th>
+        <th>Destination</th>
+        <th>Status</th>
+        <th>Transfer</th>
+        <th>Seen</th>
       </tr>
     </thead>
     <tbody>
-      ${captures.map((c) => {
-        const active = c.id === selectedId;
+      ${captures.map((capture) => {
+        const destination = splitURL(capture.url);
         return html`<tr
-          key=${c.id}
-          onClick=${() => onSelect(c.id)}
-          class="cursor-pointer border-b border-neutral-900 transition-colors ${active
-            ? "bg-brand-500/10"
-            : "hover:bg-neutral-900"}"
+          key=${capture.id}
+          class="signal-row ${capture.id === selectedId ? "active" : ""}"
+          onClick=${() => onSelect(capture.id)}
         >
-          <td class="px-3 py-2 font-mono text-neutral-500">${c.id}</td>
-          <td class="px-3 py-2"><${MethodBadge} method=${c.method} /></td>
-          <td class="max-w-0 px-3 py-2 font-mono text-neutral-300">
-            <span class="block truncate" title=${c.url}>${c.url}</span>
+          <td><${MethodBadge} method=${capture.method} /></td>
+          <td>
+            <span class="signal-primary" title=${capture.url}>${destination.path}</span>
+            <span class="signal-secondary">${destination.host} · capture ${capture.id}</span>
           </td>
-          <td class="px-3 py-2"><${StatusBadge} status=${c.status} /></td>
-          <td class="px-3 py-2 text-neutral-500">${fmtTime(c.at)}</td>
-          <td class="px-3 py-2 text-right font-mono text-neutral-500">
-            ${c.req_body_len} / ${c.resp_body_len}
+          <td><${StatusBadge} status=${capture.status} /></td>
+          <td class="mono-dim">
+            ↑ ${fmtBytes(capture.req_body_len) || "0 B"} · ↓ ${fmtBytes(capture.resp_body_len) || "0 B"}
           </td>
+          <td class="mono-dim">${fmtTime(capture.at)}</td>
         </tr>`;
       })}
     </tbody>
