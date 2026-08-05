@@ -3,7 +3,19 @@
 import { html } from "../vendor/preact/index.js";
 import { useState } from "../vendor/preact/index.js";
 import { MethodBadge, HeaderTable } from "./badges.js";
+import { CodeBlock } from "./code-block.js";
+import { DetailPane, DetailBody, BodySection } from "./detail-pane.js";
+import { Button, Input } from "./ui.js";
 import { fmtBytes } from "../lib/format.js";
+
+function headerValue(headers, name) {
+  const entry = Object.entries(headers || {}).find(
+    ([k]) => k.toLowerCase() === name.toLowerCase(),
+  );
+  if (!entry) return "";
+  const v = entry[1];
+  return Array.isArray(v) ? v.join(", ") : String(v);
+}
 
 export function WebhookDetail({ webhook, onReplay, onClose }) {
   const [targetURL, setTargetURL] = useState("");
@@ -20,61 +32,40 @@ export function WebhookDetail({ webhook, onReplay, onClose }) {
     }
   };
 
-  return html`<aside
-    class="flex w-1/2 min-w-[28rem] flex-col overflow-auto border-l border-neutral-800 bg-neutral-900/40"
+  const ct = headerValue(webhook.headers, "content-type");
+
+  return html`<${DetailPane}
+    title=${html`Webhook <span class="font-mono text-brand-300">${webhook.project}/${webhook.seq}</span>`}
+    onClose=${onClose}
   >
-    <div
-      class="flex items-center gap-2 border-b border-neutral-800 px-4 py-2"
-    >
-      <h2 class="text-sm font-semibold text-neutral-100">
-        Webhook ${webhook.project}/${webhook.seq}
-      </h2>
-      <button
-        onClick=${onClose}
-        class="ml-auto text-neutral-500 hover:text-neutral-200"
-      >
-        ✕
-      </button>
-    </div>
-    <div class="flex-1 overflow-auto px-4 py-3 text-sm">
-      <div class="mb-3 flex items-center gap-2">
+    <${DetailBody}>
+      <div class="card flex items-center gap-2 p-3">
         <${MethodBadge} method=${webhook.method} />
-        <span class="font-mono text-neutral-300">${webhook.path}</span>
+        <span class="font-mono text-xs break-all text-neutral-200">${webhook.path}</span>
       </div>
 
-      <section class="mb-4">
-        <h3 class="mb-1 text-xs uppercase text-neutral-500">Headers</h3>
+      <section>
+        <h3 class="section-label mb-1.5">Headers</h3>
         <${HeaderTable} headers=${webhook.headers} />
       </section>
 
-      <section class="mb-4">
-        <h3 class="mb-1 text-xs uppercase text-neutral-500">
-          Body (${fmtBytes(webhook.body_len)})
-        </h3>
-        <pre
-          class="max-h-48 overflow-auto rounded bg-neutral-950 p-2 text-xs font-mono break-all whitespace-pre-wrap"
-          >${webhook.body || "(empty)"}</pre
-        >
-      </section>
+      <${BodySection} title="Body" len=${fmtBytes(webhook.body_len)}>
+        <${CodeBlock} body=${webhook.body} contentType=${ct} />
+      </>
 
-      <section class="mt-4 border-t border-neutral-800 pt-3">
-        <h3 class="mb-2 text-xs uppercase text-neutral-500">
-          Replay to local target
-        </h3>
+      <section class="border-t border-neutral-800 pt-4">
+        <h3 class="section-label mb-2">Replay to local target</h3>
         <div class="flex gap-2">
-          <input
+          <${Input}
             type="text"
             placeholder="http://127.0.0.1:8080/hook"
             value=${targetURL}
             onInput=${(e) => setTargetURL(e.target.value)}
-            class="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm font-mono"
+            class="font-mono"
           />
-          <button
-            onClick=${handleReplay}
-            class="rounded bg-sky-600 px-3 py-1 text-sm font-medium text-white hover:bg-sky-500"
-          >
+          <${Button} variant="primary" onClick=${handleReplay} class="flex-shrink-0">
             Replay
-          </button>
+          </>
         </div>
         ${replayState &&
         html`<p
@@ -91,6 +82,6 @@ export function WebhookDetail({ webhook, onReplay, onClose }) {
               : `replayed → HTTP ${replayState.status}`}
         </p>`}
       </section>
-    </div>
-  </aside>`;
+    </>
+  </>`;
 }

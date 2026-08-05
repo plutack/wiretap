@@ -15,21 +15,25 @@ import { TrafficDetail } from "./components/traffic-detail.js";
 import { ScriptEditor } from "./components/script-editor.js";
 
 function Toast({ message }) {
-  return html`<footer
-    class="border-t border-neutral-800 px-4 py-1.5 text-xs text-neutral-400"
-  >
-    ${message || ""}
-  </footer>`;
+  if (!message) return null;
+  return html`<div class="pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
+    <div class="pointer-events-auto rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-xs text-neutral-100 shadow-lg shadow-black/40">
+      ${message}
+    </div>
+  </div>`;
 }
 
-function TabBar({ activeTab, onChange }) {
+function TabBar({ activeTab, onChange, counts }) {
   const tab = (id, label) => html`<button
     onClick=${() => onChange(id)}
-    class="border-b-2 px-3 py-2 text-sm ${activeTab === id
-      ? "border-sky-500 text-sky-400"
+    class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm transition-colors ${activeTab === id
+      ? "border-brand-500 text-brand-300"
       : "border-transparent text-neutral-400 hover:text-neutral-200"}"
   >
     ${label}
+    <span class="chip ${activeTab === id ? "bg-brand-500/15 text-brand-300" : "bg-neutral-800 text-neutral-500"}">
+      ${counts[id] ?? 0}
+    </span>
   </button>`;
   return html`<nav class="flex gap-1 border-b border-neutral-800 px-2">
     ${tab("webhooks", "Webhooks")} ${tab("traffic", "Traffic")}
@@ -113,9 +117,13 @@ function App() {
       showToast("get webhook: " + e);
     }
   };
-  const openCapture = (id) => {
-    const c = captures.find((r) => r.id === id);
-    if (c) setSelection({ kind: "traffic", data: c });
+  const openCapture = async (id) => {
+    try {
+      const c = await api.getCapture(id);
+      setSelection({ kind: "traffic", data: c });
+    } catch (e) {
+      showToast("get capture: " + e);
+    }
   };
   const openScript = async (s) => {
     try {
@@ -222,7 +230,11 @@ function App() {
         onStatusFilterChange=${setStatusFilter}
       />
       <div class="flex min-w-0 flex-1 flex-col">
-        <${TabBar} activeTab=${activeTab} onChange=${setActiveTab} />
+        <${TabBar}
+          activeTab=${activeTab}
+          onChange=${setActiveTab}
+          counts=${{ webhooks: visibleWebhooks.length, traffic: visibleCaptures.length }}
+        />
         <${SearchBar} onSearch=${setSearch} />
         <main class="flex min-h-0 flex-1">
           <section class="min-w-0 flex-1 overflow-auto">
@@ -230,10 +242,16 @@ function App() {
               ? html`<${WebhookList}
                   webhooks=${visibleWebhooks}
                   onSelect=${openWebhook}
+                  selectedKey=${selection && selection.kind === "webhook"
+                    ? `${selection.data.project}-${selection.data.seq}`
+                    : null}
                 />`
               : html`<${TrafficList}
                   captures=${visibleCaptures}
                   onSelect=${openCapture}
+                  selectedId=${selection && selection.kind === "traffic"
+                    ? selection.data.id
+                    : null}
                 />`}
           </section>
           ${detailPane()}

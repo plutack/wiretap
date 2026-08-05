@@ -1,50 +1,63 @@
-// TrafficDetail renders a captured exchange. NOTE: ListCaptures returns
-// summaries only — request/response bodies and full header maps are NOT
-// included, and there is no GetCapture binding yet (see PLAN.md §6.2). So this
-// pane can only honestly show method/url/status and byte counts. Wire up a
-// GetCapture Go binding to enable the full req/resp editor described in §6.2.
+// TrafficDetail renders a captured HTTP exchange with full request/response
+// headers and bodies. The parent fetches the detail via GetCapture (ListCaptures
+// only returns summaries) and passes the populated CaptureView down.
 import { html } from "../vendor/preact/index.js";
-import { MethodBadge, StatusBadge } from "./badges.js";
+import { MethodBadge, StatusBadge, HeaderTable } from "./badges.js";
+import { CodeBlock } from "./code-block.js";
+import { DetailPane, DetailBody, BodySection } from "./detail-pane.js";
 import { fmtBytes, fmtTime } from "../lib/format.js";
 
+// Pull a header value case-insensitively (header maps are {name:[values]}).
+function headerValue(headers, name) {
+  const entry = Object.entries(headers || {}).find(
+    ([k]) => k.toLowerCase() === name.toLowerCase(),
+  );
+  if (!entry) return "";
+  const v = entry[1];
+  return Array.isArray(v) ? v.join(", ") : String(v);
+}
+
 export function TrafficDetail({ capture, onClose }) {
-  return html`<aside
-    class="flex w-1/2 min-w-[28rem] flex-col overflow-auto border-l border-neutral-800 bg-neutral-900/40"
+  const reqCT = headerValue(capture.req_headers, "content-type");
+  const respCT = headerValue(capture.resp_headers, "content-type");
+
+  return html`<${DetailPane}
+    title=${html`Capture <span class="text-neutral-500">#${capture.id}</span>`}
+    onClose=${onClose}
   >
-    <div class="flex items-center gap-2 border-b border-neutral-800 px-4 py-2">
-      <h2 class="text-sm font-semibold text-neutral-100">
-        Capture #${capture.id}
-      </h2>
-      <button
-        onClick=${onClose}
-        class="ml-auto text-neutral-500 hover:text-neutral-200"
-      >
-        ✕
-      </button>
-    </div>
-    <div class="flex-1 overflow-auto px-4 py-3 text-sm">
-      <div class="mb-3 flex items-center gap-2">
-        <${MethodBadge} method=${capture.method} />
-        <span class="font-mono text-neutral-300 break-all">${capture.url}</span>
-        <${StatusBadge} status=${capture.status} />
+    <${DetailBody}>
+      <div class="card p-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <${MethodBadge} method=${capture.method} />
+          <${StatusBadge} status=${capture.status} />
+          <span class="ml-auto text-xs text-neutral-500">${fmtTime(capture.at)}</span>
+        </div>
+        <p class="mt-2 font-mono text-xs break-all text-neutral-200">${capture.url}</p>
       </div>
-      <dl class="mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
-        <dt class="text-neutral-500">At</dt>
-        <dd class="font-mono text-neutral-300">${fmtTime(capture.at)}</dd>
-        <dt class="text-neutral-500">Request body</dt>
-        <dd class="font-mono text-neutral-300">
-          ${fmtBytes(capture.req_body_len)}
-        </dd>
-        <dt class="text-neutral-500">Response body</dt>
-        <dd class="font-mono text-neutral-300">
-          ${fmtBytes(capture.resp_body_len)}
-        </dd>
-      </dl>
-      <p class="rounded border border-neutral-800 bg-neutral-950 p-2 text-xs text-neutral-500">
-        Traffic captures are returned as summaries. The full request/response
-        editor (bodies + headers) needs a <code class="font-mono">GetCapture</code>
-        binding, which is not wired yet — see PLAN.md §6.2.
-      </p>
-    </div>
-  </aside>`;
+
+      <section>
+        <h3 class="section-label mb-1.5">Request headers</h3>
+        <${HeaderTable} headers=${capture.req_headers} />
+      </section>
+
+      <${BodySection}
+        title="Request body"
+        len=${fmtBytes(capture.req_body_len)}
+      >
+        <${CodeBlock} body=${capture.req_body} contentType=${reqCT} />
+      </>
+
+      <section>
+        <h3 class="section-label mb-1.5">Response headers</h3>
+        <${HeaderTable} headers=${capture.resp_headers} />
+      </section>
+
+      <${BodySection}
+        title="Response body"
+        len=${fmtBytes(capture.resp_body_len)}
+      >
+        <${CodeBlock} body=${capture.resp_body} contentType=${respCT} />
+      </>
+    </>
+  </>`;
 }

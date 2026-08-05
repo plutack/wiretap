@@ -1,19 +1,23 @@
 // Shared formatting helpers used across all components.
 
 /**
- * Return the Tailwind classes for a HTTP method badge.
+ * Return the chip classes for a HTTP method badge. Colors are tuned so every
+ * method is legible on the dark background (the previous palette left some
+ * badges barely visible).
  * @param {string} method
  * @returns {string}
  */
 export function methodBadgeClass(method) {
   const map = {
-    GET:    "bg-emerald-900/60 text-emerald-300",
-    POST:   "bg-sky-900/60 text-sky-300",
-    PUT:    "bg-amber-900/60 text-amber-300",
-    PATCH:  "bg-amber-900/60 text-amber-300",
-    DELETE: "bg-rose-900/60 text-rose-300",
+    GET:     "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25",
+    POST:    "bg-brand-500/15 text-brand-300 ring-1 ring-brand-500/25",
+    PUT:     "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25",
+    PATCH:   "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25",
+    DELETE:  "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/25",
+    HEAD:    "bg-neutral-500/15 text-neutral-300 ring-1 ring-neutral-500/25",
+    OPTIONS: "bg-neutral-500/15 text-neutral-300 ring-1 ring-neutral-500/25",
   };
-  return map[(method || "").toUpperCase()] || "bg-neutral-800 text-neutral-300";
+  return map[(method || "").toUpperCase()] || "bg-neutral-700/40 text-neutral-300 ring-1 ring-neutral-600/40";
 }
 
 /**
@@ -48,6 +52,67 @@ export function fmtTime(iso) {
  */
 export function fmtBytes(n) {
   if (n == null) return "";
-  if (n < 1024) return n + "b";
-  return (n / 1024).toFixed(1) + "kb";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+/**
+ * Attempt to pretty-print a body as JSON. Returns {text, isJSON}: when the body
+ * parses as JSON we return the 2-space-indented form; otherwise the original
+ * string is returned untouched so non-JSON payloads are shown verbatim.
+ * @param {string} body
+ * @param {string} [contentType] optional content-type hint
+ * @returns {{text: string, isJSON: boolean}}
+ */
+export function prettyBody(body, contentType) {
+  const raw = body || "";
+  if (!raw.trim()) return { text: raw, isJSON: false };
+  // Only try JSON when it looks like JSON or the content-type says so — avoids
+  // throwing on every plain-text body.
+  const looksJSON = /^[\s]*[[{]/.test(raw) || /json/i.test(contentType || "");
+  if (!looksJSON) return { text: raw, isJSON: false };
+  try {
+    return { text: JSON.stringify(JSON.parse(raw), null, 2), isJSON: true };
+  } catch {
+    return { text: raw, isJSON: false };
+  }
+}
+
+/**
+ * Escape HTML-special characters so a string is safe to inject as innerHTML.
+ * @param {string} s
+ * @returns {string}
+ */
+export function escapeHTML(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * Turn a pretty-printed JSON string into span-wrapped, syntax-highlighted HTML.
+ * Token classes (tok-key/str/num/bool/null/punct) are styled in input.css. The
+ * input MUST already be escaped-safe JSON (we generate it via JSON.stringify),
+ * but we escape again defensively.
+ * @param {string} json
+ * @returns {string} HTML string
+ */
+export function highlightJSON(json) {
+  const esc = escapeHTML(json);
+  return esc.replace(
+    /("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false)\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,
+    (match) => {
+      let cls = "tok-num";
+      if (/^"/.test(match)) {
+        cls = /:$/.test(match) ? "tok-key" : "tok-str";
+      } else if (/true|false/.test(match)) {
+        cls = "tok-bool";
+      } else if (/null/.test(match)) {
+        cls = "tok-null";
+      }
+      return `<span class="${cls}">${match}</span>`;
+    },
+  );
 }
