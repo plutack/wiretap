@@ -27,10 +27,25 @@ import (
 var version = "dev"
 
 func main() {
-	addr := flag.String("addr", ":8443", "listen address")
-	dbPath := flag.String("db", "relay.db", "path to the relay SQLite database")
+	addr := flag.String("addr", "", "listen address (default :8443, or WIRETAP_RELAY_ADDR)")
+	dbPath := flag.String("db", "", "path to the relay SQLite database (default relay.db, or WIRETAP_RELAY_DB)")
 	adminToken := flag.String("admin-token", "", "admin token for /register and /admin/* (required, or set WIRETAP_ADMIN_TOKEN)")
 	flag.Parse()
+
+	// Configuration resolves flag first, then env var, then default. The env
+	// vars are how container platforms (Coolify, Docker, Kubernetes) configure
+	// the relay without touching the command line.
+	resolve := func(flagValue, envVar, fallback string) string {
+		if flagValue != "" {
+			return flagValue
+		}
+		if v := os.Getenv(envVar); v != "" {
+			return v
+		}
+		return fallback
+	}
+	listenAddr := resolve(*addr, "WIRETAP_RELAY_ADDR", ":8443")
+	db := resolve(*dbPath, "WIRETAP_RELAY_DB", "relay.db")
 
 	// Resolve the admin token from the flag, falling back to the env var.
 	token := *adminToken
@@ -41,7 +56,7 @@ func main() {
 		log.Fatal("wiretap-relay: --admin-token (or WIRETAP_ADMIN_TOKEN env var) is required")
 	}
 
-	if err := run(*addr, *dbPath, token); err != nil {
+	if err := run(listenAddr, db, token); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -5,87 +5,79 @@ with a stable DNS name. It accepts webhook ingress and keeps each webhook in
 SQLite until the owning desktop client acknowledges it over the WebSocket
 tunnel.
 
-The relay serves plain HTTP. Put Caddy, nginx, or another TLS reverse proxy in
-front of it so public traffic uses HTTPS and the desktop tunnel uses WSS.
+The relay is a single static Go binary that serves plain HTTP. TLS is
+terminated by a reverse proxy in front of it (Coolify's built-in Caddy if you
+use Coolify, or your own Caddy/nginx) so public traffic uses HTTPS and the
+desktop tunnel uses WSS.
 
-## 1. Build and install
+Configuration is environment-driven, which is what container platforms expect:
 
-On the server, from a wiretap checkout:
+| Variable | Default | Purpose |
+|---|---|---|
+| `WIRETAP_ADMIN_TOKEN` | — (required) | Admin token for `/register` and `/admin/*` |
+| `WIRETAP_RELAY_ADDR` | `:8443` | Listen address |
+| `WIRETAP_RELAY_DB` | `relay.db` | SQLite database path |
 
-```sh
-go build -trimpath -ldflags "-s -w" -o wiretap-relay ./cmd/wiretap-relay
-sudo install -m 0755 wiretap-relay /usr/local/bin/wiretap-relay
-sudo useradd --system --home /var/lib/wiretap --shell /usr/sbin/nologin wiretap
-sudo install -d -o wiretap -g wiretap -m 0750 /var/lib/wiretap
-```
+The same knobs exist as `-addr`, `-db`, and `-admin-token` flags; flags win
+over env vars. An unauthenticated `GET /health` returns the running version
+and is meant for health checks.
 
-Generate a long random admin token. This token can register clients, inspect
-stored webhooks, and change project ownership, so do not put it in shell
-history, source control, a URL, or the desktop credentials file.
+## 1. Deploy on Coolify
 
-```sh
-openssl rand -hex 32
-```
+Coolify already runs Caddy as its proxy, so TLS certificates and WebSocket
+proxying are handled for you — including the `/tunnel` WebSocket the desktop
+clients use.
 
-Store the generated value in `/etc/wiretap-relay.env`:
+1. **Create the app.** In your Coolify project, add a new resource → *Dockerfile*
+   from a Git repository, pointing at this repo. Coolify builds the repo's
+   root `Dockerfile` (multi-stage, distroless, non-root).
 
-```text
-WIRETAP_ADMIN_TOKEN=replace-with-the-generated-token
-```
+2. **Configure the service:**
+   - **Port:** expose the container's `8443` and mark it as the health-check
+     port (the image has no explicit healthcheck; point Coolify's at
+     `GET /health`, or leave it off).
+   - **Environment variable:** add `WIRETAP_ADMIN_TOKEN` as a *secret*. This
+     token can register clients, inspect stored webhooks, and change project
+     ownership — generate it with `openssl rand -hex 32` and never put it in
+     source control or a URL.
+   - **Persistent storage:** add a volume mounted at `/data`. The image stores
+     its SQLite database at `/data/relay.db` by default. Without a volume the
+     database is lost on every redeploy.
 
-Then restrict the file:
+3. **Attach a domain.** Give the service a FQDN (e.g.
+   `relay.example.com`). Coolify's Caddy obtains and renews the certificate and
+   proxies WebSockets without extra configuration.
 
-```sh
-sudo chown root:root /etc/wiretap-relay.env
-sudo chmod 0600 /etc/wiretap-relay.env
-```
+4. **Verify:**
 
-## 2. Run with systemd
+   ```sh
+   curl https://relay.example.com/health
+   ```
 
-Create `/etc/systemd/system/wiretap-relay.service`:
+Desktop clients connect to `wss://relay.example.com/tunnel` (see
+[Register a desktop](#3-register-a-desktop) below).
 
-```ini
-[Unit]
-Description=wiretap webhook relay
-After=network-online.target
-Wants=network-online.target
+### Upgrades
 
-[Service]
-Type=simple
-User=wiretap
-Group=wiretap
-WorkingDirectory=/var/lib/wiretap
-EnvironmentFile=/etc/wiretap-relay.env
-ExecStart=/usr/local/bin/wiretap-relay -addr 127.0.0.1:8443 -db /var/lib/wiretap/relay.db
-Restart=on-failure
-RestartSec=3
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectHome=true
-ProtectSystem=strict
-ReadWritePaths=/var/lib/wiretap
+Redeploy from the new release (Coolify rebuilds the image). Database
+migrations run automatically at startup and are idempotent. Back up the
+`/data` volume first — it contains client credentials, project ownership,
+delivery cursors, and webhook payloads, which may hold sensitive customer
+data.
 
-[Install]
-WantedBy=multi-user.target
-```
+If the relay database is lost, existing desktop `client_token` values no
+longer exist on the server: register the desktop again and replace its saved
+credentials. If the admin token is exposed, rotate the secret and redeploy;
+existing client tunnel tokens remain valid.
 
-Enable it and confirm the private listener responds:
+## 2. Run behind your own reverse proxy
 
-```sh
-sudo systemctl daemon-reload
-sudo systemctl enable --now wiretap-relay
-curl http://127.0.0.1:8443/health
-sudo journalctl -u wiretap-relay -n 50 --no-pager
-```
+Any host that can run a static binary or a Docker container works. The only
+requirements: TLS termination, preserved request paths, WebSocket upgrades on
+`/tunnel`, a request-body limit of at least 10 MiB, and no buffering of tunnel
+traffic.
 
-Back up `/var/lib/wiretap/relay.db`. It contains client credentials, project
-ownership, delivery cursors, and webhook payloads. Webhook bodies may contain
-sensitive customer data; apply an appropriate retention and backup policy.
-
-## 3. Terminate TLS with Caddy
-
-Point a DNS `A`/`AAAA` record such as `relay.example.com` at the server. A
-minimal Caddyfile is:
+A minimal Caddyfile:
 
 ```caddyfile
 relay.example.com {
@@ -93,21 +85,20 @@ relay.example.com {
 }
 ```
 
-Caddy obtains and renews the certificate and proxies WebSocket upgrades without
-extra configuration. Only ports 80 and 443 need to be publicly reachable; keep
-8443 bound to `127.0.0.1`.
-
-After reloading Caddy, verify the public endpoint:
+Or with Docker directly:
 
 ```sh
-curl https://relay.example.com/health
+docker build -t wiretap-relay .
+docker run -d --name wiretap-relay \
+  -e WIRETAP_ADMIN_TOKEN=$(openssl rand -hex 32) \
+  -p 127.0.0.1:8443:8443 \
+  -v wiretap-relay-data:/data \
+  wiretap-relay
 ```
 
-A production reverse proxy should also set a request-body limit of at least
-10 MiB, allow long-lived WebSocket connections on `/tunnel`, preserve the
-request path, and avoid buffering tunnel traffic.
+Keep the listening port bound to `localhost` and let the proxy own 80/443.
 
-## 4. Register a desktop
+## 3. Register a desktop
 
 On the desktop, initialize the config and register one or more project paths:
 
@@ -140,7 +131,7 @@ Start `wiretap gui` or `wiretap tui`. The status should show the connected
 project paths. The desktop always dials outward, so no inbound desktop port or
 third-party tunneling service is required.
 
-## 5. Send and replay webhooks
+## 4. Send and replay webhooks
 
 A sender posts to the claimed project path. Any path after the project segment
 is preserved:
@@ -163,20 +154,3 @@ wiretap relay --url https://relay.example.com --admin-token TOKEN clients list
 wiretap relay --url https://relay.example.com --admin-token TOKEN webhooks list project-a
 wiretap relay --url https://relay.example.com --admin-token TOKEN webhooks replay project-a 1
 ```
-
-## 6. Upgrades and recovery
-
-1. Back up `relay.db`.
-2. Replace `/usr/local/bin/wiretap-relay` with the new binary.
-3. Run `sudo systemctl restart wiretap-relay`.
-4. Check `/health` and the service journal.
-
-Database migrations run automatically at startup and are idempotent. Keep the
-old binary and database backup until the new process has started and a desktop
-client has reconnected.
-
-If the relay database is lost, existing desktop `client_token` values no longer
-exist on the server. Register the desktop again and replace its saved
-credentials. If the admin token is exposed, rotate the value in
-`/etc/wiretap-relay.env` and restart the service; existing client tunnel tokens
-remain valid.

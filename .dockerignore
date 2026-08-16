@@ -1,0 +1,12 @@
+.git
+.github
+.air.toml
+.air.cli.toml
+node_modules
+ui/vendor
+*.db
+wiretap
+wiretap-relay
+build/
+dist/
+docs/
