@@ -1,20 +1,23 @@
 //go:build gui
 
-// This file is compiled only with the `gui` build tag. It wires the Wails v2
-// runtime to the already-tested composition root (internal/app) via the binding
-// layer (internal/gui) and launches the desktop window as the `wiretap gui`
-// command.
+// This file is compiled only with the `gui` build tag. It wires the Wails v3
+// runtime to the already-tested composition root (internal/app) via the
+// binding layer (internal/gui) and launches the desktop window as the
+// `wiretap gui` command.
 //
-// A working GUI build needs three tags (the Makefile `gui` target sets them):
+// A working GUI build needs the `gui` tag plus a webkit selection tag (the
+// Makefile `gui` target sets them):
 //
-//   go build -tags 'gui,production,webkit2_41' ./cmd/wiretap
+//   go build -tags 'gui,gtk3' ./cmd/wiretap
 //   ./wiretap gui
 //
-//   - gui         — our gate (keeps the default build Wails/CGO/webkit-free)
-//   - production   — Wails' real-app gate; without it Wails' own stub returns
-//                    "will not build without the correct build tags" at runtime
-//   - webkit2_41   — Wails' webkit API selector (4.1 on most current Linux
-//                    distros; webkit2_40 on older ones).
+//   - gui   — our gate (keeps the default build Wails/CGO/webkit-free)
+//   - gtk3  — Wails v3's Linux webkit selector: gtk3 targets
+//             webkit2gtk-4.1 (GTK3, present on most current distros);
+//             the default targets webkitgtk-6.0 (GTK4)
+//   - production — Wails' release gate; add it for release-style builds
+//             (the Makefile `gui` target does). Without it the app runs in
+//             dev mode with devtools enabled.
 //
 // Everything testable lives in internal/gui (no Wails import, no CGO/webkit
 // dependency); this file is intentionally thin launch glue.
@@ -27,9 +30,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/linux"
+	"github.com/wailsapp/wails/v3/pkg/application"
 
 	guiassets "github.com/plutack/wiretap"
 	"github.com/plutack/wiretap/internal/app"
@@ -79,25 +80,32 @@ func runGUI(parent context.Context, version string) error {
 
 	bindings := gui.New(a, gui.WithVersion(version))
 
-	err := wails.Run(&options.App{
-		Title: "wiretap",
-		// Wails finds ui/index.html inside the embed.FS and strips the "ui/"
-		// prefix automatically (see guiassets.go).
-		Assets:                   guiassets.Assets,
-		Width:                    1024,
-		Height:                   720,
-		MinWidth:                 720,
-		MinHeight:                480,
-		EnableDefaultContextMenu: true,
-		Bind:                     []any{bindings},
-		OnShutdown: func(ctx context.Context) {
+	wailsApp := application.New(application.Options{
+		Name: "wiretap",
+		Services: []application.Service{
+			application.NewService(bindings),
+		},
+		Assets: application.AssetOptions{
+			Handler: application.BundledAssetFileServer(guiassets.Assets),
+		},
+		OnShutdown: func() {
 			_ = a.Close()
 		},
-		Linux: &linux.Options{
-			WebviewGpuPolicy: linux.WebviewGpuPolicyOnDemand,
+	})
+
+	wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+		URL:       "/",
+		Title:     "wiretap",
+		Width:     1024,
+		Height:    720,
+		MinWidth:  720,
+		MinHeight: 480,
+		Linux: application.LinuxWindow{
+			WebviewGpuPolicy: application.WebviewGpuPolicyOnDemand,
 		},
 	})
-	if err != nil {
+
+	if err := wailsApp.Run(); err != nil {
 		return fmt.Errorf("gui: %w", err)
 	}
 	return nil

@@ -18,10 +18,10 @@ tmp_dir = "tmp"
 [build]
   args_bin = []
   bin = "./tmp/wiretap-gui"
-  # Build with the three tags `make gui` uses: gui (our gate), production
-  # (Wails' real-app gate), webkit2_41 (webkit API selector — use webkit2_40
-  # on systems with webkit2gtk-4.0).
-  cmd = "go build -tags 'gui,production,webkit2_41' -o ./tmp/wiretap-gui ./cmd/wiretap"
+  # Build with the tags `make gui` uses: gui (our gate), production (Wails
+  # release mode), gtk3 (webkit2gtk-4.1 selector — drop it on systems with
+  # webkitgtk-6.0 / GTK4).
+  cmd = "go build -tags 'gui,production,gtk3' -o ./tmp/wiretap-gui ./cmd/wiretap"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "node_modules", "build", "docs", ".git"]
   exclude_file = []

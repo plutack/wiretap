@@ -1,7 +1,8 @@
 // Thin async wrappers over the Wails-bound methods. Every binding returns a
 // Promise resolving to the JSON view from internal/gui. Centralizing the
-// imports here keeps components decoupled from the generated wailsjs path and
-// gives one place to add error shaping later.
+// imports here keeps components decoupled from the generated bindings path
+// (ui/bindings, produced by `wails3 generate bindings -b -noevents -names`)
+// and gives one place to add error shaping later.
 import {
   DeleteScript,
   GetScript,
@@ -15,7 +16,7 @@ import {
   SetScriptEnabled,
   Status,
   TestScript,
-} from "../wailsjs/go/gui/Bindings.js";
+} from "../bindings/github.com/plutack/wiretap/internal/gui/bindings.js";
 
 export const api = {
   listWebhooks: (project = "") => ListWebhooks(project),

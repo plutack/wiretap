@@ -88,7 +88,7 @@ func TestRoot_VersionFlag(t *testing.T) {
 // TestGUICmd_StubErrorsWithoutTag exercises the !gui stub: the command exists
 // in the tree (so help lists it) but running it errors with rebuild instructions.
 // The real launcher lives in gui.go (build-tagged `gui`); a working GUI build
-// additionally needs Wails' `production` and `webkit2_41` tags (see Makefile).
+// additionally needs Wails v3's `gtk3` webkit tag (see Makefile).
 func TestGUICmd_StubErrorsWithoutTag(t *testing.T) {
 	t.Parallel()
 	_, _, err := runCmd(t, "dev", "gui")
@@ -96,12 +96,12 @@ func TestGUICmd_StubErrorsWithoutTag(t *testing.T) {
 		t.Fatal("gui (no -tags gui): expected error, got nil")
 	}
 	// The stub message points at `make gui` and the full `go build -tags` form,
-	// including the Wails tags (production + webkit2_41) the user actually needs.
+	// including the webkit tag (gtk3) the user actually needs.
 	if !strings.Contains(err.Error(), "make gui") {
 		t.Errorf("gui stub error = %q, want it to mention `make gui`", err.Error())
 	}
-	if !strings.Contains(err.Error(), "production") || !strings.Contains(err.Error(), "webkit2_41") {
-		t.Errorf("gui stub error = %q, want it to mention production + webkit2_41", err.Error())
+	if !strings.Contains(err.Error(), "gtk3") {
+		t.Errorf("gui stub error = %q, want it to mention gtk3", err.Error())
 	}
 }
 

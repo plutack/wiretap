@@ -5,12 +5,12 @@
 // with build instructions instead of pulling the Wails/CGO/webkit toolchain
 // into every build. The real launcher is gui.go, compiled under -tags gui.
 //
-// The GUI build needs three tags (the Makefile `gui` target sets them):
-//   - gui          — our gate (keeps the default build Wails-free)
-//   - production   — Wails' real-app gate (without it, Wails' own stub returns
-//                    "will not build without the correct build tags" at runtime)
-//   - webkit2_41   — Wails' webkit API selector (4.1 on most current Linux
-//                    distros; webkit2_40 on older ones). See the Makefile.
+// The GUI build needs the `gui` tag plus a webkit selection tag (the Makefile
+// `gui` target sets them):
+//   - gui   — our gate (keeps the default build Wails-free)
+//   - gtk3  — Wails v3's Linux webkit selector (webkit2gtk-4.1 / GTK3, present
+//             on most current distros). The default targets webkitgtk-6.0
+//             (GTK4) instead. Add `production` for release-style builds.
 
 package cli
 
@@ -30,12 +30,12 @@ func newGUICmd(version string) *cobra.Command {
 			"wiretap binary with the GUI build tags to enable it.\n\n" +
 			"  make gui\n  ./wiretap gui\n\n" +
 			"or, without make:\n" +
-			"  go build -tags 'gui,production,webkit2_41' ./cmd/wiretap\n  ./wiretap gui\n\n" +
-			"(use webkit2_40 instead of webkit2_41 on systems with webkit2gtk-4.0).",
+			"  go build -tags 'gui,gtk3' ./cmd/wiretap\n  ./wiretap gui\n\n" +
+			"(omit gtk3 on systems that provide webkitgtk-6.0 / GTK4).",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(*cobra.Command, []string) error {
-			return errors.New("gui: not enabled in this build; rebuild with `make gui` or `go build -tags 'gui,production,webkit2_41' ./cmd/wiretap` (see `wiretap gui --help`)")
+			return errors.New("gui: not enabled in this build; rebuild with `make gui` or `go build -tags 'gui,gtk3' ./cmd/wiretap` (see `wiretap gui --help`)")
 		},
 	}
 }
