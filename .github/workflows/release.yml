@@ -133,7 +133,10 @@ jobs:
           useradd -m builder
           chown -R builder .
           su builder -c 'makepkg -f --noconfirm'
-          mv "wiretap-${VERSION}-x86_64.pkg.tar.zst" "$GITHUB_WORKSPACE/"
+          # makepkg's name includes the pkgrel (wiretap-<ver>-<rel>-x86_64...);
+          # match it with a glob and rename to the release-wide convention.
+          mv ./wiretap-*-x86_64.pkg.tar.zst \
+             "$GITHUB_WORKSPACE/wiretap-${VERSION}-x86_64.pkg.tar.zst"
 
       - name: Attach to release
         env:
