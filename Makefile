@@ -1,29 +1,32 @@
 # wiretap Makefile. Default target builds the CLI/TUI binary (no GUI deps).
-# `make gui` builds the GUI-enabled binary, auto-selecting the webkit2gtk tag
-# for this system (4.1 on most current distros, 4.0 on older ones).
+# `make gui` builds the GUI-enabled binary, auto-selecting the Wails v3 webkit
+# tag for this system (GTK3/webkit2gtk-4.1 on most current distros, GTK4/
+# webkitgtk-6.0 where available).
 
 BINARY   := wiretap
 GO       := go
 GOFLAGS  := -race -shuffle=on
 
-# Auto-detect the Wails webkit build tag for this system. Wails v2 gates its
-# Linux frontend behind webkit2_36 / webkit2_40 / webkit2_41; without one it
-# falls back to the legacy webkit2gtk-4.0 pkg-config path (which is often not
-# installed when 4.1 is). Probe in 4.1 → 4.0 order.
+# Auto-detect the Wails v3 webkit build tag for this system. v3 targets
+# webkitgtk-6.0 (GTK4) by default; the `gtk3` tag switches to
+# webkit2gtk-4.1, which is what most current distros actually ship.
 WEBKIT_TAG := $(shell \
-	if pkg-config --exists webkit2gtk-4.1; then echo webkit2_41; \
-	elif pkg-config --exists webkit2gtk-4.0; then echo webkit2_40; \
-	else echo webkit2_41; fi)
+	if pkg-config --exists webkitgtk-6.0; then echo ""; \
+	elif pkg-config --exists webkit2gtk-4.1; then echo ",gtk3"; \
+	else echo ",gtk3"; fi)
 
-# Tags for a production GUI build: gui (our gate) + production (Wails real-app
-# gate, vs. its stub) + the webkit selector.
-GUI_TAGS := gui,production,$(WEBKIT_TAG)
+# Tags for a production GUI build: gui (our gate) + production (Wails release
+# mode, vs. devtools-enabled dev mode) + the webkit selector.
+GUI_TAGS := gui,production$(WEBKIT_TAG)
+
+# Regenerate the frontend bindings after changing internal/gui.
+BINDINGS := wails3 generate bindings -b -noevents -names -d ui/bindings -f '-tags gui'
 
 # air config: GUI dev by default (.air.toml), CLI dev via .air.cli.toml.
 AIR := air
 AIR_CLI := air -c .air.cli.toml
 
-.PHONY: all build gui gui-debug test test-gui vet clean fmt tidy watch watch-cli
+.PHONY: all build gui gui-debug bindings test test-gui vet clean fmt tidy watch watch-cli
 
 all: build
 
@@ -37,10 +40,15 @@ gui:
 	$(GO) build -tags '$(GUI_TAGS)' -o $(BINARY) ./cmd/wiretap
 
 # GUI build with Wails devtools enabled (inspector, console) during development.
-gui-debug: GUI_TAGS := gui,production,debug,$(WEBKIT_TAG)
+gui-debug: GUI_TAGS := gui,debug$(WEBKIT_TAG)
 gui-debug:
 	@echo "building with tags: $(GUI_TAGS)"
 	$(GO) build -tags '$(GUI_TAGS)' -o $(BINARY) ./cmd/wiretap
+
+# Regenerate ui/bindings (requires the wails3 CLI; see gui_stub.go for how to
+# build it with the gtk3 tag).
+bindings:
+	$(BINDINGS) ./cmd/wiretap ./internal/gui
 
 # Full test suite (default build; the GUI launch glue is covered by the build).
 test:
