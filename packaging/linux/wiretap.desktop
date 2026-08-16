@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=wiretap
+GenericName=API debugging proxy
+Comment=Capture HTTP traffic and inbound webhooks
+Exec=wiretap gui
+Terminal=false
+Categories=Development;Network;WebDevelopment;
+StartupWMClass=wiretap
