@@ -31,6 +31,8 @@ wiretap intercept start
 
 wiretap starts a local recording proxy and opens a child shell with the required proxy and CA environment. Run `curl`, `git`, Node, or another HTTP-aware command inside that shell. Exit the child shell to stop the interception session.
 
+See the [interception guide](docs/INTERCEPTION.md) for what the generated shell script does, how TLS/CA trust is handled without touching your system trust store, and the PATH shims for git/curl/node.
+
 Useful alternatives:
 
 ```sh
@@ -89,7 +91,7 @@ Create scripts from the GUI's **Transforms** section and attach one of these tri
 | `on_replay` | Before a stored webhook is replayed locally |
 | `on_webhook` | Before a relay webhook is stored locally |
 
-Scripts execute locally and do not require Node.js. See the [scripting guide](docs/SCRIPTING.md) for the API, helpers, examples, and execution behavior.
+Scripts execute locally and do not require Node.js. See the [scripting guide](docs/SCRIPTING.md) for the API, helpers, examples, and execution behavior — including an [end-to-end walkthrough](docs/SCRIPTING.md#end-to-end-walkthrough) from capturing a request to rewriting and rejecting it.
 
 ## Configuration
 
