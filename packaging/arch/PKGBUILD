@@ -1,0 +1,40 @@
+# wiretap's own Arch package. The release workflow builds the official
+# .pkg.tar.zst from this file (it pins pkgver to the release tag); you can
+# also build it locally:
+#
+#   cd packaging/arch && makepkg -f
+#
+# The source is the git tag itself, so no checksum bookkeeping is needed
+# (makepkg verifies the commit the tag points at).
+
+pkgname=wiretap
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Capture HTTP traffic and inbound webhooks on your machine"
+arch=('x86_64')
+url="https://github.com/plutack/wiretap"
+# TODO: pick an actual license and add a LICENSE file to the repo, then
+# update this field to match.
+license=('LicenseRef-Unknown')
+depends=('webkit2gtk-4.1' 'gtk3')
+makedepends=('go' 'git')
+# The binary is stripped at link time via -ldflags "-s -w"; no debug package.
+options=('!strip' '!debug')
+source=("git+https://github.com/plutack/wiretap.git#tag=v$pkgver")
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir/$pkgname"
+  export CGO_ENABLED=1
+  go build -trimpath -tags 'gui,production,gtk3' \
+    -ldflags "-s -w -X main.version=$pkgver" \
+    -o wiretap ./cmd/wiretap
+}
+
+package() {
+  cd "$srcdir/$pkgname"
+  install -Dm755 wiretap "$pkgdir/usr/bin/wiretap"
+  install -Dm644 packaging/linux/wiretap.desktop \
+    "$pkgdir/usr/share/applications/wiretap.desktop"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/wiretap/README.md"
+}

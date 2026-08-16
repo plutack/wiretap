@@ -1,0 +1,183 @@
+# Release pipeline. Runs only when a GitHub release is published — never on
+# pushes or PRs. Produces:
+#
+#   - Linux GUI binaries (amd64 + arm64, tar.gz)
+#   - Windows GUI binary (zip) + NSIS installer (exe), cross-compiled
+#   - Arch Linux package (.pkg.tar.zst, built from the release source archive)
+#   - wiretap-relay container image pushed to GHCR
+#   - SHA256SUMS covering all of the above
+#
+# macOS is intentionally not built yet (needs a macOS runner; add a job when
+# signing/notarization decisions are made).
+#
+# The Linux/Windows/Arch artifacts all ship the same all-in-one binary:
+# `wiretap` includes the CLI, TUI, and `wiretap gui` dashboard.
+
+name: release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  GO_VERSION: '1.26'
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install GUI build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
+
+      - name: Build
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          CGO_ENABLED=1 go build -trimpath -tags 'gui,production,gtk3' \
+            -ldflags "-s -w -X main.version=$VERSION" \
+            -o dist/wiretap ./cmd/wiretap
+          cp README.md dist/
+          cp packaging/linux/wiretap.desktop dist/
+          tar -czf "wiretap_${VERSION}_linux_${{ matrix.arch }}.tar.gz" \
+            -C dist wiretap README.md wiretap.desktop
+
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release upload "$GITHUB_REF_NAME" \
+            "wiretap_${VERSION}_linux_${{ matrix.arch }}.tar.gz" --clobber
+
+  windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      # Wails v3 on Windows is CGO-free (webview2 via go-webview2 syscalls),
+      # so the GUI binary cross-compiles from Linux directly.
+      - name: Build wiretap.exe
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p build
+          CGO_ENABLED=0 GOOS=windows go build -trimpath -tags 'gui,production' \
+            -ldflags "-s -w -X main.version=$VERSION" \
+            -o build/wiretap.exe ./cmd/wiretap
+          (cd build && zip "../wiretap_${VERSION}_windows_x86_64.zip" wiretap.exe)
+
+      - name: Build NSIS installer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Microsoft's stable WebView2 evergreen bootstrapper permalink; the
+          # installer runs it only when the runtime is missing on the target.
+          curl -fsSL -o build/MicrosoftEdgeWebview2Setup.exe \
+            "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+          makensis -V2 -DVERSION="$VERSION" packaging/windows/installer.nsi
+          mv "build/wiretap-${VERSION}-installer.exe" \
+             "wiretap_${VERSION}_windows_x86_64-installer.exe"
+
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release upload "$GITHUB_REF_NAME" \
+            "wiretap_${VERSION}_windows_x86_64.zip" \
+            "wiretap_${VERSION}_windows_x86_64-installer.exe" --clobber
+
+  arch:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base
+    steps:
+      - name: Install build dependencies
+        run: pacman -Syu --noconfirm base-devel git go gtk3 webkit2gtk-4.1 github-cli
+
+      - uses: actions/checkout@v4
+
+      # Build the official Arch package from packaging/arch/PKGBUILD; the
+      # source is the release tag itself (makepkg clones and verifies it).
+      - name: Build package
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p /tmp/pkgbuild && cd /tmp/pkgbuild
+          cp "$GITHUB_WORKSPACE/packaging/arch/PKGBUILD" .
+          sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
+          useradd -m builder
+          chown -R builder .
+          su builder -c 'makepkg -f --noconfirm'
+          mv "wiretap-${VERSION}-x86_64.pkg.tar.zst" "$GITHUB_WORKSPACE/"
+
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release upload "$GITHUB_REF_NAME" \
+            "wiretap-${VERSION}-x86_64.pkg.tar.zst" --clobber
+
+  relay-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image tags
+        run: |
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/wiretap-relay" >> "$GITHUB_ENV"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: |
+            VERSION=${{ env.VERSION }}
+          tags: |
+            ${{ env.IMAGE }}:${{ env.VERSION }}
+            ${{ env.IMAGE }}:latest
+
+  checksums:
+    needs: [linux, windows, arch]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate and attach SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh release download "$GITHUB_REF_NAME" -D dist
+          (cd dist && sha256sum ./* > ../SHA256SUMS)
+          gh release upload "$GITHUB_REF_NAME" SHA256SUMS --clobber

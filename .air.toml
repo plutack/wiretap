@@ -18,10 +18,11 @@ tmp_dir = "tmp"
 [build]
   args_bin = []
   bin = "./tmp/wiretap-gui"
-  # Build with the tags `make gui` uses: gui (our gate), production (Wails
-  # release mode), gtk3 (webkit2gtk-4.1 selector — drop it on systems with
-  # webkitgtk-6.0 / GTK4).
-  cmd = "go build -tags 'gui,production,gtk3' -o ./tmp/wiretap-gui ./cmd/wiretap"
+  # Build with the tags `make gui` uses on this machine: gui (our gate) +
+  # production (Wails release mode). No webkit tag = Wails v3's GTK4 path
+  # (webkitgtk-6.0); add ,gtk3 to pin webkit2gtk-4.1 instead. `make gui`
+  # auto-detects, but air needs a static command — this machine has both.
+  cmd = "go build -tags 'gui,production' -o ./tmp/wiretap-gui ./cmd/wiretap"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "node_modules", "build", "docs", ".git"]
   exclude_file = []
