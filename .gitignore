@@ -21,6 +21,11 @@ build-errors.log
 # are committed so `go build -tags gui` works without a separate frontend
 # build step or the wails CLI. Wails build output dir:
 /build/
+# AppImage build staging. Recreated by `make appimage`; never committed.
+/AppDir/
+# Local packaging tooling that the Makefile fetches on demand
+# (appimagetool, etc.). Safe to delete and re-fetch.
+/tools/
 # If a node_modules ever lands under ui/ (e.g. for a richer frontend), ignore it:
 /ui/node_modules/
 

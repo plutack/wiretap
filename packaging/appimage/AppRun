@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -e
+
+if [ -n "${APPDIR:-}" ] && [ -d "$APPDIR" ]; then
+	HERE="$APPDIR"
+else
+	HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+fi
+
+exec "$HERE/usr/bin/wiretap" "$@"

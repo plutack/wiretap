@@ -2,6 +2,7 @@
 # pushes or PRs. Produces:
 #
 #   - Linux GUI binaries (amd64 + arm64, tar.gz)
+#   - Linux GUI AppImages (amd64 + arm64, single-file)
 #   - Windows GUI binary (zip) + NSIS installer (exe), cross-compiled
 #   - Arch Linux package (.pkg.tar.zst, built from the release source archive)
 #   - wiretap-relay container image pushed to GHCR
@@ -10,8 +11,8 @@
 # macOS is intentionally not built yet (needs a macOS runner; add a job when
 # signing/notarization decisions are made).
 #
-# The Linux/Windows/Arch artifacts all ship the same all-in-one binary:
-# `wiretap` includes the CLI, TUI, and `wiretap gui` dashboard.
+# The Linux/Windows/Arch/AppImage artifacts all ship the same all-in-one
+# binary: `wiretap` includes the CLI, TUI, and `wiretap gui` dashboard.
 
 name: release
 
@@ -68,6 +69,72 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           gh release upload "$GITHUB_REF_NAME" \
             "wiretap_${VERSION}_linux_${{ matrix.arch }}.tar.gz" --clobber
+
+  appimage:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            appimage_arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-bin libfuse2
+
+      - name: Build AppImage
+        env:
+          APPIMAGE_ARCH: ${{ matrix.appimage_arch }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p build tools
+          CGO_ENABLED=1 go build -trimpath -tags 'gui,production,gtk3' \
+            -ldflags "-s -w -X main.version=$VERSION" \
+            -o build/wiretap ./cmd/wiretap
+          case "${APPIMAGE_ARCH:-x86_64}" in
+            aarch64) TOOL='appimagetool-aarch64.AppImage' ;;
+            *)       TOOL='appimagetool-x86_64.AppImage' ;;
+          esac
+          curl -fsSL -o "tools/appimagetool" \
+            "https://github.com/AppImage/AppImageKit/releases/download/continuous/${TOOL}"
+          chmod +x tools/appimagetool
+
+          rm -rf AppDir
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications \
+                   AppDir/usr/share/icons/hicolor/256x256/apps \
+                   AppDir/usr/share/icons/hicolor/512x512/apps
+          install -m 0755 build/wiretap              AppDir/usr/bin/wiretap
+          install -m 0644 packaging/linux/wiretap.desktop AppDir/wiretap.desktop
+          install -m 0644 packaging/linux/wiretap.desktop AppDir/usr/share/applications/wiretap.desktop
+          install -m 0755 packaging/appimage/AppRun  AppDir/AppRun
+          rsvg-convert -w 256 -h 256 packaging/appimage/wiretap.svg -o AppDir/usr/share/icons/hicolor/256x256/apps/wiretap.png
+          cp AppDir/usr/share/icons/hicolor/256x256/apps/wiretap.png AppDir/wiretap.png
+          cp AppDir/usr/share/icons/hicolor/256x256/apps/wiretap.png AppDir/.DirIcon
+          rsvg-convert -w 512 -h 512 packaging/appimage/wiretap.svg -o AppDir/usr/share/icons/hicolor/512x512/apps/wiretap.png || true
+
+          mkdir -p dist
+          APPIMAGE_EXTRACT_AND_RUN=1 ./tools/appimagetool --no-appstream \
+            AppDir "dist/wiretap_${VERSION}_${APPIMAGE_ARCH:-x86_64}.AppImage"
+
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPIMAGE_ARCH: ${{ matrix.appimage_arch }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release upload "$GITHUB_REF_NAME" \
+            "wiretap_${VERSION}_${APPIMAGE_ARCH:-x86_64}.AppImage" --clobber
 
   windows:
     runs-on: ubuntu-latest
@@ -173,7 +240,7 @@ jobs:
             ${{ env.IMAGE }}:latest
 
   checksums:
-    needs: [linux, windows, arch]
+    needs: [linux, appimage, windows, arch]
     runs-on: ubuntu-latest
     steps:
       - name: Generate and attach SHA256SUMS

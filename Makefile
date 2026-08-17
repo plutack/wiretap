@@ -26,7 +26,9 @@ BINDINGS := wails3 generate bindings -b -noevents -names -d ui/bindings -f '-tag
 AIR := air
 AIR_CLI := air -c .air.cli.toml
 
-.PHONY: all build gui gui-debug bindings test test-gui vet clean fmt tidy watch watch-cli
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+
+.PHONY: all build gui gui-debug bindings test test-gui vet clean fmt tidy watch watch-cli arch-pkg appimage dist
 
 all: build
 
@@ -36,14 +38,18 @@ build:
 
 # GUI-enabled binary. `./wiretap gui` opens the dashboard.
 gui:
-	@echo "building with tags: $(GUI_TAGS)"
-	$(GO) build -tags '$(GUI_TAGS)' -o $(BINARY) ./cmd/wiretap
+	@echo "building with tags: $(GUI_TAGS) version=$(VERSION)"
+	$(GO) build -trimpath -tags '$(GUI_TAGS)' \
+		-ldflags "-s -w -X main.version=$(VERSION)" \
+		-o $(BINARY) ./cmd/wiretap
 
 # GUI build with Wails devtools enabled (inspector, console) during development.
 gui-debug: GUI_TAGS := gui,debug$(WEBKIT_TAG)
 gui-debug:
-	@echo "building with tags: $(GUI_TAGS)"
-	$(GO) build -tags '$(GUI_TAGS)' -o $(BINARY) ./cmd/wiretap
+	@echo "building with tags: $(GUI_TAGS) version=$(VERSION)"
+	$(GO) build -trimpath -tags '$(GUI_TAGS)' \
+		-ldflags "-s -w -X main.version=$(VERSION)" \
+		-o $(BINARY) ./cmd/wiretap
 
 # Regenerate ui/bindings (requires the wails3 CLI; see gui_stub.go for how to
 # build it with the gtk3 tag).
@@ -80,3 +86,62 @@ watch-cli:
 
 clean:
 	rm -f $(BINARY)
+	rm -rf dist/ AppDir/
+
+arch-pkg:
+	@command -v makepkg >/dev/null 2>&1 || { \
+			echo "makepkg not found; install pacman-contrib (or pacman on Arch) first" >&2; exit 1; }
+	@if [ -z "$(VERSION)" ] || [ "$(VERSION)" = "dev" ]; then \
+			echo "VERSION is unset or 'dev'; tag the commit (git tag vX.Y.Z) or set VERSION=vX.Y.Z" >&2; exit 1; \
+	fi
+	@ver=$(VERSION); ver=$${ver#v}; \
+	basedir=$$(pwd); \
+	tmp=$$(mktemp -d); cp packaging/arch/PKGBUILD "$$tmp/"; \
+			sed -i "s/^pkgver=.*/pkgver=$$ver/" "$$tmp/PKGBUILD"; \
+			chmod 644 "$$tmp/PKGBUILD"; \
+			( cd "$$tmp" && makepkg -f --noconfirm ); \
+			pkg="$$tmp/wiretap-*-x86_64.pkg.tar.zst"; \
+			pkgfile=$$(ls -1 $$pkg 2>/dev/null | head -1); \
+			if [ -z "$$pkgfile" ]; then echo "makepkg did not produce a package" >&2; rm -rf "$$tmp"; exit 1; fi; \
+			out="$$basedir/dist/wiretap-$$ver-x86_64.pkg.tar.zst"; \
+			mkdir -p "$$basedir/dist" && mv "$$pkgfile" "$$out"; \
+			rm -rf "$$tmp"; \
+			echo "wrote $$out"
+
+appimage: gui
+	@set -e; \
+	if ! command -v appimagetool >/dev/null 2>&1; then \
+		mkdir -p tools; \
+		curl -fsSL -o tools/appimagetool \
+			https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage; \
+		chmod +x tools/appimagetool; \
+		export PATH="$$PWD/tools:$$PATH"; \
+		echo "fetched appimagetool into tools/"; \
+	fi; \
+	if command -v rsvg-convert >/dev/null 2>&1; then \
+		RSVG=rsvg-convert; \
+	elif command -v magick >/dev/null 2>&1; then \
+		RSVG='magick convert'; \
+	elif command -v convert >/dev/null 2>&1; then \
+		RSVG=convert; \
+	else \
+		echo 'install librsvg2-bin (rsvg-convert) or imagemagick to rasterize the icon' >&2; \
+		exit 1; \
+	fi; \
+	ver=$(VERSION); ver=$${ver#v}; \
+	out="dist/wiretap-$$ver-x86_64.AppImage"; \
+	rm -rf AppDir; \
+	mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps AppDir/usr/share/icons/hicolor/512x512/apps; \
+	install -m 0755 $(BINARY) AppDir/usr/bin/$(BINARY); \
+	install -m 0644 packaging/linux/wiretap.desktop AppDir/wiretap.desktop; \
+	install -m 0644 packaging/linux/wiretap.desktop AppDir/usr/share/applications/wiretap.desktop; \
+	install -m 0755 packaging/appimage/AppRun AppDir/AppRun; \
+	$$RSVG -w 256 -h 256 packaging/appimage/wiretap.svg -o AppDir/wiretap.png; \
+	install -m 0644 AppDir/wiretap.png AppDir/usr/share/icons/hicolor/256x256/apps/wiretap.png; \
+	$$RSVG -w 512 -h 512 packaging/appimage/wiretap.svg -o AppDir/usr/share/icons/hicolor/512x512/apps/wiretap.png 2>/dev/null || true; \
+	cp AppDir/usr/share/icons/hicolor/256x256/apps/wiretap.png AppDir/.DirIcon; \
+	mkdir -p dist; \
+	( cd AppDir && appimagetool --no-appstream . "../$$out" ); \
+	echo "wrote $$out"
+
+dist: arch-pkg appimage
