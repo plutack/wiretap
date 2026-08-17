@@ -258,7 +258,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          # Avoid `gh` (it shells out to `git` and breaks in a no-checkout
+          # workspace); drive the GitHub REST API with `curl` directly.
+          tag="${{ github.ref_name }}"
+          api="https://api.github.com/repos/${{ github.repository }}/releases/tags/${tag}"
           mkdir -p dist
-          gh release download "$GITHUB_REF_NAME" -D dist
-          (cd dist && sha256sum ./* > ../SHA256SUMS)
-          gh release upload "$GITHUB_REF_NAME" SHA256SUMS --clobber
+          curl -fsSL -H "Authorization: token ${GH_TOKEN}" \
+            "${api}/assets" | \
+            python3 -c 'import json,sys; [print(a["browser_download_url"]) for a in json.load(sys.stdin)]' \
+            > urls.txt
+          while read -r url; do
+            [ -n "$url" ] || continue
+            curl -fsSL -o "dist/$(basename "$url")" "$url"
+          done < urls.txt
+          ( cd dist && sha256sum ./* > ../SHA256SUMS )
+          curl -fsSL -X POST -H "Authorization: token ${GH_TOKEN}" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @SHA256SUMS \
+            "${api}/assets?name=SHA256SUMS"
