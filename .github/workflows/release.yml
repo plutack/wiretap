@@ -133,8 +133,13 @@ jobs:
           APPIMAGE_ARCH: ${{ matrix.appimage_arch }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          ARCH_NAME="${APPIMAGE_ARCH:-x86_64}"
+          if [ ! -f "dist/wiretap_${VERSION}_${ARCH_NAME}.AppImage" ]; then
+            echo "missing dist/wiretap_${VERSION}_${ARCH_NAME}.AppImage" >&2
+            exit 1
+          fi
           gh release upload "$GITHUB_REF_NAME" \
-            "wiretap_${VERSION}_${APPIMAGE_ARCH:-x86_64}.AppImage" --clobber
+            "dist/wiretap_${VERSION}_${ARCH_NAME}.AppImage" --clobber
 
   windows:
     runs-on: ubuntu-latest
