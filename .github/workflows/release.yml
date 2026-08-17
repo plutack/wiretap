@@ -194,16 +194,22 @@ jobs:
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           VERSION="${GITHUB_REF_NAME#v}"
-          mkdir -p /tmp/pkgbuild && cd /tmp/pkgbuild
-          cp "$GITHUB_WORKSPACE/packaging/arch/PKGBUILD" .
-          sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
+          BUILD_DIR=/tmp/pkgbuild
+          mkdir -p "$BUILD_DIR"
+          cp "$GITHUB_WORKSPACE/packaging/arch/PKGBUILD" "$BUILD_DIR/PKGBUILD"
+          sed -i "s/^pkgver=.*/pkgver=$VERSION/" "$BUILD_DIR/PKGBUILD"
           useradd -m builder
-          chown -R builder .
-          su builder -c 'makepkg -f --noconfirm'
-          # makepkg's name includes the pkgrel (wiretap-<ver>-<rel>-x86_64...);
-          # match it with a glob and rename to the release-wide convention.
-          mv ./wiretap-*-x86_64.pkg.tar.zst \
-             "$GITHUB_WORKSPACE/wiretap-${VERSION}-x86_64.pkg.tar.zst"
+          chown -R builder "$BUILD_DIR"
+          su builder -c "cd $BUILD_DIR && makepkg -f --noconfirm"
+          # makepkg drops wiretap-<ver>-<rel>-x86_64.pkg.tar.zst wherever it
+          # ran; glob both the build dir and builder's $HOME so we don't
+          # depend on su's cwd-preservation behavior.
+          PKG=$(find "$BUILD_DIR" /home/builder -maxdepth 2 -name 'wiretap-*-x86_64.pkg.tar.zst' -print -quit)
+          if [ -z "$PKG" ]; then
+            echo "makepkg did not produce a package" >&2
+            exit 1
+          fi
+          mv "$PKG" "$GITHUB_WORKSPACE/wiretap-${VERSION}-x86_64.pkg.tar.zst"
 
       - name: Attach to release
         env:
