@@ -32,6 +32,29 @@ wiretap version
 
 A GUI-enabled Linux release requires WebKitGTK at runtime. Distribution package names vary; current distributions generally provide `webkit2gtk-4.1` or an equivalent package.
 
+## Install a release AppImage
+
+Linux AppImages are published alongside the `.tar.gz` for each release. The AppImage bundles the same all-in-one binary plus a desktop entry; runtime still requires WebKitGTK and GTK3 on the host (AppImages do not bundle glibc/GTK across distributions).
+
+```sh
+curl -fsSL -o wiretap.AppImage https://github.com/plutack/wiretap/releases/latest/download/wiretap_<ver>_x86_64.AppImage
+chmod +x wiretap.AppImage
+./wiretap.AppImage gui               # launches the GUI directly
+```
+
+To integrate the AppImage with the desktop environment (icon, `.desktop` file), put it under `~/.local/bin/wiretap.AppImage` and let AppImageUpdate or your file manager register it; or wrap it with a small script that calls the AppImage and adds a desktop entry pointing at it.
+
+## Install from the Arch Linux package
+
+Arch users on `x86_64` can install `wiretap` from the `.pkg.tar.zst` artifact attached to each release. Download directly from the GitHub Releases page:
+
+```sh
+sudo pacman -U wiretap-<ver>-x86_64.pkg.tar.zst
+wiretap gui
+```
+
+The package ships the same GUI binary plus a desktop entry, and depends on `webkit2gtk-4.1` and `gtk3` from the official repos.
+
 ## Build from source
 
 Source builds are intended for contributors and platforms without a published binary.
@@ -72,6 +95,26 @@ For a GUI build with WebView developer tools:
 ```sh
 make gui-debug
 ```
+
+### Local distribution artifacts
+
+The Makefile wraps the same packaging steps the release workflow uses, so you can reproduce any artifact locally:
+
+```sh
+# AppImage for the current host (uses `make gui` underneath, then appimagetool).
+# Requires librsvg2-bin (rsvg-convert); appimagetool is fetched into tools/ on
+# first run if it isn't on $PATH.
+make appimage VERSION=v0.1.0   # → dist/wiretap-v0.1.0-x86_64.AppImage
+
+# Arch package (requires makepkg; rewrites packaging/arch/PKGBUILD's pkgver
+# to match VERSION and renames the produced artifact to the release filename).
+make arch-pkg VERSION=v0.1.0    # → dist/wiretap-v0.1.0-x86_64.pkg.tar.zst
+
+# Both artifacts in one shot (sanity check before tagging a release).
+make dist VERSION=v0.1.0
+```
+
+If `VERSION` is omitted, the targets read it from `git describe --tags`; tag the commit before running them so the artifact names match what CI will produce.
 
 ## Build the hosted relay
 
