@@ -9,15 +9,16 @@
 //     `gui` build tag, no webkit2gtk/CGO), so `go test -race ./...` stays green
 //     on machines that lack the GUI toolchain. The only file that imports Wails
 //     is internal/cli/gui.go, build-tagged `gui`.
-//   - Views convert raw []byte bodies to string for display. Byte-exact replay
-//     still uses the original bytes via app.App.ReplayWebhook; the GUI only
-//     shows text, so a UTF-8 best-effort string is the right shape here.
+//   - Detailed capture views include bodies as both UTF-8 best-effort strings
+//     and Base64. Base64 preserves arbitrary binary payloads for media/hex
+//     inspection; byte-exact replay still uses the original store bytes.
 //   - DTOs flatten store.WebhookRow / store.TrafficCaptureRow so the frontend
 //     never sees SQL/relayproto types (same isolation localapi uses).
 package gui
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -76,18 +77,20 @@ type WebhookView struct {
 // CaptureView is the GUI DTO for a traffic capture. Bodies are omitted in list
 // responses; GetCapture fills them for the detail pane.
 type CaptureView struct {
-	ID          int64               `json:"id"`
-	SessionID   int64               `json:"session_id,omitempty"`
-	At          string              `json:"at"` // RFC3339 UTC
-	Method      string              `json:"method,omitempty"`
-	URL         string              `json:"url,omitempty"`
-	Status      int                 `json:"status,omitempty"`
-	ReqHeaders  map[string][]string `json:"req_headers,omitempty"`
-	ReqBody     string              `json:"req_body,omitempty"`
-	ReqBodyLen  int                 `json:"req_body_len"`
-	RespHeaders map[string][]string `json:"resp_headers,omitempty"`
-	RespBody    string              `json:"resp_body,omitempty"`
-	RespBodyLen int                 `json:"resp_body_len"`
+	ID             int64               `json:"id"`
+	SessionID      int64               `json:"session_id,omitempty"`
+	At             string              `json:"at"` // RFC3339 UTC
+	Method         string              `json:"method,omitempty"`
+	URL            string              `json:"url,omitempty"`
+	Status         int                 `json:"status,omitempty"`
+	ReqHeaders     map[string][]string `json:"req_headers,omitempty"`
+	ReqBody        string              `json:"req_body,omitempty"`
+	ReqBodyBase64  string              `json:"req_body_base64,omitempty"`
+	ReqBodyLen     int                 `json:"req_body_len"`
+	RespHeaders    map[string][]string `json:"resp_headers,omitempty"`
+	RespBody       string              `json:"resp_body,omitempty"`
+	RespBodyBase64 string              `json:"resp_body_base64,omitempty"`
+	RespBodyLen    int                 `json:"resp_body_len"`
 }
 
 // StatusView is the status-bar payload: build version plus the resolved app
@@ -437,23 +440,25 @@ func captureSummary(rows []store.TrafficCaptureRow) []CaptureView {
 	return out
 }
 
-// captureDetail converts one capture row into the full DTO: headers parsed from
-// their stored JSON and bodies rendered as UTF-8 best-effort strings (byte-exact
-// data stays in the store; the GUI only shows text).
+// captureDetail converts one capture row into the full DTO. Text fields remain
+// for compatibility and convenient inspection; Base64 fields preserve exact
+// bytes for binary viewers and downloads.
 func captureDetail(c *store.TrafficCaptureRow) CaptureView {
 	return CaptureView{
-		ID:          c.ID,
-		SessionID:   c.SessionID,
-		At:          c.At.Format(time.RFC3339),
-		Method:      c.Method,
-		URL:         c.URL,
-		Status:      c.Status,
-		ReqHeaders:  parseHeaders(c.ReqHeadersJSON),
-		ReqBody:     string(c.ReqBody),
-		ReqBodyLen:  len(c.ReqBody),
-		RespHeaders: parseHeaders(c.RespHeadersJSON),
-		RespBody:    string(c.RespBody),
-		RespBodyLen: len(c.RespBody),
+		ID:             c.ID,
+		SessionID:      c.SessionID,
+		At:             c.At.Format(time.RFC3339),
+		Method:         c.Method,
+		URL:            c.URL,
+		Status:         c.Status,
+		ReqHeaders:     parseHeaders(c.ReqHeadersJSON),
+		ReqBody:        string(c.ReqBody),
+		ReqBodyBase64:  base64.StdEncoding.EncodeToString(c.ReqBody),
+		ReqBodyLen:     len(c.ReqBody),
+		RespHeaders:    parseHeaders(c.RespHeadersJSON),
+		RespBody:       string(c.RespBody),
+		RespBodyBase64: base64.StdEncoding.EncodeToString(c.RespBody),
+		RespBodyLen:    len(c.RespBody),
 	}
 }
 

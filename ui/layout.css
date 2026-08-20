@@ -899,6 +899,105 @@ textarea:focus-visible {
   background: rgba(255,255,255,.02);
 }
 
+.body-viewer {
+  overflow: visible;
+  border: 1px solid var(--wt-line);
+  border-radius: 8px;
+  background: #090c0e;
+}
+
+.body-viewer-toolbar {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--wt-line);
+  background: rgba(255,255,255,.025);
+}
+
+.body-type {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--wt-dim);
+  font-family: "JetBrains Mono", monospace;
+  font-size: .6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.body-viewer-mode {
+  width: 142px;
+  flex: 0 0 142px;
+}
+
+.body-viewer-mode .dropdown-menu { right: 0; left: auto; }
+.body-viewer-mode .dropdown-trigger { padding: 5px 8px; }
+
+.body-action {
+  flex: 0 0 auto;
+  padding: 5px 7px;
+  border-radius: 5px;
+  color: var(--wt-muted);
+  font-size: .75rem;
+}
+
+.body-action:hover { background: var(--wt-panel-soft); color: var(--wt-text); }
+
+.body-code {
+  overflow: auto;
+  padding: 12px;
+  color: #cbd4d8;
+  font-family: "JetBrains Mono", monospace;
+  font-size: .75rem;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.body-image-wrap {
+  display: grid;
+  min-height: 180px;
+  max-height: 520px;
+  place-items: center;
+  overflow: auto;
+  padding: 16px;
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,.035) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,.035) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,.035) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.035) 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+}
+
+.body-image {
+  display: block;
+  max-width: 100%;
+  max-height: 480px;
+  object-fit: contain;
+  image-rendering: auto;
+}
+
+.body-empty,
+.body-large-warning {
+  padding: 11px 12px;
+  border: 1px dashed var(--wt-line-strong);
+  border-radius: 7px;
+  color: var(--wt-dim);
+  font-size: .75rem;
+  line-height: 1.55;
+}
+
+.body-large-warning {
+  margin: 10px;
+  border-style: solid;
+  border-color: rgba(245, 158, 11, .28);
+  background: rgba(245, 158, 11, .07);
+  color: #e2bd7a;
+}
+
 .script-program-fallback {
   width: 100%;
   height: min(480px, 55vh);
