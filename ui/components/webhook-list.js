@@ -37,7 +37,7 @@ export function WebhookList({ webhooks, onSelect, selectedKey }) {
         <span class="signal-secondary">relay ingress</span>
       </td>
       <td class="mono-dim">${fmtBytes(webhook.body_len) || "empty"}</td>
-      <td class="mono-dim">${fmtTime(webhook.received_at)}</td>
+      <td class="mono-dim time-cell">${fmtTime(webhook.received_at)}</td>
     </tr>`;
   };
 
@@ -47,7 +47,7 @@ export function WebhookList({ webhooks, onSelect, selectedKey }) {
       <col style="width: 118px" />
       <col />
       <col style="width: 82px" />
-      <col style="width: 76px" />
+      <col style="width: 112px" />
     </colgroup>
     <thead>
       <tr>

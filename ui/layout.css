@@ -669,6 +669,30 @@ textarea:focus-visible {
   font-size: 0.75rem;
 }
 
+.time-cell,
+.transfer-cell {
+  white-space: nowrap;
+}
+
+.transfer-values {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.transfer-up {
+  color: var(--wt-warn);
+}
+
+.transfer-down {
+  color: var(--wt-blue);
+}
+
+.transfer-separator {
+  color: var(--wt-dim);
+}
+
 .empty-workspace {
   display: grid;
   min-height: 100%;
