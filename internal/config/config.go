@@ -15,11 +15,10 @@ import (
 // Config is the in-memory representation of ~/.config/wiretap/config.yaml.
 // Tags are yaml so the file reads naturally when written by Manager.Init.
 type Config struct {
-	ListenAddr string          `yaml:"listen_addr"`
-	Relay      RelayConfig     `yaml:"relay"`
-	Store      StoreConfig     `yaml:"store"`
-	TUI        TUIConfig       `yaml:"tui"`
-	Intercept  InterceptConfig `yaml:"intercept"`
+	Relay     RelayConfig     `yaml:"relay"`
+	Store     StoreConfig     `yaml:"store"`
+	TUI       TUIConfig       `yaml:"tui"`
+	Intercept InterceptConfig `yaml:"intercept"`
 }
 
 // RelayConfig holds the outbound-tunnel settings used by relayclient.
@@ -27,6 +26,11 @@ type RelayConfig struct {
 	// URL is the WebSocket endpoint of the relay, e.g.
 	// "wss://relay.example.com/tunnel". Empty means the tunnel is disabled.
 	URL string `yaml:"url"`
+	// ForwardURL, when set, is the local URL every incoming webhook is
+	// automatically POSTed to right after it is stored — the "just deliver it
+	// to my dev server" mode. on_replay scripts run first, exactly like a
+	// manual replay. Empty disables auto-forwarding.
+	ForwardURL string `yaml:"forward_url"`
 	// CredsFile is the path to the client_id/client_token JSON written by
 	// `wiretap relay register`. Defaults to <config dir>/relay-credentials.json.
 	CredsFile string `yaml:"creds_file"`
@@ -67,10 +71,10 @@ type InterceptConfig struct {
 // disk; Manager.Load overlays user values on top of it.
 func Default() Config {
 	return Config{
-		ListenAddr: "127.0.0.1:8888",
 		Relay: RelayConfig{
-			URL:       "",
-			CredsFile: "",
+			URL:        "",
+			ForwardURL: "",
+			CredsFile:  "",
 		},
 		Store: StoreConfig{Path: ""},
 		TUI:   TUIConfig{Theme: "dark"},
@@ -149,6 +153,29 @@ func (m *Manager) Init(force bool) (string, error) {
 	}
 	cfg := Default()
 	b, err := yaml.Marshal(&cfg)
+	if err != nil {
+		return "", fmt.Errorf("config: marshal: %w", err)
+	}
+	if err := os.WriteFile(p, b, 0o600); err != nil {
+		return "", fmt.Errorf("config: write %s: %w", p, err)
+	}
+	return p, nil
+}
+
+// Save marshals cfg and writes it to config.yaml (creating the directory
+// when needed) with mode 0600, the same shape Init writes. It returns the
+// path written. Used by the GUI settings screen, which edits the whole
+// config in one shot; last-write-wins is acceptable for a single-user
+// desktop file.
+func (m *Manager) Save(cfg *Config) (string, error) {
+	p, err := m.Path()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return "", fmt.Errorf("config: create dir: %w", err)
+	}
+	b, err := yaml.Marshal(cfg)
 	if err != nil {
 		return "", fmt.Errorf("config: marshal: %w", err)
 	}

@@ -11,6 +11,8 @@
 import { html } from "../vendor/preact/index.js";
 import { useEffect, useRef, useState } from "../vendor/preact/index.js";
 import { copyText, pasteText } from "../lib/clipboard.js";
+import { Dropdown } from "./dropdown.js";
+import { diffLines, hasChanges } from "../lib/diff.js";
 
 const TRIGGERS = ["on_request", "on_response", "on_replay", "on_webhook"];
 
@@ -129,17 +131,20 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
 
   const handleTest = async () => {
     setTestResult({ pending: true });
+    // A minimal sample exchange; the script body decides what it inspects.
+    const sampleBody = '{"hello":"world"}';
     try {
-      // A minimal sample exchange; the script body decides what it inspects.
       const result = await onTest({
         body: currentBody(),
         method: "POST",
         url: "https://example.com/webhook",
         headers: { "Content-Type": "application/json" },
-        req_body: '{"hello":"world"}',
+        req_body: sampleBody,
         status: 200,
       });
-      setTestResult(result);
+      // Keep the input body alongside the result so the panel can render a
+      // before/after diff of what the transform changed.
+      setTestResult({ ...result, input_body: sampleBody });
     } catch (e) {
       // Only ErrScriptEngineUnavailable is thrown; script exceptions come back
       // in result.error instead.
@@ -169,13 +174,12 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
         </label>
         <label class="block text-xs">
           <span class="mb-1 block text-neutral-400">Trigger</span>
-          <select
+          <${Dropdown}
             value=${trigger}
             onChange=${(e) => setTrigger(e.target.value)}
-            class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm"
-          >
-            ${TRIGGERS.map((t) => html`<option value=${t}>${t}</option>`)}
-          </select>
+            options=${TRIGGERS.map((t) => ({ value: t, label: t }))}
+            aria-label="Transform trigger"
+          />
         </label>
         <label class="block text-xs">
           <span class="mb-1 block text-neutral-400">Priority</span>
@@ -202,14 +206,14 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
           <button
             type="button"
             onClick=${handleCopyBody}
-            class="ml-auto rounded px-1.5 py-0.5 text-[11px] text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+            class="ml-auto rounded px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
           >
             Copy
           </button>
           <button
             type="button"
             onClick=${handlePasteBody}
-            class="rounded px-1.5 py-0.5 text-[11px] text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+            class="rounded px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
           >
             Paste
           </button>
@@ -281,6 +285,7 @@ function TestPanel({ result }) {
       <dt class="text-neutral-500">status</dt>
       <dd class="text-neutral-300">${result.status}</dd>
     </dl>
+    <${BodyDiff} before=${result.input_body} after=${result.req_body} />
     ${result.req_body &&
     html`<div class="mb-2">
       <span class="text-neutral-500">req body</span>
@@ -307,4 +312,31 @@ function TestPanel({ result }) {
       >
     </div>`}
   </section>`;
+}
+
+// BodyDiff renders a before/after line diff of the request body when the
+// transform changed it. Pretty-prints JSON on both sides first so a
+// re-serialized payload doesn't show as one giant changed line.
+function BodyDiff({ before, after }) {
+  if (before === undefined || after === undefined || before === after) return null;
+  const pretty = (s) => {
+    try {
+      return JSON.stringify(JSON.parse(s), null, 2);
+    } catch {
+      return String(s ?? "");
+    }
+  };
+  const diff = diffLines(pretty(before), pretty(after));
+  if (!diff || !hasChanges(diff)) return null;
+  return html`<div class="mb-2">
+    <span class="text-neutral-500">body changes</span>
+    <pre class="mt-1 max-h-32 overflow-auto rounded bg-neutral-900 p-1.5 font-mono">
+${diff.map(
+        (l) =>
+          html`<span class="diff-line ${l.type === "add" ? "add" : l.type === "del" ? "del" : ""}"
+            >${(l.type === "add" ? "+ " : l.type === "del" ? "- " : "  ") + l.text}</span
+          >`,
+      )}</pre
+    >
+  </div>`;
 }

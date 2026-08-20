@@ -9,8 +9,8 @@
   --wt-line: rgba(255, 255, 255, 0.075);
   --wt-line-strong: rgba(255, 255, 255, 0.13);
   --wt-text: #edf1f3;
-  --wt-muted: #889198;
-  --wt-dim: #555f66;
+  --wt-muted: #98a2aa; /* raised from #889198 for readability */
+  --wt-dim: #6a747d; /* raised from #555f66 for readability */
   --wt-accent: #62d9bf;
   --wt-accent-soft: rgba(98, 217, 191, 0.11);
   --wt-blue: #72a9ff;
@@ -28,6 +28,19 @@ body,
   margin: 0;
   overflow: hidden;
   background: var(--wt-bg);
+}
+
+/* Global type scale. Every font-size in this file (and Tailwind's rem-based
+   text-* utilities) keys off the root font size, so the Display setting in
+   the GUI can scale the whole interface with one variable. */
+html {
+  font-size: calc(17px * var(--ui-font-scale, 1));
+}
+
+/* Compact density tightens the event-table rows (Display setting). */
+body.density-compact .signal-table td {
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 body {
@@ -54,7 +67,7 @@ textarea:focus-visible {
 /* App frame -------------------------------------------------------------- */
 .workbench {
   display: grid;
-  grid-template-rows: 54px minmax(0, 1fr);
+  grid-template-rows: 60px minmax(0, 1fr);
   height: 100%;
   background:
     radial-gradient(circle at 76% -20%, rgba(98, 217, 191, 0.06), transparent 33rem),
@@ -80,6 +93,11 @@ textarea:focus-visible {
   display: flex;
   min-height: 0;
   overflow: hidden;
+}
+
+/* Settings mode renders no command deck; let the main fill both grid rows. */
+.workspace-main.full {
+  grid-row: 1 / -1;
 }
 
 .event-stage {
@@ -116,6 +134,12 @@ textarea:focus-visible {
   padding-left: 16px;
 }
 
+.brand-lockup > div:last-child {
+  display: grid;
+  gap: 2px;
+  line-height: 1.15;
+}
+
 .brand-mark {
   position: relative;
   display: grid;
@@ -144,7 +168,7 @@ textarea:focus-visible {
 }
 
 .brand-name {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 680;
   letter-spacing: -.025em;
 }
@@ -152,13 +176,12 @@ textarea:focus-visible {
 .brand-version {
   color: var(--wt-dim);
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 9px;
+  font-size: 0.75rem;
   letter-spacing: .04em;
 }
 
 .system-strip {
-  display: grid;
-  grid-template-columns: repeat(3, 154px);
+  display: flex;
   min-width: 0;
   align-items: center;
   gap: 8px;
@@ -168,18 +191,18 @@ textarea:focus-visible {
 
 .system-pill {
   display: grid;
-  grid-template-columns: 6px 8ch minmax(0, 1fr);
-  width: 154px;
-  min-width: 0;
+  grid-template-columns: 6px max-content max-content;
+  width: max-content;
+  min-width: 10.5rem;
   box-sizing: border-box;
   align-items: center;
   column-gap: 7px;
-  padding: 5px 9px;
+  padding: 6px 10px;
   border: 1px solid var(--wt-line);
   border-radius: 999px;
   background: rgba(255,255,255,.025);
   color: var(--wt-muted);
-  font-size: 10px;
+  font-size: 0.8125rem;
   line-height: 1;
 }
 
@@ -197,11 +220,9 @@ textarea:focus-visible {
 }
 
 .system-pill strong {
-  overflow: hidden;
   color: #cbd2d6;
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  font-weight: 500;
-  text-overflow: ellipsis;
+  font-weight: 600;
 }
 
 .live-dot {
@@ -235,6 +256,19 @@ textarea:focus-visible {
   color: var(--wt-text);
 }
 
+/* Right-side topbar button cluster (settings + refresh). */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.refresh-button.active {
+  border-color: var(--wt-line);
+  background: rgba(255,255,255,.06);
+  color: var(--wt-text);
+}
+
 /* Navigator -------------------------------------------------------------- */
 .navigator {
   display: flex;
@@ -265,8 +299,8 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   margin: 0 8px 8px;
-  color: var(--wt-dim);
-  font-size: 9px;
+  color: var(--wt-muted);
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: .14em;
   text-transform: uppercase;
@@ -278,7 +312,7 @@ textarea:focus-visible {
   background: rgba(255,255,255,.045);
   color: #747e84;
   font-family: "JetBrains Mono", monospace;
-  font-size: 8px;
+  font-size: 0.6875rem;
 }
 
 .nav-item {
@@ -318,7 +352,7 @@ textarea:focus-visible {
   background: rgba(255,255,255,.045);
   color: #778187;
   font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
+  font-size: 0.75rem;
 }
 
 .nav-item.active .nav-glyph {
@@ -330,7 +364,7 @@ textarea:focus-visible {
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  font-size: 11px;
+  font-size: 0.8125rem;
   font-weight: 530;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -382,29 +416,41 @@ textarea:focus-visible {
   background: transparent;
   color: var(--wt-accent);
   cursor: pointer;
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1;
 }
 
+/* Sidebar selects: same visual language as the design-system .select in
+   input.css (solid panel background, visible border, custom chevron) so
+   dropdowns never drift off-palette. */
 .nav-select {
   width: 100%;
   margin-bottom: 7px;
   padding: 7px 28px 7px 9px;
-  border: 1px solid var(--wt-line);
+  border: 1px solid var(--wt-line-strong);
   border-radius: 7px;
   appearance: none;
-  background: #111519;
-  color: #abb4b9;
-  font-size: 10px;
+  background-color: var(--wt-panel-raised);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23a3a3a3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 1rem;
+  color: var(--wt-text);
+  font-size: 0.8125rem;
   cursor: pointer;
+}
+
+.nav-select:hover {
+  border-color: var(--wt-line-strong);
+  background-color: var(--wt-panel-soft);
 }
 
 .navigator-footer {
   padding: 10px 14px 12px;
   border-top: 1px solid var(--wt-line);
-  color: var(--wt-dim);
+  color: var(--wt-muted);
   font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
+  font-size: 0.75rem;
   line-height: 1.6;
 }
 
@@ -441,7 +487,7 @@ textarea:focus-visible {
   background: transparent;
   color: var(--wt-muted);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 0.8125rem;
   font-weight: 580;
 }
 
@@ -454,7 +500,7 @@ textarea:focus-visible {
 .mode-count {
   color: var(--wt-dim);
   font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
+  font-size: 0.75rem;
 }
 
 .mode-tab.active .mode-count { color: var(--wt-accent); }
@@ -474,7 +520,7 @@ textarea:focus-visible {
   border-radius: 9px;
   background: rgba(5,7,9,.72);
   color: var(--wt-text);
-  font-size: 11px;
+  font-size: 0.8125rem;
 }
 
 .search-shell input:focus {
@@ -512,16 +558,55 @@ textarea:focus-visible {
   border-radius: 4px;
   color: var(--wt-dim);
   font-family: "JetBrains Mono", monospace;
-  font-size: 8px;
+  font-size: 0.6875rem;
   transform: translateY(-50%);
 }
 
 .workspace-summary {
   margin-left: auto;
-  color: var(--wt-dim);
+  color: var(--wt-muted);
   font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
+  font-size: 0.8125rem;
   white-space: nowrap;
+}
+
+.settings-connection-status {
+  display: block;
+  min-width: 0;
+  overflow-x: auto;
+  color: var(--wt-muted);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  scrollbar-width: none;
+}
+
+.settings-connection-status::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-status-line {
+  display: inline-flex;
+  min-width: max-content;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+
+.settings-status-line > span {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.35;
+  vertical-align: middle;
+}
+
+.settings-status-line .font-mono {
+  color: var(--wt-text);
+  line-height: 1.35;
+}
+
+.status-line-dot {
+  align-self: center;
 }
 
 /* Event table ------------------------------------------------------------ */
@@ -542,8 +627,8 @@ textarea:focus-visible {
 .signal-table th {
   padding: 8px 12px;
   border-bottom: 1px solid var(--wt-line);
-  color: var(--wt-dim);
-  font-size: 8px;
+  color: var(--wt-muted);
+  font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: .13em;
   text-align: left;
@@ -564,7 +649,7 @@ textarea:focus-visible {
   height: 46px;
   padding: 5px 12px;
   color: #aeb6bb;
-  font-size: 10px;
+  font-size: 0.78125rem;
   vertical-align: middle;
 }
 
@@ -573,7 +658,7 @@ textarea:focus-visible {
   overflow: hidden;
   color: #dce1e4;
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 10px;
+  font-size: 0.78125rem;
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -583,9 +668,9 @@ textarea:focus-visible {
   display: block;
   overflow: hidden;
   margin-top: 2px;
-  color: var(--wt-dim);
+  color: var(--wt-muted);
   font-family: "JetBrains Mono", monospace;
-  font-size: 8px;
+  font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -597,7 +682,7 @@ textarea:focus-visible {
   place-items: center;
   border-radius: 5px;
   font-family: "JetBrains Mono", monospace;
-  font-size: 8px;
+  font-size: 0.6875rem;
   font-weight: 750;
   letter-spacing: .04em;
 }
@@ -607,7 +692,7 @@ textarea:focus-visible {
   align-items: center;
   gap: 6px;
   font-family: "JetBrains Mono", monospace;
-  font-size: 10px;
+  font-size: 0.78125rem;
   font-weight: 600;
 }
 
@@ -623,7 +708,31 @@ textarea:focus-visible {
 .mono-dim {
   color: var(--wt-dim);
   font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
+  font-size: 0.75rem;
+}
+
+.time-cell,
+.transfer-cell {
+  white-space: nowrap;
+}
+
+.transfer-values {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.transfer-up {
+  color: var(--wt-warn);
+}
+
+.transfer-down {
+  color: var(--wt-blue);
+}
+
+.transfer-separator {
+  color: var(--wt-dim);
 }
 
 .empty-workspace {
@@ -653,29 +762,28 @@ textarea:focus-visible {
   border-radius: 50%;
   background: radial-gradient(circle, rgba(98,217,191,.12), transparent 65%);
   color: var(--wt-accent);
-  font-size: 22px;
+  font-size: 1.375rem;
   box-shadow: 0 0 36px rgba(98,217,191,.06);
 }
 
-.empty-card h2 { margin: 0; font-size: 14px; font-weight: 630; }
-.empty-card p { margin: 8px auto 0; color: var(--wt-muted); font-size: 10px; line-height: 1.7; }
+.empty-card h2 { margin: 0; font-size: 0.875rem; font-weight: 630; }
+.empty-card p { margin: 8px auto 0; color: var(--wt-muted); font-size: 0.78125rem; line-height: 1.7; }
 
 /* Inspector -------------------------------------------------------------- */
+/* Inspector: a persistent split pane on wide windows (list stays visible,
+   arrow keys walk the stream), collapsing to the old overlay below 960px. */
 .detail-pane,
 .script-editor-pane {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  position: relative;
   z-index: 20;
   display: flex;
-  width: min(620px, 100%);
+  width: min(620px, 52%);
   min-height: 0;
+  flex-shrink: 0;
   flex-direction: column;
   overflow: hidden;
   border-left: 1px solid var(--wt-line-strong);
   background: #0c0f12;
-  box-shadow: -24px 0 60px rgba(0,0,0,.42);
   animation: inspector-in 160ms ease-out;
 }
 
@@ -708,7 +816,7 @@ textarea:focus-visible {
   overflow: hidden;
   color: var(--wt-text);
   font-family: "JetBrains Mono", monospace;
-  font-size: 11px;
+  font-size: 0.8125rem;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -717,7 +825,7 @@ textarea:focus-visible {
 .inspector-subtitle {
   margin-top: 2px;
   color: var(--wt-dim);
-  font-size: 9px;
+  font-size: 0.75rem;
 }
 
 .inspector-close {
@@ -744,7 +852,7 @@ textarea:focus-visible {
   gap: 8px;
   margin: 0 0 7px;
   color: var(--wt-dim);
-  font-size: 8px;
+  font-size: 0.6875rem;
   font-weight: 750;
   letter-spacing: .14em;
   text-transform: uppercase;
@@ -769,7 +877,7 @@ textarea:focus-visible {
   overflow-wrap: anywhere;
   color: #cdd4d8;
   font-family: "JetBrains Mono", monospace;
-  font-size: 10px;
+  font-size: 0.78125rem;
   line-height: 1.6;
 }
 
@@ -802,7 +910,7 @@ textarea:focus-visible {
   background: #090c0e;
   color: #d6dde0;
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 11px;
+  font-size: 0.8125rem;
   line-height: 1.65;
 }
 
@@ -811,7 +919,7 @@ textarea:focus-visible {
   background: #090c0e !important;
   color: #d6dde0 !important;
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace !important;
-  font-size: 11px;
+  font-size: 0.8125rem;
   line-height: 1.65;
 }
 
@@ -841,7 +949,7 @@ textarea:focus-visible {
   background: #171c20;
   color: #dbe1e4;
   box-shadow: 0 16px 45px rgba(0,0,0,.45);
-  font-size: 10px;
+  font-size: 0.78125rem;
   animation: toast-in 140ms ease-out;
 }
 
@@ -858,4 +966,299 @@ textarea:focus-visible {
   .system-pill.optional { display: none; }
   .workspace-summary { display: none; }
   .command-topline { gap: 9px; }
+}
+
+/* Narrow windows: inspector reverts to an overlay over the list. */
+@media (max-width: 960px) {
+  .detail-pane,
+  .script-editor-pane {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(620px, 100%);
+    box-shadow: -24px 0 60px rgba(0, 0, 0, .42);
+  }
+}
+
+/* Custom dropdown --------------------------------------------------------
+   Fully CSS-drawn replacement for native <select>: WebKitGTK renders native
+   option popups with the OS GTK theme (white on light systems), which is why
+   dropdown menus kept drifting off-palette. */
+.dropdown {
+  position: relative;
+  width: 100%;
+}
+
+.dropdown-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--wt-line-strong);
+  border-radius: 7px;
+  background: var(--wt-panel-raised);
+  color: var(--wt-text);
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dropdown-trigger:hover {
+  background: var(--wt-panel-soft);
+}
+
+.dropdown-trigger .dropdown-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropdown-trigger .dropdown-chevron {
+  flex-shrink: 0;
+  color: var(--wt-muted);
+  transition: transform 120ms ease;
+}
+
+.dropdown.open .dropdown-chevron {
+  transform: rotate(180deg);
+}
+
+.dropdown-menu {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--wt-line-strong);
+  border-radius: 9px;
+  background: #101418;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .55);
+}
+
+.dropdown-option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--wt-text);
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dropdown-option:hover,
+.dropdown-option.active {
+  background: rgba(255, 255, 255, .06);
+}
+
+.dropdown-option.selected {
+  color: var(--wt-accent);
+}
+
+/* Live-tail pill: shown when the stream is paused by scrolling. ---------- */
+.new-events-pill {
+  position: absolute;
+  z-index: 30;
+  top: 10px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border: 1px solid rgba(98, 217, 191, .35);
+  border-radius: 999px;
+  background: rgba(13, 22, 20, .96);
+  color: var(--wt-accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transform: translateX(-50%);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+}
+
+.new-events-pill:hover {
+  background: rgba(20, 33, 30, .98);
+}
+
+/* Group header rows in the webhook table. -------------------------------- */
+.signal-group-row td {
+  padding: 10px 12px 4px;
+  border-bottom: 1px solid var(--wt-line);
+  background: rgba(255, 255, 255, .015);
+  color: var(--wt-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.signal-group-row .signal-group-count {
+  margin-left: 8px;
+  color: var(--wt-dim);
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* Repeated-host dimming in the traffic table. */
+.signal-secondary.repeat {
+  opacity: .38;
+}
+
+/* Follow mode ------------------------------------------------------------ */
+.follow-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 10px;
+}
+
+.follow-control,
+.new-events-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid var(--wt-line-strong);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .035);
+  color: var(--wt-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.follow-control.active {
+  border-color: rgba(98, 217, 191, .35);
+  color: var(--wt-accent);
+}
+
+.follow-control:hover,
+.new-events-pill:hover {
+  background: rgba(255, 255, 255, .08);
+  color: var(--wt-text);
+}
+
+.new-events-pill {
+  border-color: rgba(98, 217, 191, .35);
+  color: var(--wt-accent);
+}
+
+/* Command palette (Ctrl/Cmd+K) -------------------------------------------- */
+.palette-overlay {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgba(4, 6, 8, .55);
+  backdrop-filter: blur(3px);
+}
+
+.palette {
+  display: flex;
+  width: min(560px, calc(100% - 32px));
+  max-height: 60vh;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--wt-line-strong);
+  border-radius: 12px;
+  background: #0d1114;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
+}
+
+.palette-input {
+  width: 100%;
+  padding: 13px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--wt-line);
+  background: transparent;
+  color: var(--wt-text);
+  font-size: 0.9375rem;
+  outline: none;
+}
+
+.palette-input::placeholder {
+  color: var(--wt-dim);
+}
+
+.palette-list {
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.palette-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--wt-text);
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.palette-item.active {
+  background: rgba(98, 217, 191, .1);
+}
+
+.palette-item .palette-glyph {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid var(--wt-line);
+  border-radius: 6px;
+  color: var(--wt-muted);
+  font-size: 0.6875rem;
+}
+
+.palette-item .palette-hint {
+  margin-left: auto;
+  color: var(--wt-dim);
+  font-size: 0.6875rem;
+}
+
+.palette-empty {
+  padding: 18px;
+  color: var(--wt-dim);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+/* Body diff (script editor test runs) ------------------------------------ */
+.diff-line {
+  display: block;
+  padding: 0 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-line.add {
+  background: rgba(52, 211, 153, .12);
+  color: #7ee8bf;
+}
+
+.diff-line.del {
+  background: rgba(244, 114, 133, .12);
+  color: #f4a0ae;
+  text-decoration: line-through;
+  text-decoration-color: rgba(244, 114, 133, .4);
 }

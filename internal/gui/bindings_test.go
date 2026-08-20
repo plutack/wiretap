@@ -211,7 +211,7 @@ func TestBindings_ListCaptures(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("InsertTrafficCapture: %v", err)
 	}
-	got, err := b.ListCaptures()
+	got, err := b.ListCaptures(0)
 	if err != nil {
 		t.Fatalf("ListCaptures: %v", err)
 	}

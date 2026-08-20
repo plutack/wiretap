@@ -43,12 +43,13 @@ func withTempConfigManager(t *testing.T) string {
 func TestNewRootCmd_BuildsTree(t *testing.T) {
 	t.Parallel()
 	root := NewRootCmd("dev")
-	// Six top-level subcommands: version, config, relay, tui, intercept, gui.
+	// Seven top-level subcommands: version, config, export, relay, tui,
+	// intercept, gui.
 	names := subcommandNames(root)
-	if len(names) != 6 {
-		t.Fatalf("top-level subcommands = %v, want exactly 6", names)
+	if len(names) != 7 {
+		t.Fatalf("top-level subcommands = %v, want exactly 7", names)
 	}
-	want := map[string]bool{"version": false, "config": false, "relay": false, "tui": false, "intercept": false, "gui": false}
+	want := map[string]bool{"version": false, "config": false, "export": false, "relay": false, "tui": false, "intercept": false, "gui": false}
 	for _, n := range names {
 		if _, ok := want[n]; !ok {
 			t.Errorf("unexpected subcommand %q", n)

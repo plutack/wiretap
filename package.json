@@ -5,9 +5,12 @@
   "description": "Dev-time package manifest. wiretap itself is a Go project; this file only carries commitlint for local pre-commit linting (and future dev-time JS tooling). Run `npm install` once per clone to populate ./node_modules.",
   "devDependencies": {
     "@commitlint/cli": "^21.2.0",
-    "@commitlint/config-conventional": "^21.2.0"
+    "@commitlint/config-conventional": "^21.2.0",
+    "esbuild": "^0.28.2",
+    "httpsnippet-lite": "^3.0.5"
   },
   "scripts": {
-    "commitlint": "commitlint --edit"
+    "commitlint": "commitlint --edit",
+    "snippet-bundle": "esbuild internal/export/js/entry.js --bundle --format=iife --target=es2017 --minify --outfile=internal/export/js/httpsnippet.bundle.js"
   }
 }

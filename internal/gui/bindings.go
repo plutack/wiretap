@@ -77,6 +77,7 @@ type WebhookView struct {
 // responses; GetCapture fills them for the detail pane.
 type CaptureView struct {
 	ID          int64               `json:"id"`
+	SessionID   int64               `json:"session_id,omitempty"`
 	At          string              `json:"at"` // RFC3339 UTC
 	Method      string              `json:"method,omitempty"`
 	URL         string              `json:"url,omitempty"`
@@ -95,8 +96,21 @@ type StatusView struct {
 	Version           string   `json:"version"`
 	StoreOpen         bool     `json:"store_open"`
 	RelayURL          string   `json:"relay_url,omitempty"`
+	ForwardURL        string   `json:"forward_url,omitempty"`
 	TunnelRunning     bool     `json:"tunnel_running"`
 	ConnectedProjects []string `json:"connected_projects,omitempty"`
+}
+
+// SessionView is the GUI DTO for one interception session (a `wiretap
+// intercept start` run). EndedAt is empty while the session is running — or
+// when it crashed without cleanup.
+type SessionView struct {
+	ID        int64  `json:"id"`
+	StartedAt string `json:"started_at"`         // RFC3339 UTC
+	EndedAt   string `json:"ended_at,omitempty"` // empty = running/crashed
+	Shell     string `json:"shell,omitempty"`
+	ProxyAddr string `json:"proxy_addr,omitempty"`
+	Captures  int    `json:"captures"`
 }
 
 // ReplayResult is the return value of ReplayWebhook: the upstream HTTP status.
@@ -180,14 +194,39 @@ func (b *Bindings) GetCapture(id int64) (CaptureView, error) {
 	return captureDetail(c), nil
 }
 
-// ListCaptures returns the most recent traffic captures, newest-first. Bodies
-// and full header maps are omitted (use GetCapture for the detail payload).
-func (b *Bindings) ListCaptures() ([]CaptureView, error) {
-	rows, err := b.app.Captures(context.Background(), listLimit)
+// ListCaptures returns the most recent traffic captures, newest-first,
+// optionally filtered to one interception session (0 = all). Bodies and full
+// header maps are omitted (use GetCapture for the detail payload).
+func (b *Bindings) ListCaptures(sessionID int64) ([]CaptureView, error) {
+	rows, err := b.app.CapturesBySession(context.Background(), sessionID, listLimit)
 	if err != nil {
 		return nil, fmt.Errorf("list captures: %w", err)
 	}
 	return captureSummary(rows), nil
+}
+
+// ListSessions returns recorded interception sessions, newest-first, for the
+// sidebar's session filter.
+func (b *Bindings) ListSessions() ([]SessionView, error) {
+	rows, err := b.app.InterceptSessions(context.Background(), listLimit)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
+	out := make([]SessionView, 0, len(rows))
+	for _, r := range rows {
+		v := SessionView{
+			ID:        r.ID,
+			StartedAt: r.StartedAt.Format(time.RFC3339),
+			Shell:     r.Shell,
+			ProxyAddr: r.ProxyAddr,
+			Captures:  r.Captures,
+		}
+		if !r.EndedAt.IsZero() {
+			v.EndedAt = r.EndedAt.Format(time.RFC3339)
+		}
+		out = append(out, v)
+	}
+	return out, nil
 }
 
 // GetWebhook returns one webhook with body + headers populated for the detail
@@ -226,6 +265,7 @@ func (b *Bindings) Status() StatusView {
 	v := StatusView{Version: b.version, StoreOpen: b.app.Store() != nil}
 	if cfg, err := b.app.Config(); err == nil {
 		v.RelayURL = cfg.Relay.URL
+		v.ForwardURL = cfg.Relay.ForwardURL
 	}
 	v.TunnelRunning = b.app.TunnelRunning()
 	v.ConnectedProjects = b.app.ConnectedProjects()
@@ -385,6 +425,7 @@ func captureSummary(rows []store.TrafficCaptureRow) []CaptureView {
 	for _, r := range rows {
 		out = append(out, CaptureView{
 			ID:          r.ID,
+			SessionID:   r.SessionID,
 			At:          r.At.Format(time.RFC3339),
 			Method:      r.Method,
 			URL:         r.URL,
@@ -402,6 +443,7 @@ func captureSummary(rows []store.TrafficCaptureRow) []CaptureView {
 func captureDetail(c *store.TrafficCaptureRow) CaptureView {
 	return CaptureView{
 		ID:          c.ID,
+		SessionID:   c.SessionID,
 		At:          c.At.Format(time.RFC3339),
 		Method:      c.Method,
 		URL:         c.URL,
