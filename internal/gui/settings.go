@@ -24,6 +24,7 @@ import (
 type SettingsView struct {
 	ConfigPath    string   `json:"config_path"`
 	RelayURL      string   `json:"relay_url"`
+	ForwardURL    string   `json:"forward_url"`
 	StorePath     string   `json:"store_path"`
 	StoreDefault  string   `json:"store_default"`
 	TUITheme      string   `json:"tui_theme"`
@@ -42,6 +43,7 @@ type SettingsView struct {
 // every time rather than a patch.
 type SettingsInput struct {
 	RelayURL     string `json:"relay_url"`
+	ForwardURL   string `json:"forward_url"`
 	StorePath    string `json:"store_path"`
 	TUITheme     string `json:"tui_theme"`
 	ProxyAddr    string `json:"proxy_addr"`
@@ -79,6 +81,7 @@ func (b *Bindings) GetSettings() (SettingsView, error) {
 	}
 	v := SettingsView{
 		RelayURL:      cfg.Relay.URL,
+		ForwardURL:    cfg.Relay.ForwardURL,
 		StorePath:     cfg.Store.Path,
 		TUITheme:      cfg.TUI.Theme,
 		ProxyAddr:     cfg.Intercept.ProxyAddr,
@@ -117,6 +120,9 @@ func (b *Bindings) SaveSettings(in SettingsInput) (SettingsView, error) {
 	if err != nil {
 		return SettingsView{}, err
 	}
+	if err := validateHTTPURL("forward URL", in.ForwardURL); err != nil {
+		return SettingsView{}, err
+	}
 	if err := validateAddr("proxy address", in.ProxyAddr); err != nil {
 		return SettingsView{}, err
 	}
@@ -129,6 +135,7 @@ func (b *Bindings) SaveSettings(in SettingsInput) (SettingsView, error) {
 
 	cfg := *cur // copy; writers never mutate the shared snapshot
 	cfg.Relay.URL = relayURL
+	cfg.Relay.ForwardURL = strings.TrimSpace(in.ForwardURL)
 	cfg.Store.Path = strings.TrimSpace(in.StorePath)
 	cfg.TUI.Theme = strings.TrimSpace(in.TUITheme)
 	cfg.Intercept.ProxyAddr = strings.TrimSpace(in.ProxyAddr)
@@ -234,6 +241,19 @@ func normalizeTunnelURL(raw string) (string, error) {
 	default:
 		return "", fmt.Errorf("settings: relay URL must be ws(s):// or http(s)://, got %q", u.Scheme)
 	}
+}
+
+// validateHTTPURL accepts an empty string or an absolute http(s) URL.
+func validateHTTPURL(label, raw string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return fmt.Errorf("settings: %s must be an http(s) URL, got %q", label, raw)
+	}
+	return nil
 }
 
 func validateAddr(label, addr string) error {

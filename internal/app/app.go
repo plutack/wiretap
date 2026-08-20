@@ -341,10 +341,25 @@ func (a *App) Webhooks(ctx context.Context, project string, limit int) ([]store.
 
 // Captures lists the most recent traffic captures (newest-first).
 func (a *App) Captures(ctx context.Context, limit int) ([]store.TrafficCaptureRow, error) {
+	return a.CapturesBySession(ctx, 0, limit)
+}
+
+// CapturesBySession lists the most recent traffic captures (newest-first)
+// for one intercept session; sessionID 0 means all sessions.
+func (a *App) CapturesBySession(ctx context.Context, sessionID int64, limit int) ([]store.TrafficCaptureRow, error) {
 	if a.store == nil {
 		return nil, errors.New("app: store not open")
 	}
-	return a.store.TrafficCaptures(ctx, limit)
+	return a.store.TrafficCapturesBySession(ctx, sessionID, limit)
+}
+
+// InterceptSessions lists recorded interception sessions, newest-first, with
+// capture counts. Backs the GUI's session filter.
+func (a *App) InterceptSessions(ctx context.Context, limit int) ([]store.InterceptSessionRow, error) {
+	if a.store == nil {
+		return nil, errors.New("app: store not open")
+	}
+	return a.store.InterceptSessions(ctx, limit)
 }
 
 // CaptureByID loads one traffic capture with its full headers and bodies
@@ -483,6 +498,10 @@ func (a *App) defaultTunnelFactory(cfg TunnelConfig, st *store.PCStore) TunnelRu
 		relayclient.WithCallbacks(relayclient.Callbacks{
 			OnConnect:    func(projects []string) { a.SetConnectedProjects(projects) },
 			OnDisconnect: func(_ error) { a.SetConnectedProjects(nil) },
+			// Auto-forward: deliver every stored webhook to the configured
+			// local URL (relay.forward_url). Fires after persistence + ACK,
+			// so a failed delivery never loses the webhook.
+			OnWebhook: a.autoForwardWebhook,
 		}),
 	}
 	if wt := newWebhookTransformer(a.scriptEngine, st, a.onScriptError); wt != nil {
@@ -500,8 +519,34 @@ func (a *App) defaultTunnelFactory(cfg TunnelConfig, st *store.PCStore) TunnelRu
 	)
 }
 
+// forwardTimeout bounds one auto-forward delivery attempt.
+const forwardTimeout = 30 * time.Second
+
+// autoForwardWebhook implements relay.forward_url: when configured, POST the
+// just-stored webhook to that URL in the background. The config is read per
+// delivery so a settings change applies immediately. Failures are logged and
+// dropped — the webhook is already persisted, and a manual replay from the
+// GUI/CLI remains available.
+func (a *App) autoForwardWebhook(row store.WebhookRow) {
+	cfg, err := a.Config()
+	if err != nil || cfg.Relay.ForwardURL == "" {
+		return
+	}
+	target := cfg.Relay.ForwardURL
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), forwardTimeout)
+		defer cancel()
+		status, err := a.ReplayWebhook(ctx, row.Project, row.Seq, target)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "wiretap: forward %s/%d -> %s: %v\n", row.Project, row.Seq, target, err)
+			return
+		}
+		fmt.Fprintf(os.Stderr, "wiretap: forwarded %s/%d -> %s (HTTP %d)\n", row.Project, row.Seq, target, status)
+	}()
+}
+
 // parseHeaders decodes the JSON-encoded http.Header stored in the webhooks
-// table. Returns an empty header on any parse error (best-effort replay).
+// table. Returns an empty header on any parse failure (best-effort replay).
 func parseHeaders(jsonStr string) http.Header {
 	h := http.Header{}
 	if jsonStr == "" {
