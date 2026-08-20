@@ -1,5 +1,14 @@
 import { html } from "../vendor/preact/index.js";
 
+// fmtSessionLabel renders "Aug 20 · 14:05" from an RFC3339 timestamp.
+function fmtSessionLabel(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso || "unknown";
+  const day = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return `${day} · ${time}`;
+}
+
 const METHOD_OPTIONS = ["", "GET", "POST", "PUT", "PATCH", "DELETE"];
 const STATUS_OPTIONS = [
   ["", "All status families"],
@@ -31,6 +40,9 @@ export function Sidebar({
   projects,
   selectedProject,
   onSelectProject,
+  sessions = [],
+  selectedSession = 0,
+  onSelectSession,
   scripts,
   onScriptToggle,
   onScriptSelect,
@@ -62,6 +74,35 @@ export function Sidebar({
         ${projects.length === 0
           ? html`<p class="px-2 py-2 text-[10px] leading-relaxed text-neutral-600">
               Connect a relay to discover project sources.
+            </p>`
+          : null}
+      </>
+
+      <${NavSection} title="Sessions" count=${sessions.length}>
+        <button
+          class="nav-item ${selectedSession === 0 ? "active" : ""}"
+          onClick=${() => onSelectSession && onSelectSession(0)}
+        >
+          <span class="nav-glyph">∞</span>
+          <span class="nav-label">All traffic</span>
+        </button>
+        ${sessions.map(
+          (s) => html`<button
+            key=${s.id}
+            class="nav-item ${selectedSession === s.id ? "active" : ""}"
+            title=${`session #${s.id} · ${s.shell || "shell"} · ${s.proxy_addr || ""}`}
+            onClick=${() => onSelectSession && onSelectSession(s.id)}
+          >
+            <span class="nav-glyph">#${s.id}</span>
+            <span class="nav-label">${fmtSessionLabel(s.started_at)}</span>
+            ${!s.ended_at
+              ? html`<span class="live-dot online" title="running"></span>`
+              : html`<span class="nav-count">${s.captures}</span>`}
+          </button>`,
+        )}
+        ${sessions.length === 0
+          ? html`<p class="px-2 py-2 text-[10px] leading-relaxed text-neutral-600">
+              Run <code>wiretap intercept start</code> to record a session.
             </p>`
           : null}
       </>

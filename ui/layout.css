@@ -9,8 +9,8 @@
   --wt-line: rgba(255, 255, 255, 0.075);
   --wt-line-strong: rgba(255, 255, 255, 0.13);
   --wt-text: #edf1f3;
-  --wt-muted: #889198;
-  --wt-dim: #555f66;
+  --wt-muted: #98a2aa; /* raised from #889198 for readability */
+  --wt-dim: #6a747d; /* raised from #555f66 for readability */
   --wt-accent: #62d9bf;
   --wt-accent-soft: rgba(98, 217, 191, 0.11);
   --wt-blue: #72a9ff;
@@ -157,7 +157,7 @@ textarea:focus-visible {
 .brand-version {
   color: var(--wt-dim);
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 9px;
+  font-size: 10.5px;
   letter-spacing: .04em;
 }
 
@@ -184,7 +184,7 @@ textarea:focus-visible {
   border-radius: 999px;
   background: rgba(255,255,255,.025);
   color: var(--wt-muted);
-  font-size: 10px;
+  font-size: 11.5px;
   line-height: 1;
 }
 
@@ -284,7 +284,7 @@ textarea:focus-visible {
   justify-content: space-between;
   margin: 0 8px 8px;
   color: var(--wt-dim);
-  font-size: 9px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: .14em;
   text-transform: uppercase;
@@ -296,7 +296,7 @@ textarea:focus-visible {
   background: rgba(255,255,255,.045);
   color: #747e84;
   font-family: "JetBrains Mono", monospace;
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .nav-item {
@@ -336,7 +336,7 @@ textarea:focus-visible {
   background: rgba(255,255,255,.045);
   color: #778187;
   font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
+  font-size: 10.5px;
 }
 
 .nav-item.active .nav-glyph {
@@ -348,7 +348,7 @@ textarea:focus-visible {
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 530;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -404,17 +404,29 @@ textarea:focus-visible {
   line-height: 1;
 }
 
+/* Sidebar selects: same visual language as the design-system .select in
+   input.css (solid panel background, visible border, custom chevron) so
+   dropdowns never drift off-palette. */
 .nav-select {
   width: 100%;
   margin-bottom: 7px;
   padding: 7px 28px 7px 9px;
-  border: 1px solid var(--wt-line);
+  border: 1px solid var(--wt-line-strong);
   border-radius: 7px;
   appearance: none;
-  background: #111519;
-  color: #abb4b9;
-  font-size: 10px;
+  background-color: var(--wt-panel-raised);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23a3a3a3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 1rem;
+  color: var(--wt-text);
+  font-size: 12px;
   cursor: pointer;
+}
+
+.nav-select:hover {
+  border-color: var(--wt-line-strong);
+  background-color: var(--wt-panel-soft);
 }
 
 .navigator-footer {
@@ -422,7 +434,7 @@ textarea:focus-visible {
   border-top: 1px solid var(--wt-line);
   color: var(--wt-dim);
   font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
+  font-size: 10.5px;
   line-height: 1.6;
 }
 
@@ -459,7 +471,7 @@ textarea:focus-visible {
   background: transparent;
   color: var(--wt-muted);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 580;
 }
 
@@ -472,7 +484,7 @@ textarea:focus-visible {
 .mode-count {
   color: var(--wt-dim);
   font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
+  font-size: 10.5px;
 }
 
 .mode-tab.active .mode-count { color: var(--wt-accent); }
@@ -492,7 +504,7 @@ textarea:focus-visible {
   border-radius: 9px;
   background: rgba(5,7,9,.72);
   color: var(--wt-text);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .search-shell input:focus {
@@ -530,7 +542,7 @@ textarea:focus-visible {
   border-radius: 4px;
   color: var(--wt-dim);
   font-family: "JetBrains Mono", monospace;
-  font-size: 8px;
+  font-size: 10px;
   transform: translateY(-50%);
 }
 
@@ -538,7 +550,7 @@ textarea:focus-visible {
   margin-left: auto;
   color: var(--wt-dim);
   font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
+  font-size: 10.5px;
   white-space: nowrap;
 }
 
@@ -561,7 +573,7 @@ textarea:focus-visible {
   padding: 8px 12px;
   border-bottom: 1px solid var(--wt-line);
   color: var(--wt-dim);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: .13em;
   text-align: left;
@@ -582,7 +594,7 @@ textarea:focus-visible {
   height: 46px;
   padding: 5px 12px;
   color: #aeb6bb;
-  font-size: 10px;
+  font-size: 11.5px;
   vertical-align: middle;
 }
 
@@ -591,7 +603,7 @@ textarea:focus-visible {
   overflow: hidden;
   color: #dce1e4;
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 10px;
+  font-size: 11.5px;
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -603,7 +615,7 @@ textarea:focus-visible {
   margin-top: 2px;
   color: var(--wt-dim);
   font-family: "JetBrains Mono", monospace;
-  font-size: 8px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -615,7 +627,7 @@ textarea:focus-visible {
   place-items: center;
   border-radius: 5px;
   font-family: "JetBrains Mono", monospace;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 750;
   letter-spacing: .04em;
 }
@@ -625,7 +637,7 @@ textarea:focus-visible {
   align-items: center;
   gap: 6px;
   font-family: "JetBrains Mono", monospace;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 600;
 }
 
@@ -641,7 +653,7 @@ textarea:focus-visible {
 .mono-dim {
   color: var(--wt-dim);
   font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
+  font-size: 10.5px;
 }
 
 .empty-workspace {
@@ -676,7 +688,7 @@ textarea:focus-visible {
 }
 
 .empty-card h2 { margin: 0; font-size: 14px; font-weight: 630; }
-.empty-card p { margin: 8px auto 0; color: var(--wt-muted); font-size: 10px; line-height: 1.7; }
+.empty-card p { margin: 8px auto 0; color: var(--wt-muted); font-size: 11.5px; line-height: 1.7; }
 
 /* Inspector -------------------------------------------------------------- */
 .detail-pane,
@@ -726,7 +738,7 @@ textarea:focus-visible {
   overflow: hidden;
   color: var(--wt-text);
   font-family: "JetBrains Mono", monospace;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -735,7 +747,7 @@ textarea:focus-visible {
 .inspector-subtitle {
   margin-top: 2px;
   color: var(--wt-dim);
-  font-size: 9px;
+  font-size: 10.5px;
 }
 
 .inspector-close {
@@ -762,7 +774,7 @@ textarea:focus-visible {
   gap: 8px;
   margin: 0 0 7px;
   color: var(--wt-dim);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 750;
   letter-spacing: .14em;
   text-transform: uppercase;
@@ -787,7 +799,7 @@ textarea:focus-visible {
   overflow-wrap: anywhere;
   color: #cdd4d8;
   font-family: "JetBrains Mono", monospace;
-  font-size: 10px;
+  font-size: 11.5px;
   line-height: 1.6;
 }
 
@@ -820,7 +832,7 @@ textarea:focus-visible {
   background: #090c0e;
   color: #d6dde0;
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.65;
 }
 
@@ -829,7 +841,7 @@ textarea:focus-visible {
   background: #090c0e !important;
   color: #d6dde0 !important;
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace !important;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.65;
 }
 
@@ -859,7 +871,7 @@ textarea:focus-visible {
   background: #171c20;
   color: #dbe1e4;
   box-shadow: 0 16px 45px rgba(0,0,0,.45);
-  font-size: 10px;
+  font-size: 11.5px;
   animation: toast-in 140ms ease-out;
 }
 

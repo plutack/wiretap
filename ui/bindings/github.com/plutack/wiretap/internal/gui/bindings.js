@@ -114,12 +114,14 @@ export function GetWebhook(project, seq) {
 }
 
 /**
- * ListCaptures returns the most recent traffic captures, newest-first. Bodies
- * and full header maps are omitted (use GetCapture for the detail payload).
+ * ListCaptures returns the most recent traffic captures, newest-first,
+ * optionally filtered to one interception session (0 = all). Bodies and full
+ * header maps are omitted (use GetCapture for the detail payload).
+ * @param {number} sessionID
  * @returns {$CancellablePromise<$models.CaptureView[]>}
  */
-export function ListCaptures() {
-    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListCaptures").then(/** @type {($result: any) => any} */(($result) => {
+export function ListCaptures(sessionID) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListCaptures", sessionID).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType6($result);
     }));
 }
@@ -136,6 +138,17 @@ export function ListScripts() {
 }
 
 /**
+ * ListSessions returns recorded interception sessions, newest-first, for the
+ * sidebar's session filter.
+ * @returns {$CancellablePromise<$models.SessionView[]>}
+ */
+export function ListSessions() {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListSessions").then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType9($result);
+    }));
+}
+
+/**
  * ListWebhooks returns the most recent webhooks, newest-first, optionally
  * filtered by project (empty string = all projects). Body/Headers are omitted
  * (use GetWebhook for the full payload).
@@ -144,7 +157,7 @@ export function ListScripts() {
  */
 export function ListWebhooks(project) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListWebhooks", project).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType8($result);
+        return $$createType10($result);
     }));
 }
 
@@ -158,7 +171,7 @@ export function ListWebhooks(project) {
  */
 export function RegisterRelay($in) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.RegisterRelay", $in).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType9($result);
+        return $$createType11($result);
     }));
 }
 
@@ -173,7 +186,7 @@ export function RegisterRelay($in) {
  */
 export function ReplayWebhook(project, seq, targetURL) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ReplayWebhook", project, seq, targetURL).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType10($result);
+        return $$createType12($result);
     }));
 }
 
@@ -223,7 +236,7 @@ export function SetScriptEnabled(id, enabled) {
  */
 export function Status() {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.Status").then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType11($result);
+        return $$createType13($result);
     }));
 }
 
@@ -237,7 +250,7 @@ export function Status() {
  */
 export function TestScript(req) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.TestScript", req).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType12($result);
+        return $$createType14($result);
     }));
 }
 
@@ -250,8 +263,10 @@ const $$createType4 = $models.SettingsView.createFrom;
 const $$createType5 = $models.WebhookView.createFrom;
 const $$createType6 = $Create.Array($$createType2);
 const $$createType7 = $Create.Array($$createType3);
-const $$createType8 = $Create.Array($$createType5);
-const $$createType9 = $models.RegisterView.createFrom;
-const $$createType10 = $models.ReplayResult.createFrom;
-const $$createType11 = $models.StatusView.createFrom;
-const $$createType12 = $models.ScriptTestView.createFrom;
+const $$createType8 = $models.SessionView.createFrom;
+const $$createType9 = $Create.Array($$createType8);
+const $$createType10 = $Create.Array($$createType5);
+const $$createType11 = $models.RegisterView.createFrom;
+const $$createType12 = $models.ReplayResult.createFrom;
+const $$createType13 = $models.StatusView.createFrom;
+const $$createType14 = $models.ScriptTestView.createFrom;

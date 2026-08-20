@@ -23,6 +23,13 @@ export class CaptureView {
              */
             this["id"] = 0;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["session_id"] = undefined;
+        }
         if (!("at" in $$source)) {
             /**
              * RFC3339 UTC
@@ -104,14 +111,14 @@ export class CaptureView {
      * @returns {CaptureView}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType1;
-        const $$createField8_0 = $$createType1;
+        const $$createField6_0 = $$createType1;
+        const $$createField9_0 = $$createType1;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("req_headers" in $$parsedSource) {
-            $$parsedSource["req_headers"] = $$createField5_0($$parsedSource["req_headers"]);
+            $$parsedSource["req_headers"] = $$createField6_0($$parsedSource["req_headers"]);
         }
         if ("resp_headers" in $$parsedSource) {
-            $$parsedSource["resp_headers"] = $$createField8_0($$parsedSource["resp_headers"]);
+            $$parsedSource["resp_headers"] = $$createField9_0($$parsedSource["resp_headers"]);
         }
         return new CaptureView(/** @type {Partial<CaptureView>} */($$parsedSource));
     }
@@ -629,6 +636,76 @@ export class ScriptView {
 }
 
 /**
+ * SessionView is the GUI DTO for one interception session (a `wiretap
+ * intercept start` run). EndedAt is empty while the session is running — or
+ * when it crashed without cleanup.
+ */
+export class SessionView {
+    /**
+     * Creates a new SessionView instance.
+     * @param {Partial<SessionView>} [$$source = {}] - The source object to create the SessionView.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["id"] = 0;
+        }
+        if (!("started_at" in $$source)) {
+            /**
+             * RFC3339 UTC
+             * @member
+             * @type {string}
+             */
+            this["started_at"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * empty = running/crashed
+             * @member
+             * @type {string | undefined}
+             */
+            this["ended_at"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["shell"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["proxy_addr"] = undefined;
+        }
+        if (!("captures" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["captures"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SessionView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {SessionView}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new SessionView(/** @type {Partial<SessionView>} */($$parsedSource));
+    }
+}
+
+/**
  * SettingsInput is the editable subset SaveSettings writes back. Empty
  * strings are meaningful ("use the default"), so the whole form is sent
  * every time rather than a patch.
@@ -645,6 +722,13 @@ export class SettingsInput {
              * @type {string}
              */
             this["relay_url"] = "";
+        }
+        if (!("forward_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["forward_url"] = "";
         }
         if (!("store_path" in $$source)) {
             /**
@@ -720,6 +804,13 @@ export class SettingsView {
              * @type {string}
              */
             this["relay_url"] = "";
+        }
+        if (!("forward_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["forward_url"] = "";
         }
         if (!("store_path" in $$source)) {
             /**
@@ -808,10 +899,10 @@ export class SettingsView {
      * @returns {SettingsView}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType0;
+        const $$createField11_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("projects" in $$parsedSource) {
-            $$parsedSource["projects"] = $$createField10_0($$parsedSource["projects"]);
+            $$parsedSource["projects"] = $$createField11_0($$parsedSource["projects"]);
         }
         return new SettingsView(/** @type {Partial<SettingsView>} */($$parsedSource));
     }
@@ -848,6 +939,13 @@ export class StatusView {
              */
             this["relay_url"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["forward_url"] = undefined;
+        }
         if (!("tunnel_running" in $$source)) {
             /**
              * @member
@@ -872,10 +970,10 @@ export class StatusView {
      * @returns {StatusView}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType0;
+        const $$createField5_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("connected_projects" in $$parsedSource) {
-            $$parsedSource["connected_projects"] = $$createField4_0($$parsedSource["connected_projects"]);
+            $$parsedSource["connected_projects"] = $$createField5_0($$parsedSource["connected_projects"]);
         }
         return new StatusView(/** @type {Partial<StatusView>} */($$parsedSource));
     }

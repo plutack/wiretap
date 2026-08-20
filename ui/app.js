@@ -55,6 +55,8 @@ function App() {
   const [scripts, setScripts] = useState([]);
 
   const [project, setProject] = useState("");
+  const [sessions, setSessions] = useState([]);
+  const [sessionFilter, setSessionFilter] = useState(0); // 0 = all sessions
   const [methodFilter, setMethodFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
@@ -87,9 +89,16 @@ function App() {
   };
   const loadCaptures = async () => {
     try {
-      setCaptures((await api.listCaptures()) || []);
+      setCaptures((await api.listCaptures(sessionFilter)) || []);
     } catch (e) {
       showToast("list captures: " + e);
+    }
+  };
+  const loadSessions = async () => {
+    try {
+      setSessions((await api.listSessions()) || []);
+    } catch (e) {
+      showToast("list sessions: " + e);
     }
   };
   const loadScripts = async () => {
@@ -110,11 +119,18 @@ function App() {
 
   useEffect(() => {
     if (activeTab === "settings") return undefined;
-    const tick = () => (activeTab === "webhooks" ? loadWebhooks() : loadCaptures());
+    const tick = () => {
+      if (activeTab === "webhooks") {
+        loadWebhooks();
+      } else {
+        loadCaptures();
+        loadSessions();
+      }
+    };
     tick();
     const t = setInterval(tick, 2000);
     return () => clearInterval(t);
-  }, [activeTab, project]);
+  }, [activeTab, project, sessionFilter]);
 
   useEffect(() => {
     if (!selection) return undefined;
@@ -205,6 +221,7 @@ function App() {
     if (selection.kind === "webhook")
       return html`<${WebhookDetail}
         webhook=${selection.data}
+        defaultTarget=${(status && status.forward_url) || ""}
         onReplay=${api.replayWebhook}
         onExport=${(target, client) =>
           api.exportWebhook(selection.data.project, selection.data.seq, target, client)}
@@ -255,6 +272,12 @@ function App() {
         projects=${(status && status.connected_projects) || []}
         selectedProject=${project}
         onSelectProject=${setProject}
+        sessions=${sessions}
+        selectedSession=${sessionFilter}
+        onSelectSession=${(id) => {
+          setSessionFilter(id);
+          if (activeTab !== "traffic") changeTab("traffic");
+        }}
         scripts=${scripts}
         onScriptToggle=${toggleScript}
         onScriptSelect=${openScript}
