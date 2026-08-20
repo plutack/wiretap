@@ -60,9 +60,14 @@ func newInterceptStartCmd(version string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// Stop carries the session's own background context so the cleanup
-			// still runs if the caller's context is already cancelled.
-			defer func() { _ = sess.Stop(context.Background()) }()
+			if err := writePIDFile(deps.ConfigDir, os.Getpid()); err != nil {
+				_ = sess.Stop(context.Background())
+				return fmt.Errorf("write pid file: %w", err)
+			}
+			defer func() {
+				removePIDFile(deps.ConfigDir)
+				_ = sess.Stop(context.Background())
+			}()
 
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "wiretap: interception proxy listening at http://%s\n", sess.ProxyAddr())
@@ -74,7 +79,21 @@ func newInterceptStartCmd(version string) *cobra.Command {
 				waitInterrupt(cmd.Context())
 				return nil
 			}
-			return interceptSpawn(sess, cmd.Context(), kind)
+			// Shell mode: without a handler, SIGTERM (what `wiretap intercept
+			// stop` sends) would kill this process outright — the deferred
+			// cleanup would never run and the spawned shell would be orphaned
+			// with proxy env pointing at a dead listener. NotifyContext cancels
+			// the exec.CommandContext inside SpawnShell, which tears down the
+			// child shell, lets Run return, and unwinds the defers above.
+			sctx, cancelSignals := signal.NotifyContext(cmd.Context(), syscall.SIGTERM)
+			defer cancelSignals()
+			err = interceptSpawn(sess, sctx, kind)
+			if sctx.Err() != nil {
+				// Signal-triggered shutdown is a clean exit, not an error.
+				fmt.Fprintln(out, "wiretap: interception session stopped")
+				return nil
+			}
+			return err
 		},
 	}
 	cmd.Flags().BoolVar(&noShell, "no-shell", false, "start the proxy + API without spawning a shell")
@@ -96,12 +115,26 @@ func newInterceptStopCmd() *cobra.Command {
 			}
 			kind := detectShellKind(shell, cfg.Intercept.Shell)
 			configDir, _ := m.Dir()
+			out := cmd.OutOrStdout()
+
+			if pid, err := readPIDFile(configDir); err == nil {
+				if processAlive(pid) {
+					if err := terminateProcess(pid); err != nil {
+						fmt.Fprintf(out, "wiretap: signal pid %d: %v\n", pid, err)
+					} else {
+						fmt.Fprintf(out, "wiretap: stopping intercept session (pid %d)\n", pid)
+					}
+					if !waitProcessExit(pid) {
+						fmt.Fprintf(out, "wiretap: pid %d did not exit within %s; listeners may still be open\n", pid, pidStopTimeout)
+					}
+				}
+				removePIDFile(configDir)
+			}
 
 			files, err := interceptCleanup(kind, configDir)
 			if err != nil {
 				return err
 			}
-			out := cmd.OutOrStdout()
 			if len(files) == 0 {
 				fmt.Fprintln(out, "wiretap: no startup files found for", kind)
 				return nil
