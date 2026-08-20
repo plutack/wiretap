@@ -369,6 +369,7 @@ function App() {
                   ${followButton}
                   ${queuedCount > 0 ? html`<button class="new-events-pill" onClick=${() => { setFollow(true); setPausedRows(null); setQueuedCount(0); }}>${queuedCount} new event${queuedCount === 1 ? "" : "s"}</button>` : null}
                 </span>`}
+              />
               <main class="workspace-main">
                 <section class="event-stage">
                   ${activeTab === "webhooks"
