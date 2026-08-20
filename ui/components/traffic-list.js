@@ -29,8 +29,8 @@ export function TrafficList({ captures, onSelect, selectedId }) {
       <col style="width: 82px" />
       <col />
       <col style="width: 78px" />
+      <col style="width: 170px" />
       <col style="width: 112px" />
-      <col style="width: 76px" />
     </colgroup>
     <thead>
       <tr>
@@ -59,10 +59,14 @@ export function TrafficList({ captures, onSelect, selectedId }) {
             <span class="signal-secondary ${repeatHost ? "repeat" : ""}">${destination.host} · capture ${capture.id}</span>
           </td>
           <td><${StatusBadge} status=${capture.status} /></td>
-          <td class="mono-dim">
-            ↑ ${fmtBytes(capture.req_body_len) || "0 B"} · ↓ ${fmtBytes(capture.resp_body_len) || "0 B"}
+          <td class="transfer-cell">
+            <span class="transfer-values">
+              <span class="transfer-up" title="Request upload">↑ ${fmtBytes(capture.req_body_len) || "0 B"}</span>
+              <span class="transfer-separator">·</span>
+              <span class="transfer-down" title="Response download">↓ ${fmtBytes(capture.resp_body_len) || "0 B"}</span>
+            </span>
           </td>
-          <td class="mono-dim">${fmtTime(capture.at)}</td>
+          <td class="mono-dim time-cell">${fmtTime(capture.at)}</td>
         </tr>`;
       })}
     </tbody>
