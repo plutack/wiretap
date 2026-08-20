@@ -34,7 +34,7 @@ body,
    text-* utilities) keys off the root font size, so the Display setting in
    the GUI can scale the whole interface with one variable. */
 html {
-  font-size: calc(16px * var(--ui-font-scale, 1));
+  font-size: calc(17px * var(--ui-font-scale, 1));
 }
 
 /* Compact density tightens the event-table rows (Display setting). */
@@ -175,8 +175,7 @@ textarea:focus-visible {
 }
 
 .system-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(168px, 1fr));
+  display: flex;
   min-width: 0;
   align-items: center;
   gap: 8px;
@@ -186,9 +185,9 @@ textarea:focus-visible {
 
 .system-pill {
   display: grid;
-  grid-template-columns: 6px auto minmax(0, 1fr);
-  width: 168px;
-  min-width: 0;
+  grid-template-columns: 6px max-content max-content;
+  width: max-content;
+  min-width: 10.5rem;
   box-sizing: border-box;
   align-items: center;
   column-gap: 7px;
@@ -215,11 +214,9 @@ textarea:focus-visible {
 }
 
 .system-pill strong {
-  overflow: hidden;
   color: #cbd2d6;
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   font-weight: 600;
-  text-overflow: ellipsis;
 }
 
 .live-dot {
@@ -578,7 +575,7 @@ textarea:focus-visible {
 .settings-status-line {
   display: flex;
   min-width: 0;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -588,8 +585,12 @@ textarea:focus-visible {
 }
 
 .settings-status-detail .font-mono {
+  display: inline-flex;
+  align-items: center;
   overflow-wrap: anywhere;
   color: var(--wt-text);
+  line-height: 1.35;
+  vertical-align: middle;
 }
 
 .status-line-dot {
