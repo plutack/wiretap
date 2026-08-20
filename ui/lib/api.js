@@ -5,14 +5,20 @@
 // and gives one place to add error shaping later.
 import {
   DeleteScript,
+  ExportCapture,
+  ExportTargets,
+  ExportWebhook,
   GetScript,
   GetCapture,
+  GetSettings,
   GetWebhook,
   ListCaptures,
   ListScripts,
   ListWebhooks,
+  RegisterRelay,
   ReplayWebhook,
   SaveScript,
+  SaveSettings,
   SetScriptEnabled,
   Status,
   TestScript,
@@ -31,4 +37,11 @@ export const api = {
   setScriptEnabled: (id, enabled) => SetScriptEnabled(id, enabled),
   deleteScript: (id) => DeleteScript(id),
   testScript: (req) => TestScript(req),
+  exportTargets: () => ExportTargets(),
+  exportCapture: (id, target, client) => ExportCapture(id, target, client),
+  exportWebhook: (project, seq, target, client) =>
+    ExportWebhook(project, seq, target, client),
+  getSettings: () => GetSettings(),
+  saveSettings: (input) => SaveSettings(input),
+  registerRelay: (input) => RegisterRelay(input),
 };

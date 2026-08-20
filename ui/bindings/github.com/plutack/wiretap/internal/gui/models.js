@@ -118,6 +118,152 @@ export class CaptureView {
 }
 
 /**
+ * ClientView is one concrete library/tool within a TargetView.
+ */
+export class ClientView {
+    /**
+     * Creates a new ClientView instance.
+     * @param {Partial<ClientView>} [$$source = {}] - The source object to create the ClientView.
+     */
+    constructor($$source = {}) {
+        if (!("key" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["key"] = "";
+        }
+        if (!("title" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["title"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ClientView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ClientView}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ClientView(/** @type {Partial<ClientView>} */($$parsedSource));
+    }
+}
+
+/**
+ * RegisterInput is the relay registration form: the relay URL (HTTPS base or
+ * wss tunnel form — both accepted), the admin token (used once, not stored),
+ * the project paths to claim, and an optional display name.
+ */
+export class RegisterInput {
+    /**
+     * Creates a new RegisterInput instance.
+     * @param {Partial<RegisterInput>} [$$source = {}] - The source object to create the RegisterInput.
+     */
+    constructor($$source = {}) {
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
+        if (!("admin_token" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["admin_token"] = "";
+        }
+        if (!("projects" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["projects"] = [];
+        }
+        if (!("display_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["display_name"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RegisterInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RegisterInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField2_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("projects" in $$parsedSource) {
+            $$parsedSource["projects"] = $$createField2_0($$parsedSource["projects"]);
+        }
+        return new RegisterInput(/** @type {Partial<RegisterInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * RegisterView reports a successful registration: the assigned client id,
+ * the claimed projects, and the tunnel URL written to the config.
+ */
+export class RegisterView {
+    /**
+     * Creates a new RegisterView instance.
+     * @param {Partial<RegisterView>} [$$source = {}] - The source object to create the RegisterView.
+     */
+    constructor($$source = {}) {
+        if (!("client_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["client_id"] = "";
+        }
+        if (!("projects" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["projects"] = [];
+        }
+        if (!("tunnel_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["tunnel_url"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RegisterView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RegisterView}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("projects" in $$parsedSource) {
+            $$parsedSource["projects"] = $$createField1_0($$parsedSource["projects"]);
+        }
+        return new RegisterView(/** @type {Partial<RegisterView>} */($$parsedSource));
+    }
+}
+
+/**
  * ReplayResult is the return value of ReplayWebhook: the upstream HTTP status.
  */
 export class ReplayResult {
@@ -483,6 +629,195 @@ export class ScriptView {
 }
 
 /**
+ * SettingsInput is the editable subset SaveSettings writes back. Empty
+ * strings are meaningful ("use the default"), so the whole form is sent
+ * every time rather than a patch.
+ */
+export class SettingsInput {
+    /**
+     * Creates a new SettingsInput instance.
+     * @param {Partial<SettingsInput>} [$$source = {}] - The source object to create the SettingsInput.
+     */
+    constructor($$source = {}) {
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
+        if (!("store_path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["store_path"] = "";
+        }
+        if (!("tui_theme" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["tui_theme"] = "";
+        }
+        if (!("proxy_addr" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["proxy_addr"] = "";
+        }
+        if (!("local_api_addr" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["local_api_addr"] = "";
+        }
+        if (!("shell" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["shell"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SettingsInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {SettingsInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new SettingsInput(/** @type {Partial<SettingsInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * SettingsView is the full settings payload: current config values, resolved
+ * paths for display, and the relay registration state (credentials minus the
+ * secret token).
+ */
+export class SettingsView {
+    /**
+     * Creates a new SettingsView instance.
+     * @param {Partial<SettingsView>} [$$source = {}] - The source object to create the SettingsView.
+     */
+    constructor($$source = {}) {
+        if (!("config_path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["config_path"] = "";
+        }
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
+        if (!("store_path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["store_path"] = "";
+        }
+        if (!("store_default" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["store_default"] = "";
+        }
+        if (!("tui_theme" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["tui_theme"] = "";
+        }
+        if (!("proxy_addr" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["proxy_addr"] = "";
+        }
+        if (!("local_api_addr" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["local_api_addr"] = "";
+        }
+        if (!("shell" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["shell"] = "";
+        }
+        if (!("registered" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["registered"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["client_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["projects"] = undefined;
+        }
+        if (!("creds_path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["creds_path"] = "";
+        }
+        if (!("tunnel_running" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["tunnel_running"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SettingsView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {SettingsView}
+     */
+    static createFrom($$source = {}) {
+        const $$createField10_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("projects" in $$parsedSource) {
+            $$parsedSource["projects"] = $$createField10_0($$parsedSource["projects"]);
+        }
+        return new SettingsView(/** @type {Partial<SettingsView>} */($$parsedSource));
+    }
+}
+
+/**
  * StatusView is the status-bar payload: build version plus the resolved app
  * state the GUI shows in its header.
  */
@@ -543,6 +878,63 @@ export class StatusView {
             $$parsedSource["connected_projects"] = $$createField4_0($$parsedSource["connected_projects"]);
         }
         return new StatusView(/** @type {Partial<StatusView>} */($$parsedSource));
+    }
+}
+
+/**
+ * TargetView is one snippet language in the export dropdown, with its
+ * available clients. Mirrors export.Target.
+ */
+export class TargetView {
+    /**
+     * Creates a new TargetView instance.
+     * @param {Partial<TargetView>} [$$source = {}] - The source object to create the TargetView.
+     */
+    constructor($$source = {}) {
+        if (!("key" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["key"] = "";
+        }
+        if (!("title" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["title"] = "";
+        }
+        if (!("default" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["default"] = "";
+        }
+        if (!("clients" in $$source)) {
+            /**
+             * @member
+             * @type {ClientView[]}
+             */
+            this["clients"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TargetView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TargetView}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType4;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("clients" in $$parsedSource) {
+            $$parsedSource["clients"] = $$createField3_0($$parsedSource["clients"]);
+        }
+        return new TargetView(/** @type {Partial<TargetView>} */($$parsedSource));
     }
 }
 
@@ -644,3 +1036,5 @@ export class WebhookView {
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = $Create.Map($Create.Any, $$createType0);
 const $$createType2 = $Create.Map($Create.Any, $Create.Any);
+const $$createType3 = ClientView.createFrom;
+const $$createType4 = $Create.Array($$createType3);

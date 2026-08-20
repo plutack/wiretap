@@ -143,7 +143,19 @@ func New(mgr *config.Manager, opts ...Option) *App {
 // Config returns the loaded config, loading it from the manager on first
 // access. Falls back to Default when the file is missing so the app works
 // zero-touch before `wiretap config init`.
+//
+// The cfg pointer is guarded by a.mu because the GUI settings screen can
+// replace it (SaveConfig/ReloadConfig, settings.go) while the status poller
+// reads it. Callers receive an immutable snapshot: writers always swap in a
+// fresh pointer instead of mutating the shared value.
 func (a *App) Config() (*config.Config, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.configLocked()
+}
+
+// configLocked is Config's body; the caller must hold a.mu.
+func (a *App) configLocked() (*config.Config, error) {
 	if a.cfg != nil {
 		return a.cfg, nil
 	}
@@ -253,9 +265,12 @@ func (a *App) StartTunnel(ctx context.Context) error {
 	tctx, cancel := context.WithCancel(ctx)
 	a.tunnelCtx = tctx
 	a.tunnelCancel = cancel
-	a.tunnelDone = make(chan struct{})
+	// Capture the channel locally: StopTunnel nils a.tunnelDone under the
+	// mutex, so the goroutine must not read the struct field.
+	done := make(chan struct{})
+	a.tunnelDone = done
 	go func() {
-		defer close(a.tunnelDone)
+		defer close(done)
 		_ = runner.Run(tctx)
 	}()
 	return nil

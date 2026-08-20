@@ -9,11 +9,17 @@ export {
 
 export {
     CaptureView,
+    ClientView,
+    RegisterInput,
+    RegisterView,
     ReplayResult,
     ScriptInput,
     ScriptTestRequest,
     ScriptTestView,
     ScriptView,
+    SettingsInput,
+    SettingsView,
     StatusView,
+    TargetView,
     WebhookView
 } from "./models.js";

@@ -82,6 +82,11 @@ textarea:focus-visible {
   overflow: hidden;
 }
 
+/* Settings mode renders no command deck; let the main fill both grid rows. */
+.workspace-main.full {
+  grid-row: 1 / -1;
+}
+
 .event-stage {
   min-width: 0;
   flex: 1;
@@ -232,6 +237,19 @@ textarea:focus-visible {
 .refresh-button:hover {
   border-color: var(--wt-line);
   background: rgba(255,255,255,.04);
+  color: var(--wt-text);
+}
+
+/* Right-side topbar button cluster (settings + refresh). */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.refresh-button.active {
+  border-color: var(--wt-line);
+  background: rgba(255,255,255,.06);
   color: var(--wt-text);
 }
 
