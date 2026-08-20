@@ -94,12 +94,16 @@ func runGUI(parent context.Context, version string) error {
 	})
 
 	wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
-		URL:       "/",
-		Title:     "wiretap",
-		Width:     1024,
-		Height:    720,
-		MinWidth:  720,
-		MinHeight: 480,
+		URL:   "/",
+		Title: "wiretap",
+		// Match the UI's --wt-bg (#080a0c) so the window never flashes white
+		// while the webview boots — the closest thing to "native dark mode"
+		// Wails offers; form-control popups follow the CSS color-scheme:dark.
+		BackgroundColour: application.NewRGB(8, 10, 12),
+		Width:            1024,
+		Height:           720,
+		MinWidth:         720,
+		MinHeight:        480,
 		Linux: application.LinuxWindow{
 			WebviewGpuPolicy: application.WebviewGpuPolicyOnDemand,
 		},

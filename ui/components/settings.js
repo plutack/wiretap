@@ -50,6 +50,7 @@ export function Settings({ onToast, onSaved }) {
       setView(s);
       setForm({
         relay_url: s.relay_url || "",
+        forward_url: s.forward_url || "",
         store_path: s.store_path || "",
         tui_theme: s.tui_theme || "dark",
         proxy_addr: s.proxy_addr || "",
@@ -122,6 +123,19 @@ export function Settings({ onToast, onSaved }) {
             onInput=${set("relay_url")}
           />
         </>
+        <${Field} label="Default forward URL">
+          <${Input}
+            class="font-mono"
+            placeholder="http://127.0.0.1:8080/webhooks (empty = store only)"
+            value=${form.forward_url}
+            onInput=${set("forward_url")}
+          />
+        </>
+        <p class="text-xs text-neutral-500">
+          When set, every incoming webhook is automatically POSTed to this URL
+          right after it is stored — transforms with the on_replay trigger run
+          first, same as a manual replay.
+        </p>
         <div class="flex items-center gap-2 text-xs text-neutral-500">
           <span class="live-dot ${view.tunnel_running ? "online" : ""}"></span>
           tunnel ${view.tunnel_running ? "running" : "stopped"}

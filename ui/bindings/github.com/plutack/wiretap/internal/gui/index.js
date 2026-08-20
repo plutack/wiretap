@@ -17,6 +17,7 @@ export {
     ScriptTestRequest,
     ScriptTestView,
     ScriptView,
+    SessionView,
     SettingsInput,
     SettingsView,
     StatusView,
