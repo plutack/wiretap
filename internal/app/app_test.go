@@ -74,9 +74,6 @@ func TestApp_Config_FallsBackToDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Config: %v", err)
 	}
-	if cfg.ListenAddr != "127.0.0.1:8888" {
-		t.Errorf("ListenAddr = %q, want default 127.0.0.1:8888", cfg.ListenAddr)
-	}
 	if cfg.Intercept.ProxyAddr != "127.0.0.1:8888" {
 		t.Errorf("Intercept.ProxyAddr = %q", cfg.Intercept.ProxyAddr)
 	}

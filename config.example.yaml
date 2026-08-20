@@ -7,11 +7,6 @@
 # platform defaults. Paths may be absolute or relative to the process working
 # directory; absolute paths are recommended for files outside the config dir.
 
-# Compatibility setting retained by the current schema. Interception uses
-# intercept.proxy_addr below; keep these values equal unless you know a caller
-# that still reads listen_addr.
-listen_addr: 127.0.0.1:8888
-
 relay:
   # WebSocket endpoint used by the desktop tunnel. Leave empty to disable relay
   # connectivity. This is a WSS URL, not the HTTPS base URL accepted by
