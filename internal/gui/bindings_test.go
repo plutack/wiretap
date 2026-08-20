@@ -2,6 +2,7 @@ package gui
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -238,6 +239,28 @@ func TestBindings_ListCaptures(t *testing.T) {
 	if second.Method != "GET" || second.Status != 200 ||
 		second.ReqBodyLen != 3 || second.RespBodyLen != 5 {
 		t.Errorf("second capture = %+v, want GET 200 with 3/5 body lengths", second)
+	}
+}
+
+func TestBindings_GetCapturePreservesBinaryBodies(t *testing.T) {
+	t.Parallel()
+	b, a := newBindings(t)
+	binary := []byte{0x89, 0x50, 0x4e, 0x47, 0x00, 0xff}
+	if _, err := a.InsertTrafficCapture(context.Background(), store.TrafficCaptureRow{
+		Method: "GET", URL: "https://cdn.example/image.png", Status: 200,
+		RespHeadersJSON: `{"Content-Type":["image/png"]}`, RespBody: binary,
+	}); err != nil {
+		t.Fatalf("InsertTrafficCapture: %v", err)
+	}
+	got, err := b.GetCapture(1)
+	if err != nil {
+		t.Fatalf("GetCapture: %v", err)
+	}
+	if got.RespBodyBase64 != base64.StdEncoding.EncodeToString(binary) {
+		t.Errorf("RespBodyBase64 = %q, want exact binary encoding", got.RespBodyBase64)
+	}
+	if got.RespBodyLen != len(binary) {
+		t.Errorf("RespBodyLen = %d, want %d", got.RespBodyLen, len(binary))
 	}
 }
 

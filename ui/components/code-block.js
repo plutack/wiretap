@@ -1,68 +1,108 @@
-// CodeBlock renders a request/response body. When the payload is JSON it is
-// pretty-printed (2-space indent) and syntax-highlighted; otherwise the raw
-// text is shown verbatim. A small toolbar lets the user copy the body and, for
-// JSON, toggle between the formatted and raw views. This is what replaces the
-// old unformatted `<pre>` blobs that showed JSON "all over the place".
+// BodyViewer inspects captured request/response bodies without assuming they are
+// UTF-8. Auto follows Content-Type; explicit modes handle incorrect headers.
 import { html } from "../vendor/preact/index.js";
-import { useMemo, useState } from "../vendor/preact/index.js";
+import { useEffect, useMemo, useState } from "../vendor/preact/index.js";
 import { prettyBody, highlightJSON, escapeHTML } from "../lib/format.js";
 import { copyText } from "../lib/clipboard.js";
+import { Dropdown } from "./dropdown.js";
 
-export function CodeBlock({ body, contentType, maxHeightClass = "max-h-72" }) {
-  const [raw, setRaw] = useState(false);
-  const [copyState, setCopyState] = useState("idle");
+const LARGE_BODY_LIMIT = 15 * 1024 * 1024;
 
-  const { text, isJSON } = useMemo(
-    () => prettyBody(body, contentType),
-    [body, contentType],
-  );
+function mediaType(contentType) {
+  return String(contentType || "").split(";", 1)[0].trim().toLowerCase();
+}
 
-  if (!body) {
-    return html`<p class="rounded-md border border-dashed border-neutral-800 px-3 py-2 text-xs text-neutral-600">
-      (empty)
-    </p>`;
+function autoMode(type) {
+  if (/^image\/(png|jpe?g|gif|webp|svg\+xml)$/.test(type)) return "image";
+  if (/json|javascript|xml|html|css|yaml|toml|graphql/.test(type)) return "pretty";
+  if (type.startsWith("text/") || !type) return "text";
+  return "hex";
+}
+
+function decodeBase64(encoded) {
+  if (!encoded) return new Uint8Array();
+  const raw = atob(encoded);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToText(bytes) {
+  return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+}
+
+function hexDump(bytes) {
+  const lines = [];
+  for (let offset = 0; offset < bytes.length; offset += 16) {
+    const chunk = bytes.slice(offset, offset + 16);
+    const hex = Array.from(chunk, (b) => b.toString(16).padStart(2, "0")).join(" ");
+    const ascii = Array.from(chunk, (b) => b >= 32 && b <= 126 ? String.fromCharCode(b) : ".").join("");
+    lines.push(`${offset.toString(16).padStart(8, "0")}  ${hex.padEnd(47, " ")}  |${ascii}|`);
   }
+  return lines.join("\n");
+}
 
-  const showFormatted = isJSON && !raw;
-  const rendered = showFormatted ? text : body;
-  const inner = showFormatted ? highlightJSON(text) : escapeHTML(rendered);
+export function BodyViewer({ body, bodyBase64, bodyLength, contentType, maxHeightClass = "max-h-72" }) {
+  const [mode, setMode] = useState("auto");
+  const [copyState, setCopyState] = useState("idle");
+  const type = mediaType(contentType);
+  const bytes = useMemo(() => bodyBase64 ? decodeBase64(bodyBase64) : new TextEncoder().encode(body || ""), [body, bodyBase64]);
+  const effectiveMode = mode === "auto" ? autoMode(type) : mode;
+  const text = useMemo(() => bytesToText(bytes), [bytes]);
+  const isLarge = (bodyLength || bytes.length) > LARGE_BODY_LIMIT;
+  const imageURL = useMemo(() => {
+    if (effectiveMode !== "image" || !bytes.length || !/^image\//.test(type)) return "";
+    return URL.createObjectURL(new Blob([bytes], { type: type || "application/octet-stream" }));
+  }, [bytes, effectiveMode, type]);
+  useEffect(() => () => { if (imageURL) URL.revokeObjectURL(imageURL); }, [imageURL]);
 
+  if (!bytes.length) return html`<p class="body-empty">(empty)</p>`;
+
+  const pretty = prettyBody(text, contentType);
+  const renderedText = effectiveMode === "pretty" && pretty.isJSON ? pretty.text : text;
+  const inner = effectiveMode === "pretty" && pretty.isJSON
+    ? highlightJSON(renderedText)
+    : escapeHTML(effectiveMode === "hex" ? hexDump(bytes) : renderedText);
   const copy = async () => {
-    try {
-      await copyText(rendered);
-      setCopyState("copied");
-    } catch (error) {
-      console.error("copy body:", error);
-      setCopyState("failed");
-    }
+    try { await copyText(renderedText); setCopyState("copied"); }
+    catch { setCopyState("failed"); }
     setTimeout(() => setCopyState("idle"), 1600);
   };
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([bytes], { type: type || "application/octet-stream" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `wiretap-body.${type.split("/")[1]?.split("+")[0] || "bin"}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
 
-  return html`<div class="overflow-hidden rounded-md border border-neutral-800 bg-neutral-950">
-    <div class="flex items-center gap-2 border-b border-neutral-800 bg-neutral-900/60 px-2 py-1">
-      ${isJSON
-        ? html`<span class="chip bg-brand-500/15 text-brand-300">json</span>`
-        : html`<span class="chip bg-neutral-700/40 text-neutral-400">text</span>`}
-      <div class="ml-auto flex items-center gap-1">
-        ${isJSON
-          ? html`<button
-              onClick=${() => setRaw((r) => !r)}
-              class="rounded px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
-            >
-              ${raw ? "Formatted" : "Raw"}
-            </button>`
-          : null}
-        <button
-          onClick=${copy}
-          class="rounded px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
-        >
-          ${copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
-        </button>
-      </div>
+  return html`<div class="body-viewer">
+    <div class="body-viewer-toolbar">
+      <span class="body-type">${type || "unknown type"}</span>
+      <${Dropdown}
+        value=${mode}
+        options=${[
+          { value: "auto", label: `Auto (${effectiveMode})` },
+          { value: "pretty", label: "Pretty" },
+          { value: "text", label: "Text" },
+          { value: "image", label: "Image" },
+          { value: "raw", label: "Raw" },
+          { value: "hex", label: "Hex" },
+        ]}
+        onChange=${(event) => setMode(event.target.value)}
+        aria-label="Body view mode"
+        class="body-viewer-mode"
+      />
+      <button class="body-action" onClick=${download}>Save</button>
+      ${effectiveMode !== "image" ? html`<button class="body-action" onClick=${copy}>${copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}</button>` : null}
     </div>
-    <pre
-      class="${maxHeightClass} overflow-auto p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words"
-      dangerouslySetInnerHTML=${{ __html: inner }}
-    ></pre>
+    ${isLarge
+      ? html`<div class="body-large-warning">This body is ${Math.round((bodyLength || bytes.length) / 1024 / 1024)} MB. Previewing it may use significant memory. Save the original to inspect it externally.</div>`
+      : effectiveMode === "image" && imageURL
+        ? html`<div class="body-image-wrap"><img class="body-image" src=${imageURL} alt="Captured ${type} body" /></div>`
+        : html`<pre class="${maxHeightClass} body-code" dangerouslySetInnerHTML=${{ __html: inner }}></pre>`}
   </div>`;
 }
+
+export const CodeBlock = BodyViewer;
