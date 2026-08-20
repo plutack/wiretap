@@ -26,6 +26,11 @@ type RelayConfig struct {
 	// URL is the WebSocket endpoint of the relay, e.g.
 	// "wss://relay.example.com/tunnel". Empty means the tunnel is disabled.
 	URL string `yaml:"url"`
+	// ForwardURL, when set, is the local URL every incoming webhook is
+	// automatically POSTed to right after it is stored — the "just deliver it
+	// to my dev server" mode. on_replay scripts run first, exactly like a
+	// manual replay. Empty disables auto-forwarding.
+	ForwardURL string `yaml:"forward_url"`
 	// CredsFile is the path to the client_id/client_token JSON written by
 	// `wiretap relay register`. Defaults to <config dir>/relay-credentials.json.
 	CredsFile string `yaml:"creds_file"`
@@ -67,8 +72,9 @@ type InterceptConfig struct {
 func Default() Config {
 	return Config{
 		Relay: RelayConfig{
-			URL:       "",
-			CredsFile: "",
+			URL:        "",
+			ForwardURL: "",
+			CredsFile:  "",
 		},
 		Store: StoreConfig{Path: ""},
 		TUI:   TUIConfig{Theme: "dark"},

@@ -14,6 +14,12 @@ relay:
   url: ""
   # Example: wss://relay.example.com/tunnel
 
+  # Default forward target: every incoming webhook is automatically POSTed to
+  # this local URL right after it is stored (on_replay scripts run first, the
+  # same as a manual replay). Leave empty to only store webhooks.
+  forward_url: ""
+  # Example: http://127.0.0.1:8080/webhooks
+
   # JSON credentials written by `wiretap relay register --save`. Empty resolves
   # to relay-credentials.json in the wiretap config directory.
   creds_file: ""
