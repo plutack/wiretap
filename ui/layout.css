@@ -176,7 +176,7 @@ textarea:focus-visible {
 
 .system-strip {
   display: grid;
-  grid-template-columns: repeat(3, 154px);
+  grid-template-columns: repeat(3, minmax(168px, 1fr));
   min-width: 0;
   align-items: center;
   gap: 8px;
@@ -186,18 +186,18 @@ textarea:focus-visible {
 
 .system-pill {
   display: grid;
-  grid-template-columns: 6px 8ch minmax(0, 1fr);
-  width: 154px;
+  grid-template-columns: 6px auto minmax(0, 1fr);
+  width: 168px;
   min-width: 0;
   box-sizing: border-box;
   align-items: center;
   column-gap: 7px;
-  padding: 5px 9px;
+  padding: 6px 10px;
   border: 1px solid var(--wt-line);
   border-radius: 999px;
   background: rgba(255,255,255,.025);
   color: var(--wt-muted);
-  font-size: 0.78125rem;
+  font-size: 0.8125rem;
   line-height: 1;
 }
 
@@ -218,7 +218,7 @@ textarea:focus-visible {
   overflow: hidden;
   color: #cbd2d6;
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  font-weight: 500;
+  font-weight: 600;
   text-overflow: ellipsis;
 }
 
@@ -565,6 +565,35 @@ textarea:focus-visible {
   font-family: "JetBrains Mono", monospace;
   font-size: 0.8125rem;
   white-space: nowrap;
+}
+
+.settings-connection-status {
+  display: grid;
+  gap: 5px;
+  color: var(--wt-muted);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.settings-status-line {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-status-detail {
+  padding-left: 14px;
+}
+
+.settings-status-detail .font-mono {
+  overflow-wrap: anywhere;
+  color: var(--wt-text);
+}
+
+.status-line-dot {
+  align-self: center;
 }
 
 /* Event table ------------------------------------------------------------ */
