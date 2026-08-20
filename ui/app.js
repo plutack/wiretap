@@ -13,6 +13,7 @@ import { WebhookDetail } from "./components/webhook-detail.js";
 import { TrafficList } from "./components/traffic-list.js";
 import { TrafficDetail } from "./components/traffic-detail.js";
 import { ScriptEditor } from "./components/script-editor.js";
+import { Settings } from "./components/settings.js";
 
 function Toast({ message }) {
   if (!message) return null;
@@ -108,6 +109,7 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (activeTab === "settings") return undefined;
     const tick = () => (activeTab === "webhooks" ? loadWebhooks() : loadCaptures());
     tick();
     const t = setInterval(tick, 2000);
@@ -204,11 +206,15 @@ function App() {
       return html`<${WebhookDetail}
         webhook=${selection.data}
         onReplay=${api.replayWebhook}
+        onExport=${(target, client) =>
+          api.exportWebhook(selection.data.project, selection.data.seq, target, client)}
         onClose=${closeDetail}
       />`;
     if (selection.kind === "traffic")
       return html`<${TrafficDetail}
         capture=${selection.data}
+        onExport=${(target, client) =>
+          api.exportCapture(selection.data.id, target, client)}
         onClose=${closeDetail}
       />`;
     if (selection.kind === "script")
@@ -227,13 +233,21 @@ function App() {
     setSelection(null);
   };
 
+  const toggleSettings = () => {
+    setSelection(null);
+    setActiveTab((tab) => (tab === "settings" ? "webhooks" : "settings"));
+  };
+
   return html`<div class="workbench">
     <${StatusBar}
       status=${status}
+      settingsActive=${activeTab === "settings"}
+      onOpenSettings=${toggleSettings}
       onRefresh=${() => {
         loadStatus();
         loadScripts();
-        activeTab === "webhooks" ? loadWebhooks() : loadCaptures();
+        if (activeTab === "webhooks") loadWebhooks();
+        else if (activeTab === "traffic") loadCaptures();
       }}
     />
     <div class="workbench-body">
@@ -251,34 +265,40 @@ function App() {
         onStatusFilterChange=${setStatusFilter}
       />
       <div class="workspace">
-        <${CommandDeck}
-          activeTab=${activeTab}
-          onChange=${changeTab}
-          counts=${{ webhooks: visibleWebhooks.length, traffic: visibleCaptures.length }}
-          onSearch=${setSearch}
-          project=${project}
-          filtered=${activeTab === "webhooks" ? visibleWebhooks.length : visibleCaptures.length}
-        />
-        <main class="workspace-main">
-          <section class="event-stage">
-            ${activeTab === "webhooks"
-              ? html`<${WebhookList}
-                  webhooks=${visibleWebhooks}
-                  onSelect=${openWebhook}
-                  selectedKey=${selection && selection.kind === "webhook"
-                    ? `${selection.data.project}-${selection.data.seq}`
-                    : null}
-                />`
-              : html`<${TrafficList}
-                  captures=${visibleCaptures}
-                  onSelect=${openCapture}
-                  selectedId=${selection && selection.kind === "traffic"
-                    ? selection.data.id
-                    : null}
-                />`}
-          </section>
-          ${detailPane()}
-        </main>
+        ${activeTab === "settings"
+          ? html`<main class="workspace-main full">
+              <section class="event-stage">
+                <${Settings} onToast=${showToast} onSaved=${loadStatus} />
+              </section>
+            </main>`
+          : html`<${CommandDeck}
+                activeTab=${activeTab}
+                onChange=${changeTab}
+                counts=${{ webhooks: visibleWebhooks.length, traffic: visibleCaptures.length }}
+                onSearch=${setSearch}
+                project=${project}
+                filtered=${activeTab === "webhooks" ? visibleWebhooks.length : visibleCaptures.length}
+              />
+              <main class="workspace-main">
+                <section class="event-stage">
+                  ${activeTab === "webhooks"
+                    ? html`<${WebhookList}
+                        webhooks=${visibleWebhooks}
+                        onSelect=${openWebhook}
+                        selectedKey=${selection && selection.kind === "webhook"
+                          ? `${selection.data.project}-${selection.data.seq}`
+                          : null}
+                      />`
+                    : html`<${TrafficList}
+                        captures=${visibleCaptures}
+                        onSelect=${openCapture}
+                        selectedId=${selection && selection.kind === "traffic"
+                          ? selection.data.id
+                          : null}
+                      />`}
+                </section>
+                ${detailPane()}
+              </main>`}
       </div>
     </div>
     <${Toast} message=${toast} />

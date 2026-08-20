@@ -5,6 +5,7 @@ import { useState } from "../vendor/preact/index.js";
 import { MethodBadge, HeaderTable } from "./badges.js";
 import { CodeBlock } from "./code-block.js";
 import { DetailPane, DetailBody, BodySection } from "./detail-pane.js";
+import { ExportSnippet } from "./export-snippet.js";
 import { Button, Input } from "./ui.js";
 import { fmtBytes } from "../lib/format.js";
 
@@ -17,7 +18,7 @@ function headerValue(headers, name) {
   return Array.isArray(v) ? v.join(", ") : String(v);
 }
 
-export function WebhookDetail({ webhook, onReplay, onClose }) {
+export function WebhookDetail({ webhook, onReplay, onExport, onClose }) {
   const [targetURL, setTargetURL] = useState("");
   const [replayState, setReplayState] = useState(null); // {status, error}
 
@@ -82,6 +83,13 @@ export function WebhookDetail({ webhook, onReplay, onClose }) {
               : `replayed → HTTP ${replayState.status}`}
         </p>`}
       </section>
+
+      ${onExport
+        ? html`<${ExportSnippet}
+            exportKey=${`webhook-${webhook.project}-${webhook.seq}`}
+            convert=${onExport}
+          />`
+        : null}
     </>
   </>`;
 }

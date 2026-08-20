@@ -5,6 +5,7 @@ import { html } from "../vendor/preact/index.js";
 import { MethodBadge, StatusBadge, HeaderTable } from "./badges.js";
 import { CodeBlock } from "./code-block.js";
 import { DetailPane, DetailBody, BodySection } from "./detail-pane.js";
+import { ExportSnippet } from "./export-snippet.js";
 import { fmtBytes, fmtTime } from "../lib/format.js";
 
 // Pull a header value case-insensitively (header maps are {name:[values]}).
@@ -17,7 +18,7 @@ function headerValue(headers, name) {
   return Array.isArray(v) ? v.join(", ") : String(v);
 }
 
-export function TrafficDetail({ capture, onClose }) {
+export function TrafficDetail({ capture, onExport, onClose }) {
   const reqCT = headerValue(capture.req_headers, "content-type");
   const respCT = headerValue(capture.resp_headers, "content-type");
 
@@ -58,6 +59,13 @@ export function TrafficDetail({ capture, onClose }) {
       >
         <${CodeBlock} body=${capture.resp_body} contentType=${respCT} />
       </>
+
+      ${onExport
+        ? html`<${ExportSnippet}
+            exportKey=${`capture-${capture.id}`}
+            convert=${onExport}
+          />`
+        : null}
     </>
   </>`;
 }
