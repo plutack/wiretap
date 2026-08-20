@@ -73,6 +73,13 @@ export class CaptureView {
              */
             this["req_body"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["req_body_base64"] = undefined;
+        }
         if (!("req_body_len" in $$source)) {
             /**
              * @member
@@ -94,6 +101,13 @@ export class CaptureView {
              */
             this["resp_body"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["resp_body_base64"] = undefined;
+        }
         if (!("resp_body_len" in $$source)) {
             /**
              * @member
@@ -112,13 +126,13 @@ export class CaptureView {
      */
     static createFrom($$source = {}) {
         const $$createField6_0 = $$createType1;
-        const $$createField9_0 = $$createType1;
+        const $$createField10_0 = $$createType1;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("req_headers" in $$parsedSource) {
             $$parsedSource["req_headers"] = $$createField6_0($$parsedSource["req_headers"]);
         }
         if ("resp_headers" in $$parsedSource) {
-            $$parsedSource["resp_headers"] = $$createField9_0($$parsedSource["resp_headers"]);
+            $$parsedSource["resp_headers"] = $$createField10_0($$parsedSource["resp_headers"]);
         }
         return new CaptureView(/** @type {Partial<CaptureView>} */($$parsedSource));
     }
