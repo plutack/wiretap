@@ -17,6 +17,8 @@ export function StatusBar({ status, onRefresh, onOpenSettings, settingsActive })
       ? "negotiating"
       : "offline";
 
+  const version = String(s.version || "dev").replace(/^v/, "");
+
   return html`<header class="topbar">
     <div class="brand-lockup">
       <div class="brand-mark" aria-hidden="true">
@@ -26,7 +28,7 @@ export function StatusBar({ status, onRefresh, onOpenSettings, settingsActive })
       </div>
       <div>
         <div class="brand-name">wiretap</div>
-        <div class="brand-version">signal workbench · v${s.version || "dev"}</div>
+        <div class="brand-version">signal workbench · v${version}</div>
       </div>
     </div>
 

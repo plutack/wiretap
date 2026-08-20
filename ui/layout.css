@@ -67,7 +67,7 @@ textarea:focus-visible {
 /* App frame -------------------------------------------------------------- */
 .workbench {
   display: grid;
-  grid-template-rows: 54px minmax(0, 1fr);
+  grid-template-rows: 60px minmax(0, 1fr);
   height: 100%;
   background:
     radial-gradient(circle at 76% -20%, rgba(98, 217, 191, 0.06), transparent 33rem),
@@ -132,6 +132,12 @@ textarea:focus-visible {
   align-items: center;
   gap: 10px;
   padding-left: 16px;
+}
+
+.brand-lockup > div:last-child {
+  display: grid;
+  gap: 2px;
+  line-height: 1.15;
 }
 
 .brand-mark {
@@ -565,32 +571,38 @@ textarea:focus-visible {
 }
 
 .settings-connection-status {
-  display: grid;
-  gap: 5px;
+  display: block;
+  min-width: 0;
+  overflow-x: auto;
   color: var(--wt-muted);
   font-size: 0.8125rem;
   line-height: 1.35;
+  scrollbar-width: none;
+}
+
+.settings-connection-status::-webkit-scrollbar {
+  display: none;
 }
 
 .settings-status-line {
-  display: flex;
-  min-width: 0;
+  display: inline-flex;
+  min-width: max-content;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  white-space: nowrap;
 }
 
-.settings-status-detail {
-  padding-left: 14px;
-}
 
-.settings-status-detail .font-mono {
+.settings-status-line > span {
   display: inline-flex;
   align-items: center;
-  overflow-wrap: anywhere;
-  color: var(--wt-text);
   line-height: 1.35;
   vertical-align: middle;
+}
+
+.settings-status-line .font-mono {
+  color: var(--wt-text);
+  line-height: 1.35;
 }
 
 .status-line-dot {

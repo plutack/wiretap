@@ -145,22 +145,18 @@ export function Settings({ onToast, onSaved }) {
           first, same as a manual replay.
         </p>
         <div class="settings-connection-status">
-          <div class="settings-status-line">
+          <span class="settings-status-line">
             <span class="live-dot ${view.tunnel_running ? "online" : ""} status-line-dot"></span>
             <span>tunnel ${view.tunnel_running ? "running" : "stopped"}</span>
-          </div>
-          ${view.registered
-            ? html`<div class="settings-status-line settings-status-detail">
-                <span>registered as</span>
-                <span class="font-mono text-neutral-300">${view.client_id}</span>
-              </div>
-              ${view.projects && view.projects.length
-                ? html`<div class="settings-status-line settings-status-detail">
-                    <span>projects</span>
-                    <span class="font-mono text-neutral-300">${view.projects.join(", ")}</span>
-                  </div>`
-                : null}`
-            : html`<div class="settings-status-line settings-status-detail">not registered</div>`}
+            ${view.registered
+              ? html`<span>· registered as</span>
+                  <span class="font-mono text-neutral-300">${view.client_id}</span>
+                  ${view.projects && view.projects.length
+                    ? html`<span>· projects</span>
+                        <span class="font-mono text-neutral-300">${view.projects.join(", ")}</span>`
+                    : null}`
+              : html`<span>· not registered</span>`}
+          </span>
         </div>
       </>
 
