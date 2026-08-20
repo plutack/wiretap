@@ -45,7 +45,12 @@ export function TrafficDetail({ capture, onExport, onClose }) {
         title="Request body"
         len=${fmtBytes(capture.req_body_len)}
       >
-        <${CodeBlock} body=${capture.req_body} contentType=${reqCT} />
+        <${CodeBlock}
+                  body=${capture.req_body}
+                  bodyBase64=${capture.req_body_base64}
+                  bodyLength=${capture.req_body_len}
+                  contentType=${reqCT}
+                />
       </>
 
       <section class="inspector-section">
@@ -57,7 +62,12 @@ export function TrafficDetail({ capture, onExport, onClose }) {
         title="Response body"
         len=${fmtBytes(capture.resp_body_len)}
       >
-        <${CodeBlock} body=${capture.resp_body} contentType=${respCT} />
+        <${CodeBlock}
+                  body=${capture.resp_body}
+                  bodyBase64=${capture.resp_body_base64}
+                  bodyLength=${capture.resp_body_len}
+                  contentType=${respCT}
+                />
       </>
 
       ${onExport
