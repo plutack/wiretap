@@ -144,17 +144,23 @@ export function Settings({ onToast, onSaved }) {
           right after it is stored — transforms with the on_replay trigger run
           first, same as a manual replay.
         </p>
-        <div class="flex items-center gap-2 text-xs text-neutral-500">
-          <span class="live-dot ${view.tunnel_running ? "online" : ""}"></span>
-          tunnel ${view.tunnel_running ? "running" : "stopped"}
+        <div class="settings-connection-status">
+          <div class="settings-status-line">
+            <span class="live-dot ${view.tunnel_running ? "online" : ""} status-line-dot"></span>
+            <span>tunnel ${view.tunnel_running ? "running" : "stopped"}</span>
+          </div>
           ${view.registered
-            ? html` · registered as
+            ? html`<div class="settings-status-line settings-status-detail">
+                <span>registered as</span>
                 <span class="font-mono text-neutral-300">${view.client_id}</span>
-                ${view.projects && view.projects.length
-                  ? html` · projects:
-                      <span class="font-mono text-neutral-300">${view.projects.join(", ")}</span>`
-                  : null}`
-            : " · not registered"}
+              </div>
+              ${view.projects && view.projects.length
+                ? html`<div class="settings-status-line settings-status-detail">
+                    <span>projects</span>
+                    <span class="font-mono text-neutral-300">${view.projects.join(", ")}</span>
+                  </div>`
+                : null}`
+            : html`<div class="settings-status-line settings-status-detail">not registered</div>`}
         </div>
       </>
 
