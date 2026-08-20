@@ -42,8 +42,12 @@ export function TrafficList({ captures, onSelect, selectedId }) {
       </tr>
     </thead>
     <tbody>
-      ${captures.map((capture) => {
+      ${captures.map((capture, i) => {
         const destination = splitURL(capture.url);
+        // Dim the host on consecutive rows to the same destination so unique
+        // requests pop out of a burst of same-API traffic.
+        const prev = i > 0 ? splitURL(captures[i - 1].url) : null;
+        const repeatHost = prev !== null && prev.host === destination.host;
         return html`<tr
           key=${capture.id}
           class="signal-row ${capture.id === selectedId ? "active" : ""}"
@@ -52,7 +56,7 @@ export function TrafficList({ captures, onSelect, selectedId }) {
           <td><${MethodBadge} method=${capture.method} /></td>
           <td>
             <span class="signal-primary" title=${capture.url}>${destination.path}</span>
-            <span class="signal-secondary">${destination.host} · capture ${capture.id}</span>
+            <span class="signal-secondary ${repeatHost ? "repeat" : ""}">${destination.host} · capture ${capture.id}</span>
           </td>
           <td><${StatusBadge} status=${capture.status} /></td>
           <td class="mono-dim">

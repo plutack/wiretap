@@ -46,7 +46,7 @@ export function HeaderTable({ headers }) {
         type="button"
         title="Copy all headers"
         onClick=${() => copy(serializeHeaders(headers))}
-        class="rounded px-1.5 py-0.5 text-[11px] text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+        class="rounded px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
       >
         Copy all
       </button>
@@ -63,7 +63,7 @@ export function HeaderTable({ headers }) {
                   title=${`Copy ${k}`}
                   aria-label=${`Copy ${k} header`}
                   onClick=${() => copy(headerValues(vs).map((value) => `${k}: ${value}`).join("\n"))}
-                  class="shrink-0 rounded px-1 text-[10px] text-neutral-600 hover:bg-neutral-800 hover:text-neutral-300"
+                  class="shrink-0 rounded px-1 text-xs text-neutral-600 hover:bg-neutral-800 hover:text-neutral-300"
                 >
                   Copy
                 </button>

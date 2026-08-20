@@ -15,6 +15,32 @@ export function WebhookList({ webhooks, onSelect, selectedKey }) {
     </div>`;
   }
 
+  // Group rows by project (preserving newest-first order) when more than one
+  // project is present, so multi-source streams stay scannable.
+  const projects = [...new Set(webhooks.map((w) => w.project))];
+  const grouped = projects.length > 1;
+
+  const row = (webhook) => {
+    const key = `${webhook.project}-${webhook.seq}`;
+    return html`<tr
+      key=${key}
+      class="signal-row ${key === selectedKey ? "active" : ""}"
+      onClick=${() => onSelect(webhook.project, webhook.seq)}
+    >
+      <td><${MethodBadge} method=${webhook.method} /></td>
+      <td>
+        <span class="signal-primary">${webhook.project}</span>
+        <span class="signal-secondary">sequence ${webhook.seq}</span>
+      </td>
+      <td>
+        <span class="signal-primary" title=${webhook.path}>${webhook.path || "/"}</span>
+        <span class="signal-secondary">relay ingress</span>
+      </td>
+      <td class="mono-dim">${fmtBytes(webhook.body_len) || "empty"}</td>
+      <td class="mono-dim">${fmtTime(webhook.received_at)}</td>
+    </tr>`;
+  };
+
   return html`<table class="signal-table">
     <colgroup>
       <col style="width: 82px" />
@@ -33,26 +59,18 @@ export function WebhookList({ webhooks, onSelect, selectedKey }) {
       </tr>
     </thead>
     <tbody>
-      ${webhooks.map((webhook) => {
-        const key = `${webhook.project}-${webhook.seq}`;
-        return html`<tr
-          key=${key}
-          class="signal-row ${key === selectedKey ? "active" : ""}"
-          onClick=${() => onSelect(webhook.project, webhook.seq)}
-        >
-          <td><${MethodBadge} method=${webhook.method} /></td>
-          <td>
-            <span class="signal-primary">${webhook.project}</span>
-            <span class="signal-secondary">sequence ${webhook.seq}</span>
-          </td>
-          <td>
-            <span class="signal-primary" title=${webhook.path}>${webhook.path || "/"}</span>
-            <span class="signal-secondary">relay ingress</span>
-          </td>
-          <td class="mono-dim">${fmtBytes(webhook.body_len) || "empty"}</td>
-          <td class="mono-dim">${fmtTime(webhook.received_at)}</td>
-        </tr>`;
-      })}
+      ${grouped
+        ? projects.map((project) => {
+            const rows = webhooks.filter((w) => w.project === project);
+            return html`<tr key=${"group-" + project} class="signal-group-row">
+                <td colspan="5">
+                  ${project}
+                  <span class="signal-group-count">${rows.length} deliver${rows.length === 1 ? "y" : "ies"}</span>
+                </td>
+              </tr>
+              ${rows.map(row)}`;
+          })
+        : webhooks.map(row)}
     </tbody>
   </table>`;
 }
