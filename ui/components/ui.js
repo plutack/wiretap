@@ -4,6 +4,7 @@
 // these instead of hand-rolling Tailwind class strings, so a dropdown looks the
 // same everywhere and nothing ends up "barely visible".
 import { html } from "../vendor/preact/index.js";
+import { Dropdown } from "./dropdown.js";
 
 /** Button with a visual variant: "primary" | "ghost" | "danger". */
 export function Button({ variant = "ghost", type = "button", class: cls = "", children, ...rest }) {
@@ -24,22 +25,20 @@ export function Input({ class: cls = "", ...rest }) {
 }
 
 /**
- * Styled native select.
+ * Select is the app-wide dropdown. It used to be a styled native <select>,
+ * but WebKitGTK draws native option popups with the OS GTK theme (white on
+ * light desktops), so it now delegates to the CSS-drawn Dropdown while
+ * keeping the same props/callback shape.
  * @param options array of {value, label} or plain strings.
  */
 export function Select({ value, onChange, options = [], class: cls = "", ...rest }) {
-  return html`<select
-    class="select ${cls}"
+  return html`<${Dropdown}
     value=${value}
     onChange=${onChange}
+    options=${options}
+    class=${cls}
     ...${rest}
-  >
-    ${options.map((o) => {
-      const val = typeof o === "string" ? o : o.value;
-      const label = typeof o === "string" ? o : o.label;
-      return html`<option key=${val} value=${val}>${label}</option>`;
-    })}
-  </select>`;
+  />`;
 }
 
 /** Labelled form field wrapper: a small caption stacked above its control. */

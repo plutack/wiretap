@@ -14,13 +14,18 @@ import { TrafficList } from "./components/traffic-list.js";
 import { TrafficDetail } from "./components/traffic-detail.js";
 import { ScriptEditor } from "./components/script-editor.js";
 import { Settings } from "./components/settings.js";
+import { CommandPalette } from "./components/palette.js";
+import { copyText } from "./lib/clipboard.js";
+import { applyDisplayPrefs, loadDisplayPrefs } from "./lib/prefs.js";
+
+applyDisplayPrefs(loadDisplayPrefs());
 
 function Toast({ message }) {
   if (!message) return null;
   return html`<div class="workbench-toast">${message}</div>`;
 }
 
-function CommandDeck({ activeTab, onChange, counts, onSearch, project, filtered }) {
+function CommandDeck({ activeTab, onChange, counts, onSearch, project, filtered, followControl }) {
   const tab = (id, label, glyph) => html`<button
     onClick=${() => onChange(id)}
     class="mode-tab ${activeTab === id ? "active" : ""}"
@@ -42,6 +47,7 @@ function CommandDeck({ activeTab, onChange, counts, onSearch, project, filtered 
       />
       <div class="workspace-summary">
         ${project ? `source:${project} · ` : ""}${filtered} visible
+        ${followControl}
       </div>
     </div>
   </div>`;
@@ -61,8 +67,12 @@ function App() {
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
 
-  // selection: {kind: "webhook"|"traffic"|"script", data}
   const [selection, setSelection] = useState(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [follow, setFollow] = useState(true);
+  const [queuedCount, setQueuedCount] = useState(0);
+  const [pausedRows, setPausedRows] = useState(null);
+  const lastVisibleCount = useRef(0);
 
   const [toast, setToast] = useState("");
   const toastTimer = useRef(null);
@@ -142,6 +152,27 @@ function App() {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [selection]);
 
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen(true);
+      }
+      if (event.key === "Escape") setPaletteOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    const count = activeTab === "webhooks" ? webhooks.length : captures.length;
+    if (count > lastVisibleCount.current && !follow) {
+      setQueuedCount((n) => n + count - lastVisibleCount.current);
+    }
+    if (follow) setQueuedCount(0);
+    lastVisibleCount.current = count;
+  }, [webhooks, captures, activeTab, follow]);
+
   // --- selection handlers ------------------------------------------------
   const openWebhook = async (proj, seq) => {
     try {
@@ -214,6 +245,9 @@ function App() {
       matchesSearch([c.method, c.url]),
   );
 
+  const displayedWebhooks = pausedRows ? pausedRows.webhooks : visibleWebhooks;
+  const displayedCaptures = pausedRows ? pausedRows.captures : visibleCaptures;
+
   const closeDetail = () => setSelection(null);
 
   const detailPane = () => {
@@ -254,6 +288,37 @@ function App() {
     setSelection(null);
     setActiveTab((tab) => (tab === "settings" ? "webhooks" : "settings"));
   };
+
+  const paletteActions = [
+    { id: "webhooks", label: "Show ingress", glyph: "↘", run: () => changeTab("webhooks") },
+    { id: "traffic", label: "Show traffic", glyph: "⇄", run: () => changeTab("traffic") },
+    { id: "settings", label: "Open settings", glyph: "⚙", run: toggleSettings },
+    { id: "transform", label: "New transform", glyph: "+", run: newScript },
+    { id: "clear", label: "Clear filters", glyph: "×", run: () => { setSearch(""); setMethodFilter(""); setStatusFilter(""); setProject(""); setSessionFilter(0); } },
+    ...(selection?.kind === "traffic" ? [{ id: "copy-url", label: "Copy selected URL", glyph: "↗", run: () => copyText(selection.data.url).then(() => showToast("URL copied")) }] : []),
+    ...(selection?.kind === "webhook" ? [{ id: "replay", label: "Replay selected webhook", glyph: "↻", run: async () => {
+      const target = (status && status.forward_url) || "";
+      if (!target) {
+        showToast("Set a default forward URL in Settings first");
+        return;
+      }
+      try {
+        const result = await api.replayWebhook(selection.data.project, selection.data.seq, target);
+        showToast(`Replayed → HTTP ${result.status}`);
+      } catch (e) {
+        showToast("replay: " + e, 5000);
+      }
+    } }] : []),
+  ];
+
+  const followButton = html`<button class="follow-control ${follow ? "active" : ""}" onClick=${() => {
+    if (follow) setPausedRows({ webhooks: visibleWebhooks, captures: visibleCaptures });
+    else setPausedRows(null);
+    setFollow((v) => !v);
+    setQueuedCount(0);
+  }}>
+    <span class="live-dot ${follow ? "online" : ""}"></span>${follow ? "Following" : "Paused"}
+  </button>`;
 
   return html`<div class="workbench">
     <${StatusBar}
@@ -297,23 +362,26 @@ function App() {
           : html`<${CommandDeck}
                 activeTab=${activeTab}
                 onChange=${changeTab}
-                counts=${{ webhooks: visibleWebhooks.length, traffic: visibleCaptures.length }}
+                counts=${{ webhooks: displayedWebhooks.length, traffic: displayedCaptures.length }}
                 onSearch=${setSearch}
                 project=${project}
-                filtered=${activeTab === "webhooks" ? visibleWebhooks.length : visibleCaptures.length}
-              />
+                filtered=${activeTab === "webhooks" ? displayedWebhooks.length : displayedCaptures.length}
+                followControl=${html`<span class="follow-cluster">
+                  ${followButton}
+                  ${queuedCount > 0 ? html`<button class="new-events-pill" onClick=${() => { setFollow(true); setPausedRows(null); setQueuedCount(0); }}>${queuedCount} new event${queuedCount === 1 ? "" : "s"}</button>` : null}
+                </span>`}
               <main class="workspace-main">
                 <section class="event-stage">
                   ${activeTab === "webhooks"
                     ? html`<${WebhookList}
-                        webhooks=${visibleWebhooks}
+                        webhooks=${displayedWebhooks}
                         onSelect=${openWebhook}
                         selectedKey=${selection && selection.kind === "webhook"
                           ? `${selection.data.project}-${selection.data.seq}`
                           : null}
                       />`
                     : html`<${TrafficList}
-                        captures=${visibleCaptures}
+                        captures=${displayedCaptures}
                         onSelect=${openCapture}
                         selectedId=${selection && selection.kind === "traffic"
                           ? selection.data.id
@@ -325,6 +393,7 @@ function App() {
       </div>
     </div>
     <${Toast} message=${toast} />
+    ${paletteOpen ? html`<${CommandPalette} actions=${paletteActions} onClose=${() => setPaletteOpen(false)} />` : null}
   </div>`;
 }
 

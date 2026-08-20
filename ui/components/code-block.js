@@ -47,14 +47,14 @@ export function CodeBlock({ body, contentType, maxHeightClass = "max-h-72" }) {
         ${isJSON
           ? html`<button
               onClick=${() => setRaw((r) => !r)}
-              class="rounded px-1.5 py-0.5 text-[11px] text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+              class="rounded px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
             >
               ${raw ? "Formatted" : "Raw"}
             </button>`
           : null}
         <button
           onClick=${copy}
-          class="rounded px-1.5 py-0.5 text-[11px] text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+          class="rounded px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
         >
           ${copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
         </button>

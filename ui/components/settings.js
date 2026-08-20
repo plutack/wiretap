@@ -12,6 +12,8 @@ import { html } from "../vendor/preact/index.js";
 import { useEffect, useState } from "../vendor/preact/index.js";
 import { api } from "../lib/api.js";
 import { Button, Input, Select, Field, Section } from "./ui.js";
+import { Dropdown } from "./dropdown.js";
+import { DENSITIES, FONT_SCALES, loadDisplayPrefs, saveDisplayPrefs } from "../lib/prefs.js";
 
 const SHELL_OPTIONS = [
   { value: "", label: "auto-detect ($SHELL)" },
@@ -43,6 +45,12 @@ export function Settings({ onToast, onSaved }) {
   // except through RegisterRelay's own save path).
   const [reg, setReg] = useState({ url: "", token: "", projects: "", name: "" });
   const [registering, setRegistering] = useState(false);
+  const [displayPrefs, setDisplayPrefs] = useState(loadDisplayPrefs());
+  const updateDisplay = (key) => (event) => {
+    const next = { ...displayPrefs, [key]: event.target.value };
+    setDisplayPrefs(next);
+    saveDisplayPrefs(next);
+  };
 
   const load = async () => {
     try {
@@ -147,6 +155,17 @@ export function Settings({ onToast, onSaved }) {
                       <span class="font-mono text-neutral-300">${view.projects.join(", ")}</span>`
                   : null}`
             : " · not registered"}
+        </div>
+      </>
+
+      <${SettingsCard} title="Display" hint="Adjust readability and row density for this desktop. These preferences are stored locally.">
+        <div class="grid grid-cols-2 gap-3">
+          <${Field} label="Text size">
+            <${Dropdown} value=${displayPrefs.fontScale} onChange=${updateDisplay("fontScale")} options=${FONT_SCALES} aria-label="Text size" />
+          </>
+          <${Field} label="Row density">
+            <${Dropdown} value=${displayPrefs.density} onChange=${updateDisplay("density")} options=${DENSITIES} aria-label="Row density" />
+          </>
         </div>
       </>
 
