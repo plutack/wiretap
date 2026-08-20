@@ -264,16 +264,17 @@ jobs:
           tag="${{ github.ref_name }}"
           api="https://api.github.com/repos/${{ github.repository }}/releases/tags/${tag}"
           mkdir -p dist
-          curl -fsSL -H "Authorization: token ${GH_TOKEN}" \
-            "${api}/assets" | \
-            python3 -c 'import json,sys; [print(a["browser_download_url"]) for a in json.load(sys.stdin)]' \
+          curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" "${api}" > release.json
+          python3 -c 'import json; [print(a["browser_download_url"]) for a in json.load(open("release.json"))["assets"] if a["name"] != "SHA256SUMS"]' \
             > urls.txt
           while read -r url; do
             [ -n "$url" ] || continue
-            curl -fsSL -o "dist/$(basename "$url")" "$url"
+            curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
+              -o "dist/$(basename "$url")" "$url"
           done < urls.txt
           ( cd dist && sha256sum ./* > ../SHA256SUMS )
-          curl -fsSL -X POST -H "Authorization: token ${GH_TOKEN}" \
+          release_id=$(python3 -c 'import json; print(json.load(open("release.json"))["id"])')
+          upload_api="https://uploads.github.com/repos/${{ github.repository }}/releases/${release_id}/assets?name=SHA256SUMS"
+          curl -fsSL -X POST -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Content-Type: application/octet-stream" \
-            --data-binary @SHA256SUMS \
-            "${api}/assets?name=SHA256SUMS"
+            --data-binary @SHA256SUMS "${upload_api}"
