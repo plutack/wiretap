@@ -61,8 +61,11 @@ type ScriptRow struct {
 }
 
 // TrafficCaptureRow is a row in the local PC's traffic_captures table.
+// SessionID links the capture to its intercept_sessions row; 0 means "no
+// session" (rows captured before sessions existed, or inserted directly).
 type TrafficCaptureRow struct {
 	ID              int64
+	SessionID       int64
 	At              time.Time
 	Method          string
 	URL             string
@@ -71,4 +74,18 @@ type TrafficCaptureRow struct {
 	Status          int
 	RespHeadersJSON string
 	RespBody        []byte
+}
+
+// InterceptSessionRow is a row in the local PC's intercept_sessions table:
+// one per `wiretap intercept start` run. EndedAt is the zero time while the
+// session is running — or when it crashed without cleanup, which the UI can
+// render as "not closed cleanly". Captures is a derived count populated by
+// InterceptSessions listings, not a stored column.
+type InterceptSessionRow struct {
+	ID        int64
+	StartedAt time.Time
+	EndedAt   time.Time // zero while running
+	Shell     string
+	ProxyAddr string
+	Captures  int // derived: COUNT of traffic_captures with this session_id
 }

@@ -131,6 +131,14 @@ func execScript(ctx context.Context, db *sql.DB, name, script string) error {
 			continue
 		}
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			// Migrations are replayed at every startup (there is no version
+			// table); CREATE statements are idempotent via IF NOT EXISTS, but
+			// SQLite has no "ADD COLUMN IF NOT EXISTS". Treat the duplicate-
+			// column error as "already applied" so ALTER TABLE ADD COLUMN
+			// migrations stay re-runnable.
+			if strings.Contains(err.Error(), "duplicate column name") {
+				continue
+			}
 			return fmt.Errorf("store: migrate %s: %w", name, err)
 		}
 	}

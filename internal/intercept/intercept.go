@@ -33,6 +33,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/plutack/wiretap/internal/intercept/castore"
 	"github.com/plutack/wiretap/internal/intercept/localapi"
@@ -77,6 +78,14 @@ type Session struct {
 	localAPIAddr string
 	overrideDir  string
 	startupFiles []string
+
+	// Session persistence: every `intercept start` run is recorded in the
+	// intercept_sessions table so captures stay grouped and referenceable
+	// after the session ends. sessionID is 0 when the insert failed (capture
+	// still works, rows are just unsessioned).
+	sessionID int64
+	st        *store.PCStore
+	clock     testutil.Clock
 }
 
 // Start runs the orchestration described at the package doc and returns a
@@ -120,7 +129,15 @@ func Start(ctx context.Context, deps Deps) (*Session, error) {
 		return nil, fmt.Errorf("intercept: patch startup files: %w", err)
 	}
 
-	recorder := &storeRecorder{st: deps.PCStore, clock: clock}
+	// Record this run as an intercept session so captures are grouped in the
+	// local DB. Best-effort: a failed insert degrades to unsessioned capture
+	// rather than blocking interception.
+	sessionID, err := deps.PCStore.CreateInterceptSession(ctx, clock.Now(), string(deps.ShellKind), deps.ProxyAddr)
+	if err != nil {
+		sessionID = 0
+	}
+
+	recorder := &storeRecorder{st: deps.PCStore, clock: clock, sessionID: sessionID}
 	proxyOpts := []proxy.Option{proxy.WithClock(clock)}
 	if transformer := newScriptTransformer(deps.ScriptEngine, deps.PCStore, deps.OnScriptError); transformer != nil {
 		proxyOpts = append(proxyOpts, proxy.WithTransformer(transformer))
@@ -146,7 +163,19 @@ func Start(ctx context.Context, deps Deps) (*Session, error) {
 		localAPIAddr: apiLn.Addr().String(),
 		overrideDir:  overrideDir,
 		startupFiles: startupFiles,
+		sessionID:    sessionID,
+		st:           deps.PCStore,
+		clock:        clock,
 	}, nil
+}
+
+// SessionID returns the intercept_sessions row id for this run, or 0 when
+// session persistence failed at Start.
+func (s *Session) SessionID() int64 {
+	if s == nil {
+		return 0
+	}
+	return s.sessionID
 }
 
 // ProxyAddr returns the resolved address the interception proxy is listening on
@@ -192,6 +221,17 @@ func (s *Session) Stop(ctx context.Context) error {
 	}
 	if s.overrideDir != "" {
 		_ = os.RemoveAll(s.overrideDir)
+	}
+	// Close the session row so the history shows when this run ended. Uses a
+	// background context: ctx may already be cancelled during shutdown.
+	if s.st != nil && s.sessionID != 0 {
+		now := time.Now()
+		if s.clock != nil {
+			now = s.clock.Now()
+		}
+		if err := s.st.EndInterceptSession(context.Background(), s.sessionID, now); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	return errors.Join(errs...)
 }
@@ -397,8 +437,9 @@ func ShellCommand(kind shellscript.ShellKind) (string, []string) {
 // proxy.Capture into a TrafficCaptureRow and persisting it. Headers marshal to
 // JSON the same way the relay stores them (json.Marshal on http.Header).
 type storeRecorder struct {
-	st    *store.PCStore
-	clock testutil.Clock
+	st        *store.PCStore
+	clock     testutil.Clock
+	sessionID int64 // intercept_sessions row id; 0 = unsessioned
 }
 
 // Record implements proxy.Recorder. Errors from the store are returned to the
@@ -416,6 +457,7 @@ func (r *storeRecorder) Record(ctx context.Context, c proxy.Capture) error {
 		}
 	}
 	_, err := r.st.InsertTrafficCapture(ctx, store.TrafficCaptureRow{
+		SessionID:       r.sessionID,
 		At:              at,
 		Method:          c.Method,
 		URL:             c.URL,
