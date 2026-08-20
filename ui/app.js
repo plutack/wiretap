@@ -119,7 +119,7 @@ function App() {
     }
   };
 
-  // Initial load + polling. Status every 5s, active-tab rows every 2s.
+  // Status and transform metadata have their own slower refresh cadence.
   useEffect(() => {
     loadStatus();
     loadScripts();
@@ -127,15 +127,14 @@ function App() {
     return () => clearInterval(s);
   }, []);
 
+  // Keep both stream counts warm so switching tabs never starts from an empty
+  // count. Settings pauses the stream polling because it has no live rows.
   useEffect(() => {
     if (activeTab === "settings") return undefined;
     const tick = () => {
-      if (activeTab === "webhooks") {
-        loadWebhooks();
-      } else {
-        loadCaptures();
-        loadSessions();
-      }
+      loadWebhooks();
+      loadCaptures();
+      loadSessions();
     };
     tick();
     const t = setInterval(tick, 2000);
