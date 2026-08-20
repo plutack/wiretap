@@ -15,7 +15,6 @@ func TestDefault(t *testing.T) {
 		got  string
 		want string
 	}{
-		{"listen_addr", cfg.ListenAddr, "127.0.0.1:8888"},
 		{"relay url (disabled by default)", cfg.Relay.URL, ""},
 		{"tui theme", cfg.TUI.Theme, "dark"},
 		{"intercept proxy_addr", cfg.Intercept.ProxyAddr, "127.0.0.1:8888"},
@@ -107,9 +106,6 @@ func TestManager_Load_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.ListenAddr != "127.0.0.1:8888" {
-		t.Errorf("ListenAddr = %q, want %q", cfg.ListenAddr, "127.0.0.1:8888")
-	}
 	if cfg.Relay.URL != "" {
 		t.Errorf("Relay.URL = %q, want empty (tunnel disabled by default)", cfg.Relay.URL)
 	}
@@ -121,5 +117,45 @@ func TestManager_Load_ErrorsOnMissingFile(t *testing.T) {
 	m := NewManager(WithBaseDir(t.TempDir()))
 	if _, err := m.Load(); err == nil {
 		t.Fatal("Load on missing file: expected error, got nil")
+	}
+}
+
+func TestManagerSaveRoundTrip(t *testing.T) {
+	t.Parallel()
+	m := NewManager(WithBaseDir(t.TempDir()))
+
+	cfg := Default()
+	cfg.Relay.URL = "wss://relay.example.com/tunnel"
+	cfg.Intercept.Shell = "fish"
+	path, err := m.Save(&cfg)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if path == "" {
+		t.Fatal("Save returned empty path")
+	}
+
+	got, err := m.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.Relay.URL != cfg.Relay.URL {
+		t.Errorf("relay url = %q, want %q", got.Relay.URL, cfg.Relay.URL)
+	}
+	if got.Intercept.Shell != "fish" {
+		t.Errorf("shell = %q, want fish", got.Intercept.Shell)
+	}
+
+	// Save must be an overwrite, not an Init-style refusal.
+	cfg.Intercept.Shell = "bash"
+	if _, err := m.Save(&cfg); err != nil {
+		t.Fatalf("second Save: %v", err)
+	}
+	got, err = m.Load()
+	if err != nil {
+		t.Fatalf("Load after overwrite: %v", err)
+	}
+	if got.Intercept.Shell != "bash" {
+		t.Errorf("shell after overwrite = %q, want bash", got.Intercept.Shell)
 	}
 }

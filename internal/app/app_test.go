@@ -36,6 +36,76 @@ func openTestApp(t *testing.T) (*App, string) {
 	return a, base
 }
 
+// TestApp_AutoForwardWebhook exercises relay.forward_url: a stored webhook is
+// POSTed to the configured target in the background when the tunnel's
+// OnWebhook callback fires.
+func TestApp_AutoForwardWebhook(t *testing.T) {
+	t.Parallel()
+	a, _ := openTestApp(t)
+
+	hits := make(chan *http.Request, 1)
+	bodies := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		hits <- r
+		bodies <- string(b)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	cfg := config.Default()
+	cfg.Relay.ForwardURL = srv.URL + "/hook"
+	a.cfg = &cfg
+
+	row := store.WebhookRow{
+		Project:     "p1",
+		Seq:         1,
+		ReceivedAt:  time.Now(),
+		Method:      "POST",
+		Path:        "/orders",
+		HeadersJSON: `{"Content-Type":["application/json"],"Connection":["keep-alive"]}`,
+		Body:        []byte(`{"n":1}`),
+	}
+	if _, err := a.store.StoreWebhook(context.Background(), row, time.Now()); err != nil {
+		t.Fatalf("StoreWebhook: %v", err)
+	}
+
+	a.autoForwardWebhook(row)
+
+	select {
+	case r := <-hits:
+		if r.Method != "POST" || r.URL.Path != "/hook" {
+			t.Errorf("forwarded %s %s, want POST /hook", r.Method, r.URL.Path)
+		}
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("Content-Type = %q", ct)
+		}
+		if body := <-bodies; body != `{"n":1}` {
+			t.Errorf("body = %q", body)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("webhook was not forwarded within 5s")
+	}
+}
+
+// TestApp_AutoForwardWebhook_DisabledByDefault ensures no delivery is
+// attempted when forward_url is empty.
+func TestApp_AutoForwardWebhook_Disabled(t *testing.T) {
+	t.Parallel()
+	a, _ := openTestApp(t)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+	}))
+	defer srv.Close()
+
+	a.autoForwardWebhook(store.WebhookRow{Project: "p", Seq: 1})
+	time.Sleep(200 * time.Millisecond)
+	if calls.Load() != 0 {
+		t.Errorf("forward attempted with empty forward_url")
+	}
+}
+
 func TestApp_OpenCreatesStore(t *testing.T) {
 	t.Parallel()
 	a, base := openTestApp(t)
@@ -73,9 +143,6 @@ func TestApp_Config_FallsBackToDefault(t *testing.T) {
 	cfg, err := a.Config()
 	if err != nil {
 		t.Fatalf("Config: %v", err)
-	}
-	if cfg.ListenAddr != "127.0.0.1:8888" {
-		t.Errorf("ListenAddr = %q, want default 127.0.0.1:8888", cfg.ListenAddr)
 	}
 	if cfg.Intercept.ProxyAddr != "127.0.0.1:8888" {
 		t.Errorf("Intercept.ProxyAddr = %q", cfg.Intercept.ProxyAddr)

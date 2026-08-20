@@ -28,7 +28,7 @@ AIR_CLI := air -c .air.cli.toml
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: all build gui gui-debug bindings test test-gui vet clean fmt tidy watch watch-cli arch-pkg appimage dist
+.PHONY: all build gui gui-debug bindings snippet-bundle test test-gui vet clean fmt tidy watch watch-cli arch-pkg appimage dist
 
 all: build
 
@@ -55,6 +55,12 @@ gui-debug:
 # build it with the gtk3 tag).
 bindings:
 	$(BINDINGS) ./cmd/wiretap ./internal/gui
+
+# Rebuild the committed httpsnippet bundle embedded by internal/export
+# (requires `npm install`; see internal/export/js/entry.js). Run after
+# changing entry.js or bumping the httpsnippet-lite dependency.
+snippet-bundle:
+	npm run snippet-bundle
 
 # Full test suite (default build; the GUI launch glue is covered by the build).
 test:

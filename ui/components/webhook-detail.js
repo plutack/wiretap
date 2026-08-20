@@ -5,6 +5,7 @@ import { useState } from "../vendor/preact/index.js";
 import { MethodBadge, HeaderTable } from "./badges.js";
 import { CodeBlock } from "./code-block.js";
 import { DetailPane, DetailBody, BodySection } from "./detail-pane.js";
+import { ExportSnippet } from "./export-snippet.js";
 import { Button, Input } from "./ui.js";
 import { fmtBytes } from "../lib/format.js";
 
@@ -17,8 +18,10 @@ function headerValue(headers, name) {
   return Array.isArray(v) ? v.join(", ") : String(v);
 }
 
-export function WebhookDetail({ webhook, onReplay, onClose }) {
-  const [targetURL, setTargetURL] = useState("");
+export function WebhookDetail({ webhook, onReplay, onExport, onClose, defaultTarget = "" }) {
+  // Prefill the replay target with the configured forward URL (settings →
+  // relay.forward_url) so a manual re-delivery is one click.
+  const [targetURL, setTargetURL] = useState(defaultTarget);
   const [replayState, setReplayState] = useState(null); // {status, error}
 
   const handleReplay = async () => {
@@ -58,7 +61,7 @@ export function WebhookDetail({ webhook, onReplay, onClose }) {
         <div class="flex gap-2">
           <${Input}
             type="text"
-            placeholder="http://127.0.0.1:8080/hook"
+            placeholder=${defaultTarget || "http://127.0.0.1:8080/hook"}
             value=${targetURL}
             onInput=${(e) => setTargetURL(e.target.value)}
             class="font-mono"
@@ -82,6 +85,13 @@ export function WebhookDetail({ webhook, onReplay, onClose }) {
               : `replayed → HTTP ${replayState.status}`}
         </p>`}
       </section>
+
+      ${onExport
+        ? html`<${ExportSnippet}
+            exportKey=${`webhook-${webhook.project}-${webhook.seq}`}
+            convert=${onExport}
+          />`
+        : null}
     </>
   </>`;
 }
