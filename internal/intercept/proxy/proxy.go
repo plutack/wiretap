@@ -21,6 +21,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -282,11 +283,21 @@ func (p *Proxy) Stop(ctx context.Context) error {
 	}
 	p.conns = make(map[net.Conn]struct{})
 	srv := p.server
+	ln := p.ln
+	p.ln = nil
 	p.mu.Unlock()
-	if srv == nil {
-		return nil
+	var errs []error
+	if srv != nil {
+		if err := srv.Shutdown(ctx); err != nil {
+			errs = append(errs, err)
+		}
 	}
-	return srv.Shutdown(ctx)
+	if ln != nil {
+		if err := ln.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // Addr returns the resolved listen address, or the configured addr before

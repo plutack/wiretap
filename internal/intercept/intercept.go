@@ -73,6 +73,7 @@ type Deps struct {
 type Session struct {
 	proxy        *proxy.Proxy
 	localAPI     *http.Server
+	localAPILn   net.Listener
 	localAPIAddr string
 	overrideDir  string
 	startupFiles []string
@@ -141,6 +142,7 @@ func Start(ctx context.Context, deps Deps) (*Session, error) {
 	return &Session{
 		proxy:        prox,
 		localAPI:     httpSrv,
+		localAPILn:   apiLn,
 		localAPIAddr: apiLn.Addr().String(),
 		overrideDir:  overrideDir,
 		startupFiles: startupFiles,
@@ -177,6 +179,11 @@ func (s *Session) Stop(ctx context.Context) error {
 	}
 	if s.localAPI != nil {
 		errs = append(errs, s.localAPI.Shutdown(ctx))
+	}
+	if s.localAPILn != nil {
+		if err := s.localAPILn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			errs = append(errs, err)
+		}
 	}
 	for _, f := range s.startupFiles {
 		if err := resetStartupFile(f); err != nil {
