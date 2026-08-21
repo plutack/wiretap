@@ -799,15 +799,18 @@ func (m *Model) layout() {
 	if m.width == 0 {
 		return
 	}
-	ch := m.contentHeight()
-	m.ingress.SetSize(m.width, maxInt(ch, 3))
-	m.traffic.SetSize(m.width, maxInt(ch, 3))
-	m.scripts.SetSize(m.width, maxInt(ch, 3))
+	// bubbles lists render one extra line for the always-present filter
+	// bar section, so reserve it — otherwise the frame grows taller than
+	// the terminal and the header/tab lines scroll off the top.
+	ch := maxInt(m.contentHeight()-1, 3)
+	m.ingress.SetSize(m.width, ch)
+	m.traffic.SetSize(m.width, ch)
+	m.scripts.SetSize(m.width, ch)
 	if m.detail != nil {
-		m.detail.resize(m.width, maxInt(ch+1, 4))
+		m.detail.resize(m.width, maxInt(m.contentHeight()+1, 4))
 	}
 	if m.export != nil {
-		m.export.resize(m.width, maxInt(ch+1, 4))
+		m.export.resize(m.width, maxInt(m.contentHeight()+1, 4))
 	}
 }
 
@@ -856,25 +859,33 @@ func (m Model) View() string {
 	switch m.focus {
 	case focusExport:
 		if m.export != nil {
-			b.WriteString(m.export.View())
+			b.WriteString(ensureNewline(m.export.View()))
 		}
 	case focusDetail:
 		if m.detail != nil {
-			b.WriteString(m.detail.View())
+			b.WriteString(ensureNewline(m.detail.View()))
 		}
 	default:
-		b.WriteString(m.activeList().View())
+		b.WriteString(ensureNewline(m.activeList().View()))
 	}
 
 	if m.replay != nil {
-		b.WriteByte('\n')
-		b.WriteString(m.replay.View())
+		b.WriteString(ensureNewline(m.replay.View()))
 	}
-	b.WriteByte('\n')
 	b.WriteString(m.statusLine())
 	b.WriteByte('\n')
 	b.WriteString(m.helpLine())
 	return b.String()
+}
+
+// ensureNewline adds a trailing newline unless the pane already ends with
+// one — bubbles list views carry their own, and doubling it would add a
+// blank row to every frame.
+func ensureNewline(s string) string {
+	if strings.HasSuffix(s, "\n") {
+		return s
+	}
+	return s + "\n"
 }
 
 func (m Model) headerLine() string {

@@ -109,6 +109,21 @@ func (d rowDelegate) Render(w io.Writer, m list.Model, index int, item list.Item
 	d.render(w, item, selected, m.Width()-2, currentTheme)
 }
 
+// decorateRow prefixes the selection marker and, for the selected row, pads
+// to the full width so the cursor background spans the terminal — without
+// the padding a subtle background only covers the text, which is nearly
+// impossible to see on dark terminals.
+func decorateRow(line string, selected bool, width int, t theme) string {
+	if !selected {
+		return "  " + line
+	}
+	line = "❯ " + line
+	if pad := width - lipgloss.Width(line); pad > 0 {
+		line += strings.Repeat(" ", pad)
+	}
+	return t.cursor.Render(line)
+}
+
 // padRight right-pads s with spaces to want cells (display-width aware).
 func padRight(s string, want int) string {
 	gap := want - lipgloss.Width(s)
@@ -139,13 +154,10 @@ func renderWebhookRow(w io.Writer, item list.Item, selected bool, width int, t t
 	}
 	method := t.method.Render(padRight(cutWidth(r.row.Method, 7), 7))
 	src := t.badge.Render(padRight(cutWidth(fmt.Sprintf("%s/%d", r.row.Project, r.row.Seq), 18), 18))
-	path := cutWidth(r.row.Path, maxInt(width-7-18-10-9, 4))
+	path := cutWidth(r.row.Path, maxInt(width-2-7-18-10-9, 4))
 	size := padRight(byteCount(len(r.row.Body)), 9)
 	line := strings.Join([]string{method, src, path, size, fmtTime(r.row.ReceivedAt)}, "  ")
-	if selected {
-		line = t.cursor.Render(ansi.Truncate(line, width, "…"))
-	}
-	fmt.Fprintln(w, line)
+	fmt.Fprint(w, decorateRow(line, selected, width, t))
 }
 
 func renderCaptureRow(w io.Writer, item list.Item, selected bool, width int, t theme) {
@@ -159,12 +171,9 @@ func renderCaptureRow(w io.Writer, item list.Item, selected bool, width int, t t
 		status = padRight(t.statusStyle(r.row.Status).Render(strconv.Itoa(r.row.Status)), 4)
 	}
 	xfer := padRight(fmt.Sprintf("↑%s ↓%s", byteCount(len(r.row.ReqBody)), byteCount(len(r.row.RespBody))), 17)
-	url := cutWidth(r.row.URL, maxInt(width-7-4-17-9, 4))
+	url := cutWidth(r.row.URL, maxInt(width-2-7-4-17-9, 4))
 	line := strings.Join([]string{method, status, url, xfer, fmtTime(r.row.At)}, "  ")
-	if selected {
-		line = t.cursor.Render(ansi.Truncate(line, width, "…"))
-	}
-	fmt.Fprintln(w, line)
+	fmt.Fprint(w, decorateRow(line, selected, width, t))
 }
 
 func renderScriptRow(w io.Writer, item list.Item, selected bool, width int, t theme) {
@@ -180,11 +189,8 @@ func renderScriptRow(w io.Writer, item list.Item, selected bool, width int, t th
 	}
 	// Trigger is stored as the full "on_replay"-style string already.
 	meta := t.dim.Render(fmt.Sprintf("%s · prio %d", r.row.Trigger, r.row.Priority))
-	line := fmt.Sprintf("%s %s  %s", mark, cutWidth(name, maxInt(width-30, 8)), meta)
-	if selected {
-		line = t.cursor.Render(ansi.Truncate(line, width, "…"))
-	}
-	fmt.Fprintln(w, line)
+	line := fmt.Sprintf("%s %s  %s", mark, cutWidth(name, maxInt(width-2-30, 8)), meta)
+	fmt.Fprint(w, decorateRow(line, selected, width, t))
 }
 
 // --- list construction ----------------------------------------------------
