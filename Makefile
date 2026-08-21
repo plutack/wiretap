@@ -142,9 +142,9 @@ appimage: gui
 	install -m 0644 packaging/linux/wiretap.desktop AppDir/wiretap.desktop; \
 	install -m 0644 packaging/linux/wiretap.desktop AppDir/usr/share/applications/wiretap.desktop; \
 	install -m 0755 packaging/appimage/AppRun AppDir/AppRun; \
-	$$RSVG -w 256 -h 256 packaging/appimage/wiretap.svg -o AppDir/wiretap.png; \
+	$$RSVG -w 256 -h 256 packaging/linux/wiretap.svg -o AppDir/wiretap.png; \
 	install -m 0644 AppDir/wiretap.png AppDir/usr/share/icons/hicolor/256x256/apps/wiretap.png; \
-	$$RSVG -w 512 -h 512 packaging/appimage/wiretap.svg -o AppDir/usr/share/icons/hicolor/512x512/apps/wiretap.png 2>/dev/null || true; \
+	$$RSVG -w 512 -h 512 packaging/linux/wiretap.svg -o AppDir/usr/share/icons/hicolor/512x512/apps/wiretap.png 2>/dev/null || true; \
 	cp AppDir/usr/share/icons/hicolor/256x256/apps/wiretap.png AppDir/.DirIcon; \
 	mkdir -p dist; \
 	( cd AppDir && appimagetool --no-appstream . "../$$out" ); \

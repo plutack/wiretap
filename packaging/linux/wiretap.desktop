@@ -6,5 +6,5 @@ Comment=Capture HTTP traffic and inbound webhooks
 Icon=wiretap
 Exec=wiretap gui
 Terminal=false
-Categories=Development;Network;WebDevelopment;
+Categories=Development;WebDevelopment;
 StartupWMClass=wiretap
