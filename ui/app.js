@@ -53,6 +53,16 @@ function CommandDeck({ activeTab, onChange, counts, onSearch, project, filtered,
   </div>`;
 }
 
+// Row fingerprints. Every poll calls setState with a fresh array identity,
+// which re-renders the whole tree — including any open detail pane, whose
+// body viewer is expensive on large payloads. Returning the previous state
+// identity when the rows did not change lets Preact skip that re-render.
+// Webhook (project, seq) pairs and capture ids are immutable once stored,
+// so these fingerprints cannot miss a real change.
+const webhooksFingerprint = (rows) => rows.map((w) => `${w.project}/${w.seq}`).join("|");
+const capturesFingerprint = (rows) => rows.map((c) => `${c.id}:${c.status}`).join("|");
+const sessionsFingerprint = (rows) => rows.map((s) => `${s.id}:${s.captures}:${s.ended_at || ""}`).join("|");
+
 function App() {
   const [activeTab, setActiveTab] = useState("webhooks");
   const [status, setStatus] = useState(null);
@@ -92,21 +102,24 @@ function App() {
   };
   const loadWebhooks = async () => {
     try {
-      setWebhooks((await api.listWebhooks(project)) || []);
+      const rows = (await api.listWebhooks(project)) || [];
+      setWebhooks((prev) => (webhooksFingerprint(prev) === webhooksFingerprint(rows) ? prev : rows));
     } catch (e) {
       showToast("list webhooks: " + e);
     }
   };
   const loadCaptures = async () => {
     try {
-      setCaptures((await api.listCaptures(sessionFilter)) || []);
+      const rows = (await api.listCaptures(sessionFilter)) || [];
+      setCaptures((prev) => (capturesFingerprint(prev) === capturesFingerprint(rows) ? prev : rows));
     } catch (e) {
       showToast("list captures: " + e);
     }
   };
   const loadSessions = async () => {
     try {
-      setSessions((await api.listSessions()) || []);
+      const rows = (await api.listSessions()) || [];
+      setSessions((prev) => (sessionsFingerprint(prev) === sessionsFingerprint(rows) ? prev : rows));
     } catch (e) {
       showToast("list sessions: " + e);
     }
@@ -173,20 +186,38 @@ function App() {
   }, [webhooks, captures, activeTab, follow]);
 
   // --- selection handlers ------------------------------------------------
+  // Rapid row clicking must not pile work onto the webview: each detail
+  // fetch ships the full body payload and each render decodes it, so every
+  // queued click used to add another multi-MB render on arrival. In-flight
+  // requests are deduplicated per row, and responses that were superseded
+  // by a newer click are dropped instead of rendered.
+  const latestDetailReq = useRef(0);
+  const inflightDetails = useRef(new Map());
+  const fetchDetail = (key, load) => {
+    const pending = inflightDetails.current;
+    let p = pending.get(key);
+    if (!p) {
+      p = load().finally(() => pending.delete(key));
+      pending.set(key, p);
+    }
+    return p;
+  };
   const openWebhook = async (proj, seq) => {
+    const req = ++latestDetailReq.current;
     try {
-      const w = await api.getWebhook(proj, seq);
-      setSelection({ kind: "webhook", data: w });
+      const w = await fetchDetail(`${proj}/${seq}`, () => api.getWebhook(proj, seq));
+      if (req === latestDetailReq.current) setSelection({ kind: "webhook", data: w });
     } catch (e) {
-      showToast("get webhook: " + e);
+      if (req === latestDetailReq.current) showToast("get webhook: " + e);
     }
   };
   const openCapture = async (id) => {
+    const req = ++latestDetailReq.current;
     try {
-      const c = await api.getCapture(id);
-      setSelection({ kind: "traffic", data: c });
+      const c = await fetchDetail(`c/${id}`, () => api.getCapture(id));
+      if (req === latestDetailReq.current) setSelection({ kind: "traffic", data: c });
     } catch (e) {
-      showToast("get capture: " + e);
+      if (req === latestDetailReq.current) showToast("get capture: " + e);
     }
   };
   const openScript = async (s) => {

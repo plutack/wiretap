@@ -7,6 +7,11 @@ import { copyText } from "../lib/clipboard.js";
 import { Dropdown } from "./dropdown.js";
 
 const LARGE_BODY_LIMIT = 15 * 1024 * 1024;
+// Pretty-print and JSON highlighting are only attempted below this size.
+// Both are synchronous O(body) passes that build several multiples of the
+// body size in strings and DOM; re-running them on every poll re-render
+// froze the webview on multi-MB bodies (and could exhaust the JS heap).
+const PRETTY_LIMIT = 1024 * 1024;
 
 function mediaType(contentType) {
   return String(contentType || "").split(";", 1)[0].trim().toLowerCase();
@@ -58,11 +63,23 @@ export function BodyViewer({ body, bodyBase64, bodyLength, contentType, maxHeigh
 
   if (!bytes.length) return html`<p class="body-empty">(empty)</p>`;
 
-  const pretty = prettyBody(text, contentType);
-  const renderedText = effectiveMode === "pretty" && pretty.isJSON ? pretty.text : text;
-  const inner = effectiveMode === "pretty" && pretty.isJSON
-    ? highlightJSON(renderedText)
-    : escapeHTML(effectiveMode === "hex" ? hexDump(bytes) : renderedText);
+  const oversizePretty = (bodyLength || bytes.length) > PRETTY_LIMIT;
+  // All heavy transforms below are memoized on their inputs: the poll loop
+  // re-renders this component every cycle, and re-running JSON.parse,
+  // regex highlighting, and a full innerHTML swap for a large body turned
+  // each 2s poll into seconds of blocked main thread.
+  const pretty = useMemo(() => {
+    if (effectiveMode !== "pretty" || oversizePretty) return { text, isJSON: false };
+    return prettyBody(text, contentType);
+  }, [text, contentType, effectiveMode, oversizePretty]);
+  const renderedText = pretty.isJSON ? pretty.text : text;
+  const inner = useMemo(() => {
+    if (pretty.isJSON) return highlightJSON(renderedText);
+    return escapeHTML(effectiveMode === "hex" ? hexDump(bytes) : renderedText);
+  }, [pretty, renderedText, effectiveMode, bytes]);
+  // Stable object identity so Preact does not re-assign innerHTML when the
+  // content is unchanged.
+  const innerHTML = useMemo(() => ({ __html: inner }), [inner]);
   const copy = async () => {
     try { await copyText(renderedText); setCopyState("copied"); }
     catch { setCopyState("failed"); }
@@ -101,7 +118,12 @@ export function BodyViewer({ body, bodyBase64, bodyLength, contentType, maxHeigh
       ? html`<div class="body-large-warning">This body is ${Math.round((bodyLength || bytes.length) / 1024 / 1024)} MB. Previewing it may use significant memory. Save the original to inspect it externally.</div>`
       : effectiveMode === "image" && imageURL
         ? html`<div class="body-image-wrap"><img class="body-image" src=${imageURL} alt="Captured ${type} body" /></div>`
-        : html`<pre class="${maxHeightClass} body-code" dangerouslySetInnerHTML=${{ __html: inner }}></pre>`}
+        : html`<div>
+              ${oversizePretty && effectiveMode === "pretty"
+                ? html`<div class="body-large-warning">Body is over 1 MB — pretty-print and highlighting are skipped for responsiveness. Use Text, Hex, or Save.</div>`
+                : null}
+              <pre class="${maxHeightClass} body-code" dangerouslySetInnerHTML=${innerHTML}></pre>
+            </div>`}
   </div>`;
 }
 
