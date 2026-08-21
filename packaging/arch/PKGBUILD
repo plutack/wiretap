@@ -16,7 +16,7 @@ url="https://github.com/plutack/wiretap"
 # TODO: pick an actual license and add a LICENSE file to the repo, then
 # update this field to match.
 license=('LicenseRef-Unknown')
-depends=('webkit2gtk-4.1' 'gtk3')
+depends=('webkit2gtk-4.1' 'gtk3' 'hicolor-icon-theme')
 makedepends=('go' 'git')
 # The binary is stripped at link time via -ldflags "-s -w"; no debug package.
 options=('!strip' '!debug')
@@ -38,5 +38,7 @@ package() {
   install -Dm755 wiretap "$pkgdir/usr/bin/wiretap"
   install -Dm644 packaging/linux/wiretap.desktop \
     "$pkgdir/usr/share/applications/wiretap.desktop"
+  install -Dm644 packaging/linux/wiretap.svg \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/wiretap.svg"
   install -Dm644 README.md "$pkgdir/usr/share/doc/wiretap/README.md"
 }

@@ -7,6 +7,9 @@ import (
 	"io/fs"
 )
 
+//go:embed packaging/linux/wiretap.svg
+var Icon []byte
+
 // Assets is the embedded ./ui frontend tree served by the Wails webview,
 // re-rooted at the "ui" directory so the Wails v3 asset server finds
 // index.html at the root of the FS.
