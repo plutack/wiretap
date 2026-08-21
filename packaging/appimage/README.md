@@ -4,7 +4,7 @@ Inputs for building `wiretap-<ver>-<arch>.AppImage`.
 
 ## Files
 
-- `wiretap.svg` — vector icon. The build rasterizes this to `256x256` and `512x512` PNGs into `AppDir/usr/share/icons/hicolor/<size>/apps/wiretap.png` and a top-level `.DirIcon`.
+- `../linux/wiretap.svg` - shared vector icon. The build rasterizes this to `256x256` and `512x512` PNGs into `AppDir/usr/share/icons/hicolor/<size>/apps/wiretap.png` and a top-level `.DirIcon`.
 - `AppRun` — bash entry point. `make appimage` marks it `0755` at build time.
 
 ## Runtime requirements
