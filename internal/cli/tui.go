@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -13,21 +12,16 @@ import (
 )
 
 // newTUICmd builds the `wiretap tui` command. It uses the same *app.App
-// composition root as the GUI: Open the local store, start the relay tunnel
+// composition root as the GUI: open the local store, start the relay tunnel
 // in the background, and poll the store every 500ms for the dashboard.
 //
-// Switching from the old newPCStore/startTunnelBackground pair to *app.App
-// means the TUI now gets:
-//   - the same default-path resolution for wiretap.db as the GUI
-//   - the same tunnel OnConnect wiring, so the dashboard can show which
-//     projects the relay actually says this client owns
-//
-// app.App owns the lifecycle; the TUI reads webhooks from a.Store() and
-// connected-project names from a.ConnectedProjects().
-func newTUICmd() *cobra.Command {
+// The TUI reads the app strictly through the tui.Deps function-field seam
+// (the same "thin adapter over the composition root" split the GUI's
+// internal/gui bindings use), so the dashboard stays testable with fakes.
+func newTUICmd(version string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "tui",
-		Short: "Live dashboard of captured webhooks",
+		Short: "Live dashboard of captured webhooks and traffic",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			a := app.New(newConfigManager(), app.WithScriptEngine(newScriptEngine(), logScriptError))
 			if err := a.Open(cmd.Context()); err != nil {
@@ -43,7 +37,27 @@ func newTUICmd() *cobra.Command {
 				fmt.Fprintf(os.Stderr, "wiretap: tunnel not started: %v\n", err)
 			}
 
-			m := tui.New(a.Store(), tui.WithConnectedProjects(a.ConnectedProjects))
+			deps := tui.Deps{
+				Webhooks:          a.Webhooks,
+				CapturesBySession: a.CapturesBySession,
+				Sessions:          a.InterceptSessions,
+				Replay:            a.ReplayWebhook,
+				ExportTargets:     a.ExportTargets,
+				ExportWebhook:     a.ExportWebhook,
+				ExportCapture:     a.ExportCapture,
+				Scripts:           a.Scripts,
+				SetScriptEnabled:  a.SetScriptEnabled,
+				Status: func() tui.StatusSnapshot {
+					return statusSnapshot(a, version)
+				},
+			}
+
+			theme := ""
+			if cfg, err := a.Config(); err == nil {
+				theme = cfg.TUI.Theme
+			}
+
+			m := tui.New(deps, tui.WithTheme(theme))
 			p := tea.NewProgram(m, tea.WithAltScreen())
 			_, err := p.Run()
 			return err
@@ -51,6 +65,17 @@ func newTUICmd() *cobra.Command {
 	}
 }
 
-// runner and its seams were deleted when the TUI switched to app.App. The
-// app package owns the tunnel runner now; no per-command seam is needed.
-var _ = context.Background
+// statusSnapshot mirrors the GUI bindings' Status payload for the TUI header.
+func statusSnapshot(a *app.App, version string) tui.StatusSnapshot {
+	v := tui.StatusSnapshot{
+		Version:           version,
+		StoreOpen:         a.Store() != nil,
+		TunnelRunning:     a.TunnelRunning(),
+		ConnectedProjects: a.ConnectedProjects(),
+	}
+	if cfg, err := a.Config(); err == nil {
+		v.RelayURL = cfg.Relay.URL
+		v.ForwardURL = cfg.Relay.ForwardURL
+	}
+	return v
+}
