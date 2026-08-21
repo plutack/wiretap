@@ -82,6 +82,10 @@ func runGUI(parent context.Context, version string) error {
 
 	wailsApp := application.New(application.Options{
 		Name: "wiretap",
+		Icon: guiassets.Icon,
+		Linux: application.LinuxOptions{
+			ProgramName: "wiretap",
+		},
 		Services: []application.Service{
 			application.NewService(bindings),
 		},
@@ -99,6 +103,7 @@ func runGUI(parent context.Context, version string) error {
 		// Match the UI's --wt-bg (#080a0c) so the window never flashes white
 		// while the webview boots — the closest thing to "native dark mode"
 		// Wails offers; form-control popups follow the CSS color-scheme:dark.
+		StartState:       application.WindowStateMaximised,
 		BackgroundColour: application.NewRGB(8, 10, 12),
 		Width:            1024,
 		Height:           720,
