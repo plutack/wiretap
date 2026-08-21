@@ -98,6 +98,28 @@ wiretap uses a self-hosted public relay. The desktop establishes an outbound Web
 
 The first URL segment identifies the registered project. Any remaining path is preserved for inspection and replay.
 
+### TUI dashboard
+
+`wiretap tui` is the terminal counterpart of the GUI: three tabs (Ingress, Traffic, Transforms) over the same local store, with vim-style navigation (`j`/`k`, `g`/`G`, `h`/`l` paging).
+
+| Key | Action |
+|---|---|
+| `1`/`2`/`3`, `tab` | Switch Ingress / Traffic / Transforms |
+| `enter` | Open the selected webhook or capture (headers + body) |
+| `m` | Cycle body view mode: auto → text → raw → hex |
+| `tab` (detail) | Jump between a capture's request and response halves |
+| `/` | Fuzzy-search the visible list; `esc` clears |
+| `f` / `F` | Cycle method / status-family lens (Traffic) |
+| `S` | Cycle interception-session filter (Traffic) |
+| `c` | Clear all lens filters |
+| `p` | Pause/resume the live feed (shows a backlog count) |
+| `r` | Replay the selected webhook to a target URL (prefilled with `relay.forward_url`) |
+| `e` | Export the selected row as code (language → client, `y` copies via OSC 52) |
+| `space` | Enable/disable a transform script |
+| `q` | Quit |
+
+The `tui.theme` config key (`dark`, the default, or `light`) selects the color palette.
+
 ## Payload scripts
 
 Create scripts from the GUI's **Transforms** section and attach one of these triggers:

@@ -36,7 +36,7 @@ func NewRootCmd(version string) *cobra.Command {
 	root.AddCommand(newConfigCmd())
 	root.AddCommand(newExportCmd())
 	root.AddCommand(newRelayCmd())
-	root.AddCommand(newTUICmd())
+	root.AddCommand(newTUICmd(version))
 	root.AddCommand(newInterceptCmd(version))
 	root.AddCommand(newGUICmd(version))
 	return root
