@@ -81,14 +81,12 @@ export function prettyBody(body, contentType) {
 
 /**
  * Escape HTML-special characters so a string is safe to inject as innerHTML.
+ * Single pass: bodies run through this on every display window change.
  * @param {string} s
  * @returns {string}
  */
 export function escapeHTML(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return String(s).replace(/[&<>]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"));
 }
 
 /**
