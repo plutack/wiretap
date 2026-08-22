@@ -50,21 +50,27 @@ export function ExportSnippet({ exportKey, convert }) {
     [targets, target],
   );
 
-  // Re-convert whenever the row or the language/client selection changes.
+  // Re-convert whenever the row or the language/client selection changes —
+  // debounced, because conversion spins a JS runtime on the Go side per
+  // call. Clicking rapidly through capture rows otherwise fires one
+  // conversion per click, and the pile-up froze the UI.
   useEffect(() => {
     if (!active) return undefined;
     let alive = true;
     setError("");
-    convert(target, client).then(
-      (out) => alive && setSnippet(out),
-      (e) => {
-        if (!alive) return;
-        setSnippet("");
-        setError(String(e));
-      },
-    );
+    const timer = setTimeout(() => {
+      convert(target, client).then(
+        (out) => alive && setSnippet(out),
+        (e) => {
+          if (!alive) return;
+          setSnippet("");
+          setError(String(e));
+        },
+      );
+    }, 250);
     return () => {
       alive = false;
+      clearTimeout(timer);
     };
   }, [exportKey, target, client, active]);
 
@@ -96,6 +102,10 @@ export function ExportSnippet({ exportKey, convert }) {
         ...active.clients.map((c) => ({ value: c.key, label: c.title })),
       ]
     : [{ value: "", label: "default" }];
+
+  // Stable object identity so the snippet <pre> is not re-assigned
+  // innerHTML on unrelated re-renders (the poll loop).
+  const snippetHTML = useMemo(() => ({ __html: escapeHTML(snippet) }), [snippet]);
 
   return html`<section class="inspector-section border-t border-neutral-800 pt-4">
     <div class="inspector-label">Export as code</div>
@@ -129,7 +139,7 @@ export function ExportSnippet({ exportKey, convert }) {
           </div>
           <pre
             class="max-h-72 overflow-auto p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words"
-            dangerouslySetInnerHTML=${{ __html: escapeHTML(snippet) }}
+            dangerouslySetInnerHTML=${snippetHTML}
           ></pre>
         </div>`}
   </section>`;
