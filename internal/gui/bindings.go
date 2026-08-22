@@ -440,9 +440,11 @@ func captureSummary(rows []store.TrafficCaptureRow) []CaptureView {
 	return out
 }
 
-// captureDetail converts one capture row into the full DTO. Text fields remain
-// for compatibility and convenient inspection; Base64 fields preserve exact
-// bytes for binary viewers and downloads.
+// captureDetail converts one capture row into the full DTO. Bodies travel as
+// Base64 only: shipping the same bytes as UTF-8 as well doubled every
+// response (a 5 MB body became 12+ MB of JSON), and the webview's JSON.parse
+// of that payload was a large part of the traffic-tab freezes. The body
+// viewer already decodes Base64 byte-exactly.
 func captureDetail(c *store.TrafficCaptureRow) CaptureView {
 	return CaptureView{
 		ID:             c.ID,
@@ -452,11 +454,9 @@ func captureDetail(c *store.TrafficCaptureRow) CaptureView {
 		URL:            c.URL,
 		Status:         c.Status,
 		ReqHeaders:     parseHeaders(c.ReqHeadersJSON),
-		ReqBody:        string(c.ReqBody),
 		ReqBodyBase64:  base64.StdEncoding.EncodeToString(c.ReqBody),
 		ReqBodyLen:     len(c.ReqBody),
 		RespHeaders:    parseHeaders(c.RespHeadersJSON),
-		RespBody:       string(c.RespBody),
 		RespBodyBase64: base64.StdEncoding.EncodeToString(c.RespBody),
 		RespBodyLen:    len(c.RespBody),
 	}

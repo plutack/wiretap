@@ -46,7 +46,6 @@ export function TrafficDetail({ capture, onExport, onClose }) {
         len=${fmtBytes(capture.req_body_len)}
       >
         <${CodeBlock}
-                  body=${capture.req_body}
                   bodyBase64=${capture.req_body_base64}
                   bodyLength=${capture.req_body_len}
                   contentType=${reqCT}
@@ -63,7 +62,6 @@ export function TrafficDetail({ capture, onExport, onClose }) {
         len=${fmtBytes(capture.resp_body_len)}
       >
         <${CodeBlock}
-                  body=${capture.resp_body}
                   bodyBase64=${capture.resp_body_base64}
                   bodyLength=${capture.resp_body_len}
                   contentType=${respCT}
