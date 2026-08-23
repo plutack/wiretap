@@ -141,7 +141,8 @@ Every configuration key is documented in [`config.example.yaml`](config.example.
 
 Alternatively, use the GUI: the gear icon in the top bar opens a Settings
 screen that edits the same `config.yaml` (relay endpoint, interception
-addresses, storage path, TUI theme) and performs relay registration — the
+addresses, storage path, TUI theme, desktop window title bar) and performs
+relay registration — the
 equivalent of `wiretap relay register --save` — without the CLI. The admin
 token is used once for registration and never stored.
 

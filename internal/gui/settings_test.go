@@ -55,6 +55,9 @@ func TestBindings_GetSettings_Defaults(t *testing.T) {
 	if v.TUITheme != "dark" {
 		t.Errorf("TUITheme = %q, want dark", v.TUITheme)
 	}
+	if v.NativeTitlebar != "auto" {
+		t.Errorf("NativeTitlebar = %q, want auto", v.NativeTitlebar)
+	}
 	if v.Registered {
 		t.Error("Registered = true before any registration")
 	}
@@ -155,11 +158,37 @@ func TestBindings_SaveSettings_Validation(t *testing.T) {
 		{ProxyAddr: "no-port"},
 		{LocalAPIAddr: "also no port"},
 		{Shell: "zsh"},
+		{NativeTitlebar: "sometimes"},
 	}
 	for _, in := range cases {
 		if _, err := b.SaveSettings(in); err == nil {
 			t.Errorf("SaveSettings(%+v): expected validation error", in)
 		}
+	}
+}
+
+// TestBindings_SaveSettings_NativeTitlebar covers the titlebar mode
+// round-trip: a valid mode persists to config.yaml, an empty input falls
+// back to the default, and GetSettings reflects what is on disk.
+func TestBindings_SaveSettings_NativeTitlebar(t *testing.T) {
+	t.Parallel()
+	b, _, _ := newSettingsBindings(t)
+
+	v, err := b.SaveSettings(SettingsInput{NativeTitlebar: "always"})
+	if err != nil {
+		t.Fatalf("SaveSettings: %v", err)
+	}
+	if v.NativeTitlebar != "always" {
+		t.Errorf("NativeTitlebar = %q, want always", v.NativeTitlebar)
+	}
+
+	// Empty means "unset": valid, and the runtime treats it as auto.
+	v, err = b.SaveSettings(SettingsInput{})
+	if err != nil {
+		t.Fatalf("SaveSettings empty: %v", err)
+	}
+	if v.NativeTitlebar != "" {
+		t.Errorf("NativeTitlebar = %q, want empty (default)", v.NativeTitlebar)
 	}
 }
 
