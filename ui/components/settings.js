@@ -1,9 +1,10 @@
 // Settings renders the full-workspace configuration screen: everything that
 // previously required editing config.yaml or running CLI commands (relay
 // endpoint, relay registration, interception addresses, storage path, TUI
-// theme) is editable here. GetSettings re-reads config.yaml from disk on
-// every mount so the form always reflects what is actually configured —
-// including values set via `wiretap config init` or a text editor.
+// theme, desktop window title bar) is editable here. GetSettings re-reads
+// config.yaml from disk on every mount so the form always reflects what is
+// actually configured — including values set via `wiretap config init` or a
+// text editor.
 //
 // The relay admin token is deliberately ephemeral: it is sent once with the
 // register call and never persisted (OS-keychain storage is a planned
@@ -26,6 +27,12 @@ const SHELL_OPTIONS = [
 const THEME_OPTIONS = [
   { value: "dark", label: "dark" },
   { value: "light", label: "light" },
+];
+
+const TITLEBAR_OPTIONS = [
+  { value: "auto", label: "auto (compositor decides)" },
+  { value: "always", label: "always (native bar)" },
+  { value: "never", label: "never (GTK bar)" },
 ];
 
 function SettingsCard({ title, hint, children }) {
@@ -61,6 +68,7 @@ export function Settings({ onToast, onSaved }) {
         forward_url: s.forward_url || "",
         store_path: s.store_path || "",
         tui_theme: s.tui_theme || "dark",
+        native_titlebar: s.native_titlebar || "auto",
         proxy_addr: s.proxy_addr || "",
         local_api_addr: s.local_api_addr || "",
         shell: s.shell || "",
@@ -167,6 +175,21 @@ export function Settings({ onToast, onSaved }) {
           </>
           <${Field} label="Row density">
             <${Dropdown} value=${displayPrefs.density} onChange=${updateDisplay("density")} options=${DENSITIES} aria-label="Row density" />
+          </>
+        </div>
+      </>
+
+      <${SettingsCard}
+        title="Desktop window"
+        hint="Who draws the window title bar: auto uses the compositor's native bar on desktops that provide server-side decorations (COSMIC, KDE Plasma) and GTK's fallback bar everywhere else. Applies after restarting wiretap."
+      >
+        <div class="grid grid-cols-2 gap-3">
+          <${Field} label="Native title bar">
+            <${Select}
+              value=${form.native_titlebar}
+              onChange=${set("native_titlebar")}
+              options=${TITLEBAR_OPTIONS}
+            />
           </>
         </div>
       </>
