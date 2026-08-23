@@ -76,6 +76,37 @@ type TrafficCaptureRow struct {
 	RespBody        []byte
 }
 
+// TrafficCaptureSummaryRow contains only the fields needed by capture lists.
+// Body lengths come from SQLite's length() function so polling does not load
+// potentially large body blobs merely to discard them in the GUI.
+type TrafficCaptureSummaryRow struct {
+	ID          int64
+	SessionID   int64
+	At          time.Time
+	Method      string
+	URL         string
+	Status      int
+	ReqBodyLen  int
+	RespBodyLen int
+}
+
+// TrafficCapturePreviewRow contains capture metadata and bounded body prefixes.
+// The full body lengths let callers distinguish complete bodies from previews.
+type TrafficCapturePreviewRow struct {
+	ID              int64
+	SessionID       int64
+	At              time.Time
+	Method          string
+	URL             string
+	ReqHeadersJSON  string
+	ReqBody         []byte
+	ReqBodyLen      int
+	Status          int
+	RespHeadersJSON string
+	RespBody        []byte
+	RespBodyLen     int
+}
+
 // InterceptSessionRow is a row in the local PC's intercept_sessions table:
 // one per `wiretap intercept start` run. EndedAt is the zero time while the
 // session is running — or when it crashed without cleanup, which the UI can

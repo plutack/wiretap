@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -221,7 +222,7 @@ func TestBindings_ListCaptures(t *testing.T) {
 	}
 	// Summary: no bodies, but lengths set; newest-first (id DESC).
 	first := got[0]
-	if first.ReqBody != "" || first.RespBody != "" {
+	if first.ReqBodyBase64 != "" || first.RespBodyBase64 != "" {
 		t.Errorf("body leaked into summary: %+v", first)
 	}
 	// Newest (id DESC) is the POST with body `{}` (len 2) and no response body.
@@ -261,6 +262,58 @@ func TestBindings_GetCapturePreservesBinaryBodies(t *testing.T) {
 	}
 	if got.RespBodyLen != len(binary) {
 		t.Errorf("RespBodyLen = %d, want %d", got.RespBodyLen, len(binary))
+	}
+}
+
+func TestBindings_GetCaptureBoundsPreviewAndLoadsFullBodyOnDemand(t *testing.T) {
+	t.Parallel()
+	b, a := newBindings(t)
+	body := bytes.Repeat([]byte("0123456789abcdef"), bodyPreviewLimit/16+128)
+	if _, err := a.InsertTrafficCapture(context.Background(), store.TrafficCaptureRow{
+		Method: "GET", URL: "https://api.example/large.json", Status: 200,
+		RespHeadersJSON: `{"Content-Type":["application/json"]}`, RespBody: body,
+	}); err != nil {
+		t.Fatalf("InsertTrafficCapture: %v", err)
+	}
+
+	preview, err := b.GetCapture(1)
+	if err != nil {
+		t.Fatalf("GetCapture: %v", err)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(preview.RespBodyBase64)
+	if err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if len(decoded) != bodyPreviewLimit {
+		t.Fatalf("preview len = %d, want %d", len(decoded), bodyPreviewLimit)
+	}
+	if !preview.RespBodyTruncated || preview.RespBodyLen != len(body) {
+		t.Fatalf("preview metadata = truncated:%v len:%d, want true/%d", preview.RespBodyTruncated, preview.RespBodyLen, len(body))
+	}
+	more, err := b.GetCaptureBody(1, "response", bodyPreviewLimit+512)
+	if err != nil {
+		t.Fatalf("GetCaptureBody bounded: %v", err)
+	}
+	moreBytes, _ := base64.StdEncoding.DecodeString(more.BodyBase64)
+	if len(moreBytes) != bodyPreviewLimit+512 || !more.Truncated {
+		t.Fatalf("bounded body = %d bytes, truncated:%v", len(moreBytes), more.Truncated)
+	}
+
+	full, err := b.GetCaptureBody(1, "response", 0)
+	if err != nil {
+		t.Fatalf("GetCaptureBody full: %v", err)
+	}
+	fullBytes, _ := base64.StdEncoding.DecodeString(full.BodyBase64)
+	if !bytes.Equal(fullBytes, body) || full.Truncated || full.BodyLen != len(body) {
+		t.Fatalf("full body mismatch: len=%d truncated=%v total=%d", len(fullBytes), full.Truncated, full.BodyLen)
+	}
+}
+
+func TestBindings_GetCaptureBodyRejectsInvalidPart(t *testing.T) {
+	t.Parallel()
+	b, _ := newBindings(t)
+	if _, err := b.GetCaptureBody(1, "headers", 100); err == nil {
+		t.Fatal("GetCaptureBody accepted invalid part")
 	}
 }
 

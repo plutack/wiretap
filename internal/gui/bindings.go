@@ -9,9 +9,8 @@
 //     `gui` build tag, no webkit2gtk/CGO), so `go test -race ./...` stays green
 //     on machines that lack the GUI toolchain. The only file that imports Wails
 //     is internal/cli/gui.go, build-tagged `gui`.
-//   - Detailed capture views include bodies as both UTF-8 best-effort strings
-//     and Base64. Base64 preserves arbitrary binary payloads for media/hex
-//     inspection; byte-exact replay still uses the original store bytes.
+//   - Detailed capture views include bounded Base64 body previews. Full bytes
+//     cross the bridge only after an explicit Save/Copy request.
 //   - DTOs flatten store.WebhookRow / store.TrafficCaptureRow so the frontend
 //     never sees SQL/relayproto types (same isolation localapi uses).
 package gui
@@ -31,7 +30,10 @@ import (
 
 // listLimit is the row cap for list calls. Matches the localapi default; big
 // enough for an MVP dashboard, small enough to keep payload sane.
-const listLimit = 100
+const (
+	listLimit        = 100
+	bodyPreviewLimit = 256 * 1024
+)
 
 // Bindings is the struct registered with wails.Run as the bound App. Every
 // exported method becomes a callable in the frontend's wailsjs bindings.
@@ -75,22 +77,29 @@ type WebhookView struct {
 }
 
 // CaptureView is the GUI DTO for a traffic capture. Bodies are omitted in list
-// responses; GetCapture fills them for the detail pane.
+// responses; GetCapture fills bounded Base64 previews for the detail pane.
 type CaptureView struct {
-	ID             int64               `json:"id"`
-	SessionID      int64               `json:"session_id,omitempty"`
-	At             string              `json:"at"` // RFC3339 UTC
-	Method         string              `json:"method,omitempty"`
-	URL            string              `json:"url,omitempty"`
-	Status         int                 `json:"status,omitempty"`
-	ReqHeaders     map[string][]string `json:"req_headers,omitempty"`
-	ReqBody        string              `json:"req_body,omitempty"`
-	ReqBodyBase64  string              `json:"req_body_base64,omitempty"`
-	ReqBodyLen     int                 `json:"req_body_len"`
-	RespHeaders    map[string][]string `json:"resp_headers,omitempty"`
-	RespBody       string              `json:"resp_body,omitempty"`
-	RespBodyBase64 string              `json:"resp_body_base64,omitempty"`
-	RespBodyLen    int                 `json:"resp_body_len"`
+	ID                int64               `json:"id"`
+	SessionID         int64               `json:"session_id,omitempty"`
+	At                string              `json:"at"` // RFC3339 UTC
+	Method            string              `json:"method,omitempty"`
+	URL               string              `json:"url,omitempty"`
+	Status            int                 `json:"status,omitempty"`
+	ReqHeaders        map[string][]string `json:"req_headers,omitempty"`
+	ReqBodyBase64     string              `json:"req_body_base64,omitempty"`
+	ReqBodyLen        int                 `json:"req_body_len"`
+	ReqBodyTruncated  bool                `json:"req_body_truncated,omitempty"`
+	RespHeaders       map[string][]string `json:"resp_headers,omitempty"`
+	RespBodyBase64    string              `json:"resp_body_base64,omitempty"`
+	RespBodyLen       int                 `json:"resp_body_len"`
+	RespBodyTruncated bool                `json:"resp_body_truncated,omitempty"`
+}
+
+// CaptureBodyView is one bounded or complete body fetched on demand.
+type CaptureBodyView struct {
+	BodyBase64 string `json:"body_base64,omitempty"`
+	BodyLen    int    `json:"body_len"`
+	Truncated  bool   `json:"truncated,omitempty"`
 }
 
 // StatusView is the status-bar payload: build version plus the resolved app
@@ -186,22 +195,37 @@ func (b *Bindings) ListWebhooks(project string) ([]WebhookView, error) {
 	return webhookSummary(rows), nil
 }
 
-// GetCapture returns one traffic capture with request/response headers and
-// bodies populated for the detail pane. Returns an error when the row is
-// absent (errors.Is, store.ErrNotFound).
+// GetCapture returns capture metadata, headers, and bounded body previews.
 func (b *Bindings) GetCapture(id int64) (CaptureView, error) {
-	c, err := b.app.CaptureByID(context.Background(), id)
+	c, err := b.app.CapturePreviewByID(context.Background(), id, bodyPreviewLimit)
 	if err != nil {
 		return CaptureView{}, fmt.Errorf("get capture %d: %w", id, err)
 	}
 	return captureDetail(c), nil
 }
 
+// GetCaptureBody returns a request or response body prefix. limit <= 0 returns
+// the complete body and should only be used for explicit user actions.
+func (b *Bindings) GetCaptureBody(id int64, part string, limit int) (CaptureBodyView, error) {
+	if part != "request" && part != "response" {
+		return CaptureBodyView{}, fmt.Errorf("get capture body: invalid part %q", part)
+	}
+	body, bodyLen, err := b.app.CaptureBody(context.Background(), id, part == "response", limit)
+	if err != nil {
+		return CaptureBodyView{}, fmt.Errorf("get capture %d %s body: %w", id, part, err)
+	}
+	return CaptureBodyView{
+		BodyBase64: base64.StdEncoding.EncodeToString(body),
+		BodyLen:    bodyLen,
+		Truncated:  len(body) < bodyLen,
+	}, nil
+}
+
 // ListCaptures returns the most recent traffic captures, newest-first,
 // optionally filtered to one interception session (0 = all). Bodies and full
 // header maps are omitted (use GetCapture for the detail payload).
 func (b *Bindings) ListCaptures(sessionID int64) ([]CaptureView, error) {
-	rows, err := b.app.CapturesBySession(context.Background(), sessionID, listLimit)
+	rows, err := b.app.CaptureSummariesBySession(context.Background(), sessionID, listLimit)
 	if err != nil {
 		return nil, fmt.Errorf("list captures: %w", err)
 	}
@@ -423,7 +447,7 @@ func scriptView(r store.ScriptRow) ScriptView {
 	}
 }
 
-func captureSummary(rows []store.TrafficCaptureRow) []CaptureView {
+func captureSummary(rows []store.TrafficCaptureSummaryRow) []CaptureView {
 	out := make([]CaptureView, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, CaptureView{
@@ -433,32 +457,31 @@ func captureSummary(rows []store.TrafficCaptureRow) []CaptureView {
 			Method:      r.Method,
 			URL:         r.URL,
 			Status:      r.Status,
-			ReqBodyLen:  len(r.ReqBody),
-			RespBodyLen: len(r.RespBody),
+			ReqBodyLen:  r.ReqBodyLen,
+			RespBodyLen: r.RespBodyLen,
 		})
 	}
 	return out
 }
 
-// captureDetail converts one capture row into the full DTO. Text fields remain
-// for compatibility and convenient inspection; Base64 fields preserve exact
-// bytes for binary viewers and downloads.
-func captureDetail(c *store.TrafficCaptureRow) CaptureView {
+// captureDetail converts bounded body prefixes into a detail DTO. Bodies are
+// encoded once so text and Base64 copies are not duplicated across the bridge.
+func captureDetail(c *store.TrafficCapturePreviewRow) CaptureView {
 	return CaptureView{
-		ID:             c.ID,
-		SessionID:      c.SessionID,
-		At:             c.At.Format(time.RFC3339),
-		Method:         c.Method,
-		URL:            c.URL,
-		Status:         c.Status,
-		ReqHeaders:     parseHeaders(c.ReqHeadersJSON),
-		ReqBody:        string(c.ReqBody),
-		ReqBodyBase64:  base64.StdEncoding.EncodeToString(c.ReqBody),
-		ReqBodyLen:     len(c.ReqBody),
-		RespHeaders:    parseHeaders(c.RespHeadersJSON),
-		RespBody:       string(c.RespBody),
-		RespBodyBase64: base64.StdEncoding.EncodeToString(c.RespBody),
-		RespBodyLen:    len(c.RespBody),
+		ID:                c.ID,
+		SessionID:         c.SessionID,
+		At:                c.At.Format(time.RFC3339),
+		Method:            c.Method,
+		URL:               c.URL,
+		Status:            c.Status,
+		ReqHeaders:        parseHeaders(c.ReqHeadersJSON),
+		ReqBodyBase64:     base64.StdEncoding.EncodeToString(c.ReqBody),
+		ReqBodyLen:        c.ReqBodyLen,
+		ReqBodyTruncated:  len(c.ReqBody) < c.ReqBodyLen,
+		RespHeaders:       parseHeaders(c.RespHeadersJSON),
+		RespBodyBase64:    base64.StdEncoding.EncodeToString(c.RespBody),
+		RespBodyLen:       c.RespBodyLen,
+		RespBodyTruncated: len(c.RespBody) < c.RespBodyLen,
 	}
 }
 
