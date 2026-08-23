@@ -28,7 +28,19 @@ env:
   GO_VERSION: '1.26'
 
 jobs:
+  # Assets ship only for tags whose commit is reachable from main. A tag cut
+  # on dev or any other branch fails here before anything builds or pushes.
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail unless tagged commit is on main
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "${{ github.sha }}" origin/main
+
   linux:
+    needs: guard
     strategy:
       fail-fast: false
       matrix:
@@ -71,6 +83,7 @@ jobs:
             "wiretap_${VERSION}_linux_${{ matrix.arch }}.tar.gz" --clobber
 
   appimage:
+    needs: guard
     strategy:
       fail-fast: false
       matrix:
@@ -142,6 +155,7 @@ jobs:
             "dist/wiretap_${VERSION}_${ARCH_NAME}.AppImage" --clobber
 
   windows:
+    needs: guard
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -184,6 +198,7 @@ jobs:
             "wiretap_${VERSION}_windows_x86_64-installer.exe" --clobber
 
   arch:
+    needs: guard
     runs-on: ubuntu-latest
     container:
       image: archlinux:base
@@ -225,6 +240,7 @@ jobs:
             "wiretap-${VERSION}-x86_64.pkg.tar.zst" --clobber
 
   relay-image:
+    needs: guard
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
