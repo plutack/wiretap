@@ -75,6 +75,38 @@ func TestInterceptSessions_CreateEndList(t *testing.T) {
 	}
 }
 
+func TestInterceptSessionsPage_CursorAndTotal(t *testing.T) {
+	t.Parallel()
+	s := newSessionTestStore(t)
+	ctx := context.Background()
+	start := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+
+	var ids []int64
+	for i := range 5 {
+		id, err := s.CreateInterceptSession(ctx, start.Add(time.Duration(i)*time.Minute), "bash", ":0")
+		if err != nil {
+			t.Fatalf("CreateInterceptSession %d: %v", i, err)
+		}
+		ids = append(ids, id)
+	}
+
+	first, total, err := s.InterceptSessionsPage(ctx, 0, 2)
+	if err != nil {
+		t.Fatalf("first page: %v", err)
+	}
+	if total != 5 || len(first) != 2 || first[0].ID != ids[4] || first[1].ID != ids[3] {
+		t.Fatalf("first = %+v, total = %d", first, total)
+	}
+
+	second, total, err := s.InterceptSessionsPage(ctx, first[1].ID, 2)
+	if err != nil {
+		t.Fatalf("second page: %v", err)
+	}
+	if total != 5 || len(second) != 2 || second[0].ID != ids[2] || second[1].ID != ids[1] {
+		t.Fatalf("second = %+v, total = %d", second, total)
+	}
+}
+
 func TestTrafficCapturesBySession_Filters(t *testing.T) {
 	t.Parallel()
 	s := newSessionTestStore(t)

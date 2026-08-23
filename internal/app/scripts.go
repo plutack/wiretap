@@ -28,6 +28,14 @@ func (a *App) Scripts(ctx context.Context) ([]store.ScriptRow, error) {
 	return a.store.Scripts(ctx)
 }
 
+// ScriptSummaries lists editor metadata without reading stored script bodies.
+func (a *App) ScriptSummaries(ctx context.Context) ([]store.ScriptRow, error) {
+	if a.store == nil {
+		return nil, errStoreNotOpen
+	}
+	return a.store.ScriptSummaries(ctx)
+}
+
 // ScriptByID returns a single script. Wraps store.ErrNotFound when absent.
 func (a *App) ScriptByID(ctx context.Context, id int64) (*store.ScriptRow, error) {
 	if a.store == nil {
