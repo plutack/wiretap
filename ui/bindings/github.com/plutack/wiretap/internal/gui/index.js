@@ -8,6 +8,7 @@ export {
 };
 
 export {
+    CaptureBodyView,
     CaptureView,
     ClientView,
     RegisterInput,

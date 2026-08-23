@@ -944,6 +944,7 @@ textarea:focus-visible {
 }
 
 .body-action:hover { background: var(--wt-panel-soft); color: var(--wt-text); }
+.body-action:disabled { cursor: wait; opacity: .55; }
 
 .body-code {
   overflow: auto;
@@ -996,6 +997,12 @@ textarea:focus-visible {
   border-color: rgba(245, 158, 11, .28);
   background: rgba(245, 158, 11, .07);
   color: #e2bd7a;
+}
+
+.body-large-warning .body-action {
+  margin-left: 6px;
+  border: 1px solid rgba(245, 158, 11, .25);
+  color: #f0c87f;
 }
 
 .script-program-fallback {

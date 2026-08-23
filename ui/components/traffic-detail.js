@@ -18,7 +18,7 @@ function headerValue(headers, name) {
   return Array.isArray(v) ? v.join(", ") : String(v);
 }
 
-export function TrafficDetail({ capture, onExport, onClose }) {
+export function TrafficDetail({ capture, onExport, onLoadBody, onClose }) {
   const reqCT = headerValue(capture.req_headers, "content-type");
   const respCT = headerValue(capture.resp_headers, "content-type");
 
@@ -46,10 +46,12 @@ export function TrafficDetail({ capture, onExport, onClose }) {
         len=${fmtBytes(capture.req_body_len)}
       >
         <${CodeBlock}
-                  body=${capture.req_body}
+                  key=${`capture-${capture.id}-request`}
                   bodyBase64=${capture.req_body_base64}
                   bodyLength=${capture.req_body_len}
+                  truncated=${capture.req_body_truncated}
                   contentType=${reqCT}
+                  loadBody=${onLoadBody ? (limit) => onLoadBody("request", limit) : null}
                 />
       </>
 
@@ -63,10 +65,12 @@ export function TrafficDetail({ capture, onExport, onClose }) {
         len=${fmtBytes(capture.resp_body_len)}
       >
         <${CodeBlock}
-                  body=${capture.resp_body}
+                  key=${`capture-${capture.id}-response`}
                   bodyBase64=${capture.resp_body_base64}
                   bodyLength=${capture.resp_body_len}
+                  truncated=${capture.resp_body_truncated}
                   contentType=${respCT}
+                  loadBody=${onLoadBody ? (limit) => onLoadBody("response", limit) : null}
                 />
       </>
 

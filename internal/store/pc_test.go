@@ -213,3 +213,46 @@ func TestPCStore_TrafficCaptures_OrderAndLimit(t *testing.T) {
 		t.Errorf("ordering = [%d, %d, %d], want [5, 4, 3]", got[0].ID, got[1].ID, got[2].ID)
 	}
 }
+
+func TestPCStore_TrafficCaptureSummariesAndPreview(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := freshPCStore(t)
+	req := bytes.Repeat([]byte("r"), 700)
+	resp := bytes.Repeat([]byte("s"), 900)
+	id, err := s.InsertTrafficCapture(ctx, TrafficCaptureRow{
+		At: fixedTime, Method: "POST", URL: "https://example.test/large",
+		ReqHeadersJSON: `{"X-Test":["yes"]}`, ReqBody: req, Status: 201,
+		RespHeadersJSON: `{"Content-Type":["application/json"]}`, RespBody: resp,
+	})
+	if err != nil {
+		t.Fatalf("InsertTrafficCapture: %v", err)
+	}
+
+	summaries, err := s.TrafficCaptureSummariesBySession(ctx, 0, 10)
+	if err != nil {
+		t.Fatalf("TrafficCaptureSummariesBySession: %v", err)
+	}
+	if len(summaries) != 1 || summaries[0].ReqBodyLen != len(req) || summaries[0].RespBodyLen != len(resp) {
+		t.Fatalf("summaries = %+v", summaries)
+	}
+
+	preview, err := s.TrafficCapturePreviewByID(ctx, id, 128)
+	if err != nil {
+		t.Fatalf("TrafficCapturePreviewByID: %v", err)
+	}
+	if !bytes.Equal(preview.ReqBody, req[:128]) || !bytes.Equal(preview.RespBody, resp[:128]) {
+		t.Fatalf("preview prefixes = %d/%d bytes", len(preview.ReqBody), len(preview.RespBody))
+	}
+	if preview.ReqBodyLen != len(req) || preview.RespBodyLen != len(resp) {
+		t.Fatalf("preview lengths = %d/%d", preview.ReqBodyLen, preview.RespBodyLen)
+	}
+
+	full, fullLen, err := s.TrafficCaptureBody(ctx, id, true, 0)
+	if err != nil {
+		t.Fatalf("TrafficCaptureBody: %v", err)
+	}
+	if !bytes.Equal(full, resp) || fullLen != len(resp) {
+		t.Fatalf("full response = %d/%d bytes", len(full), fullLen)
+	}
+}
