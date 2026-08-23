@@ -353,6 +353,15 @@ func (a *App) CapturesBySession(ctx context.Context, sessionID int64, limit int)
 	return a.store.TrafficCapturesBySession(ctx, sessionID, limit)
 }
 
+// CaptureSummariesBySession lists capture metadata and body lengths without
+// loading body blobs. It is used by the GUI's frequent polling path.
+func (a *App) CaptureSummariesBySession(ctx context.Context, sessionID int64, limit int) ([]store.TrafficCaptureSummaryRow, error) {
+	if a.store == nil {
+		return nil, errors.New("app: store not open")
+	}
+	return a.store.TrafficCaptureSummariesBySession(ctx, sessionID, limit)
+}
+
 // InterceptSessions lists recorded interception sessions, newest-first, with
 // capture counts. Backs the GUI's session filter.
 func (a *App) InterceptSessions(ctx context.Context, limit int) ([]store.InterceptSessionRow, error) {
@@ -369,6 +378,22 @@ func (a *App) CaptureByID(ctx context.Context, id int64) (*store.TrafficCaptureR
 		return nil, errors.New("app: store not open")
 	}
 	return a.store.TrafficCaptureByID(ctx, id)
+}
+
+// CapturePreviewByID loads headers and bounded body prefixes for the GUI.
+func (a *App) CapturePreviewByID(ctx context.Context, id int64, bodyLimit int) (*store.TrafficCapturePreviewRow, error) {
+	if a.store == nil {
+		return nil, errors.New("app: store not open")
+	}
+	return a.store.TrafficCapturePreviewByID(ctx, id, bodyLimit)
+}
+
+// CaptureBody loads one request or response body, optionally bounded.
+func (a *App) CaptureBody(ctx context.Context, id int64, response bool, limit int) ([]byte, int, error) {
+	if a.store == nil {
+		return nil, 0, errors.New("app: store not open")
+	}
+	return a.store.TrafficCaptureBody(ctx, id, response, limit)
 }
 
 // WebhookBySeq loads one webhook by (project, seq). Returns store.ErrNotFound

@@ -189,6 +189,101 @@ func (s *PCStore) TrafficCapturesBySession(ctx context.Context, sessionID int64,
 	return out, nil
 }
 
+// TrafficCaptureSummariesBySession lists capture metadata without selecting
+// request or response body blobs. sessionID 0 means "all sessions".
+func (s *PCStore) TrafficCaptureSummariesBySession(ctx context.Context, sessionID int64, limit int) ([]TrafficCaptureSummaryRow, error) {
+	q := `SELECT id, COALESCE(session_id, 0), at, COALESCE(method, ''), COALESCE(url, ''), status, length(COALESCE(req_body, '')), length(COALESCE(resp_body, '')) FROM traffic_captures`
+	args := []any{}
+	if sessionID != 0 {
+		q += " WHERE session_id = ?"
+		args = append(args, sessionID)
+	}
+	q += " ORDER BY id DESC"
+	if limit > 0 {
+		q += " LIMIT ?"
+		args = append(args, limit)
+	}
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("PCStore.TrafficCaptureSummariesBySession: %w", err)
+	}
+	defer rows.Close()
+	var out []TrafficCaptureSummaryRow
+	for rows.Next() {
+		var c TrafficCaptureSummaryRow
+		var at int64
+		var status sql.NullInt64
+		if err := rows.Scan(&c.ID, &c.SessionID, &at, &c.Method, &c.URL, &status, &c.ReqBodyLen, &c.RespBodyLen); err != nil {
+			return nil, fmt.Errorf("PCStore.TrafficCaptureSummariesBySession scan: %w", err)
+		}
+		c.At = time.Unix(at, 0).UTC()
+		if status.Valid {
+			c.Status = int(status.Int64)
+		}
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("PCStore.TrafficCaptureSummariesBySession rows: %w", err)
+	}
+	return out, nil
+}
+
+// TrafficCapturePreviewByID returns capture metadata and at most bodyLimit
+// bytes from each body. bodyLimit must be positive.
+func (s *PCStore) TrafficCapturePreviewByID(ctx context.Context, id int64, bodyLimit int) (*TrafficCapturePreviewRow, error) {
+	if bodyLimit <= 0 {
+		return nil, fmt.Errorf("PCStore.TrafficCapturePreviewByID: body limit must be positive")
+	}
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, COALESCE(session_id, 0), at, COALESCE(method, ''), COALESCE(url, ''), COALESCE(req_headers, ''), substr(COALESCE(req_body, ''), 1, ?), length(COALESCE(req_body, '')), status, COALESCE(resp_headers, ''), substr(COALESCE(resp_body, ''), 1, ?), length(COALESCE(resp_body, ''))
+		 FROM traffic_captures WHERE id = ?`,
+		bodyLimit, bodyLimit, id,
+	)
+	var c TrafficCapturePreviewRow
+	var at int64
+	var status sql.NullInt64
+	if err := row.Scan(&c.ID, &c.SessionID, &at, &c.Method, &c.URL, &c.ReqHeadersJSON, &c.ReqBody, &c.ReqBodyLen, &status, &c.RespHeadersJSON, &c.RespBody, &c.RespBodyLen); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("PCStore.TrafficCapturePreviewByID %d: %w", id, ErrNotFound)
+		}
+		return nil, fmt.Errorf("PCStore.TrafficCapturePreviewByID %d: %w", id, err)
+	}
+	c.At = time.Unix(at, 0).UTC()
+	if status.Valid {
+		c.Status = int(status.Int64)
+	}
+	return &c, nil
+}
+
+// TrafficCaptureBody returns a bounded prefix of one body. A non-positive
+// limit returns the full body and is reserved for explicit user actions.
+func (s *PCStore) TrafficCaptureBody(ctx context.Context, id int64, response bool, limit int) ([]byte, int, error) {
+	column := "req_body"
+	if response {
+		column = "resp_body"
+	}
+	expr := "COALESCE(" + column + ", '')"
+	args := []any{}
+	if limit > 0 {
+		expr = "substr(" + expr + ", 1, ?)"
+		args = append(args, limit)
+	}
+	args = append(args, id)
+	row := s.db.QueryRowContext(ctx,
+		"SELECT "+expr+", length(COALESCE("+column+", '')) FROM traffic_captures WHERE id = ?",
+		args...,
+	)
+	var body []byte
+	var bodyLen int
+	if err := row.Scan(&body, &bodyLen); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, 0, fmt.Errorf("PCStore.TrafficCaptureBody %d: %w", id, ErrNotFound)
+		}
+		return nil, 0, fmt.Errorf("PCStore.TrafficCaptureBody %d: %w", id, err)
+	}
+	return body, bodyLen, nil
+}
+
 // TrafficCaptureByID returns a single traffic capture with its request/response
 // headers and bodies populated (the detail view). Returns ErrNotFound when no
 // row has that id.
