@@ -173,6 +173,8 @@ func TestBindings_SaveSettings_Validation(t *testing.T) {
 func TestBindings_SaveSettings_NativeTitlebar(t *testing.T) {
 	t.Parallel()
 	b, _, _ := newSettingsBindings(t)
+	var applied []string
+	b.onTitlebarModeChange = func(mode string) { applied = append(applied, mode) }
 
 	v, err := b.SaveSettings(SettingsInput{NativeTitlebar: "always"})
 	if err != nil {
@@ -180,6 +182,17 @@ func TestBindings_SaveSettings_NativeTitlebar(t *testing.T) {
 	}
 	if v.NativeTitlebar != "always" {
 		t.Errorf("NativeTitlebar = %q, want always", v.NativeTitlebar)
+	}
+	if len(applied) != 1 || applied[0] != "always" {
+		t.Fatalf("applied modes = %v, want [always]", applied)
+	}
+
+	// Saving an unchanged titlebar mode must not touch the live window.
+	if _, err := b.SaveSettings(SettingsInput{NativeTitlebar: "always"}); err != nil {
+		t.Fatalf("SaveSettings unchanged: %v", err)
+	}
+	if len(applied) != 1 {
+		t.Fatalf("unchanged mode applied again: %v", applied)
 	}
 
 	// Empty means "unset": valid, and the runtime treats it as auto.
@@ -189,6 +202,9 @@ func TestBindings_SaveSettings_NativeTitlebar(t *testing.T) {
 	}
 	if v.NativeTitlebar != "" {
 		t.Errorf("NativeTitlebar = %q, want empty (default)", v.NativeTitlebar)
+	}
+	if len(applied) != 2 || applied[1] != "" {
+		t.Fatalf("applied modes = %v, want [always empty]", applied)
 	}
 }
 
