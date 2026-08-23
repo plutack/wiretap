@@ -19,6 +19,7 @@ type Config struct {
 	Store     StoreConfig     `yaml:"store"`
 	TUI       TUIConfig       `yaml:"tui"`
 	Intercept InterceptConfig `yaml:"intercept"`
+	GUI       GUIConfig       `yaml:"gui"`
 }
 
 // RelayConfig holds the outbound-tunnel settings used by relayclient.
@@ -51,6 +52,16 @@ type TUIConfig struct {
 	Theme string `yaml:"theme"`
 }
 
+// GUIConfig holds desktop dashboard preferences.
+type GUIConfig struct {
+	// NativeTitlebar selects who draws the window title bar. "auto" (the
+	// default) marks the window frameless on desktops whose compositor
+	// provides server-side decorations (COSMIC, KDE Plasma) so its native
+	// bar is used instead of GTK's fallback; "always"/"never" force the
+	// choice for every desktop.
+	NativeTitlebar string `yaml:"native_titlebar"`
+}
+
 // InterceptConfig holds the traffic-interception settings consumed by the
 // `wiretap intercept` commands: the local interception proxy listen address,
 // the local 127.0.0.1 control HTTP API address, and an optional shell
@@ -78,6 +89,7 @@ func Default() Config {
 		},
 		Store: StoreConfig{Path: ""},
 		TUI:   TUIConfig{Theme: "dark"},
+		GUI:   GUIConfig{NativeTitlebar: "auto"},
 		Intercept: InterceptConfig{
 			ProxyAddr:    "127.0.0.1:8888",
 			LocalAPIAddr: "127.0.0.1:9876",
