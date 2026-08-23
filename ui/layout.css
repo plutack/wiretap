@@ -238,6 +238,20 @@ textarea:focus-visible {
   box-shadow: 0 0 0 3px rgba(98,217,191,.1), 0 0 10px rgba(98,217,191,.45);
 }
 
+.session-interrupted {
+	display: grid;
+	width: 16px;
+	height: 16px;
+	flex: 0 0 auto;
+	place-items: center;
+	border-radius: 50%;
+	background: rgba(233,187,112,.12);
+	color: var(--wt-warn);
+	font-family: "JetBrains Mono", monospace;
+	font-size: 0.6875rem;
+	font-weight: 700;
+}
+
 .refresh-button {
   display: grid;
   width: 30px;
@@ -304,6 +318,41 @@ textarea:focus-visible {
   font-weight: 700;
   letter-spacing: .14em;
   text-transform: uppercase;
+}
+
+.nav-heading-toggle,
+.nav-heading-actions {
+	display: flex;
+	align-items: center;
+}
+
+.nav-heading-toggle {
+	min-width: 0;
+	gap: 5px;
+	padding: 2px 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	letter-spacing: inherit;
+	text-transform: inherit;
+	cursor: pointer;
+}
+
+.nav-heading-actions {
+	gap: 6px;
+}
+
+.nav-chevron {
+	display: inline-block;
+	color: var(--wt-dim);
+	font-size: 0.875rem;
+	transform: rotate(0deg);
+	transition: transform 120ms ease;
+}
+
+.nav-chevron.expanded {
+	transform: rotate(90deg);
 }
 
 .nav-count {
@@ -418,6 +467,35 @@ textarea:focus-visible {
   cursor: pointer;
   font-size: 0.9375rem;
   line-height: 1;
+}
+
+.nav-more {
+	display: flex;
+	width: calc(100% - 16px);
+	align-items: center;
+	justify-content: space-between;
+	margin: 4px 8px 0;
+	padding: 6px 7px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--wt-dim);
+	font-size: 0.75rem;
+	cursor: pointer;
+}
+
+.nav-more:hover {
+	background: rgba(255,255,255,.035);
+	color: var(--wt-muted);
+}
+
+.nav-more-chevron {
+	display: inline-block;
+	transition: transform 120ms ease;
+}
+
+.nav-more-chevron.expanded {
+	transform: rotate(180deg);
 }
 
 /* Sidebar selects: same visual language as the design-system .select in

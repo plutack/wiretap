@@ -11,7 +11,7 @@ import (
 func TestWriteReadRemovePIDFile(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	if err := writePIDFile(dir, 12345); err != nil {
+	if err := writePIDFile(dir, 12345, 67); err != nil {
 		t.Fatalf("writePIDFile: %v", err)
 	}
 	pid, err := readPIDFile(dir)
@@ -20,6 +20,10 @@ func TestWriteReadRemovePIDFile(t *testing.T) {
 	}
 	if pid != 12345 {
 		t.Errorf("pid = %d, want 12345", pid)
+	}
+	record, err := readPIDRecord(dir)
+	if err != nil || record.SessionID != 67 {
+		t.Errorf("record = %+v, err = %v", record, err)
 	}
 	removePIDFile(dir)
 	if _, err := readPIDFile(dir); !os.IsNotExist(err) {
@@ -58,12 +62,12 @@ func TestPIDRoundTrip_HasSamePIDAfterParse(t *testing.T) {
 	}
 }
 
-func TestPIDFileContent_IsJustDigits(t *testing.T) {
+func TestPIDFileContent_IncludesSessionID(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writePIDFile(dir, 42)
+	writePIDFile(dir, 42, 9)
 	b, _ := os.ReadFile(filepath.Join(dir, pidFileName))
-	if strings.TrimSpace(string(b)) != "42" {
-		t.Errorf("pid file body = %q, want %q", string(b), "42")
+	if !strings.Contains(string(b), `"pid":42`) || !strings.Contains(string(b), `"session_id":9`) {
+		t.Errorf("pid file body = %q", string(b))
 	}
 }

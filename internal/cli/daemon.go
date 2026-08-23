@@ -6,6 +6,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,23 +21,42 @@ const (
 	pidStopPoll    = 100 * time.Millisecond
 )
 
-func writePIDFile(configDir string, pid int) error {
+type interceptPIDRecord struct {
+	PID       int   `json:"pid"`
+	SessionID int64 `json:"session_id,omitempty"`
+}
+
+func writePIDFile(configDir string, pid int, sessionID int64) error {
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		return fmt.Errorf("create config dir %s: %w", configDir, err)
 	}
-	return os.WriteFile(filepath.Join(configDir, pidFileName), []byte(strconv.Itoa(pid)), 0o644)
+	b, err := json.Marshal(interceptPIDRecord{PID: pid, SessionID: sessionID})
+	if err != nil {
+		return fmt.Errorf("encode pid file: %w", err)
+	}
+	return os.WriteFile(filepath.Join(configDir, pidFileName), b, 0o644)
+}
+
+func readPIDRecord(configDir string) (interceptPIDRecord, error) {
+	b, err := os.ReadFile(filepath.Join(configDir, pidFileName))
+	if err != nil {
+		return interceptPIDRecord{}, err
+	}
+	var record interceptPIDRecord
+	if err := json.Unmarshal(b, &record); err == nil && record.PID > 0 {
+		return record, nil
+	}
+	// Backward compatibility with the pre-session-ID plain-number format.
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil || pid <= 0 {
+		return interceptPIDRecord{}, fmt.Errorf("parse pid file: %w", err)
+	}
+	return interceptPIDRecord{PID: pid}, nil
 }
 
 func readPIDFile(configDir string) (int, error) {
-	b, err := os.ReadFile(filepath.Join(configDir, pidFileName))
-	if err != nil {
-		return 0, err
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-	if err != nil {
-		return 0, fmt.Errorf("parse pid file: %w", err)
-	}
-	return pid, nil
+	record, err := readPIDRecord(configDir)
+	return record.PID, err
 }
 
 func removePIDFile(configDir string) {

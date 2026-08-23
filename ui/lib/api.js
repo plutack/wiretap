@@ -31,7 +31,7 @@ export const api = {
   getWebhook: (project, seq) => GetWebhook(project, seq),
   replayWebhook: (project, seq, targetURL) => ReplayWebhook(project, seq, targetURL),
   listCaptures: (sessionId = 0) => ListCaptures(sessionId),
-  listSessions: () => ListSessions(),
+  listSessions: (beforeID = 0, limit = 20) => ListSessions(beforeID, limit),
   getCapture: (id) => GetCapture(id),
   getCaptureBody: (id, part, limit) => GetCaptureBody(id, part, limit),
   status: () => Status(),

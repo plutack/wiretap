@@ -1,4 +1,4 @@
-import { html } from "../vendor/preact/index.js";
+import { html, useState } from "../vendor/preact/index.js";
 import { Dropdown } from "./dropdown.js";
 
 // fmtSessionLabel renders "Aug 20 · 14:05" from an RFC3339 timestamp.
@@ -26,14 +26,38 @@ const STATUS_OPTIONS = [
   { value: "5xx", label: "5xx · server error" },
 ];
 
-function NavSection({ title, count, action, children }) {
+function NavSection({ title, count, action, collapsed, onToggle, children }) {
   return html`<section class="nav-section">
     <div class="nav-heading">
-      <span>${title}</span>
-      ${action || (count != null ? html`<span class="nav-count">${count}</span>` : null)}
+		${onToggle
+			? html`<button class="nav-heading-toggle" onClick=${onToggle} aria-expanded=${!collapsed}>
+				<span class="nav-chevron ${collapsed ? "" : "expanded"}">›</span>
+				<span>${title}</span>
+			</button>`
+			: html`<span>${title}</span>`}
+		<span class="nav-heading-actions">
+			${count != null ? html`<span class="nav-count">${count}</span>` : null}
+			${action}
+		</span>
     </div>
-    ${children}
+		${collapsed ? null : children}
   </section>`;
+}
+
+function MoreButton({ remaining, expanded, onClick }) {
+	if (remaining <= 0 && !expanded) return null;
+	return html`<button class="nav-more" onClick=${onClick}>
+		<span>${expanded && remaining <= 0 ? "Show less" : `Show ${remaining} more`}</span>
+		<span class="nav-more-chevron ${expanded && remaining <= 0 ? "expanded" : ""}">⌄</span>
+	</button>`;
+}
+
+function includePinned(items, visibleCount, isPinned) {
+	const visible = items.slice(0, visibleCount);
+	for (const item of items) {
+		if (isPinned(item) && !visible.includes(item)) visible.push(item);
+	}
+	return visible;
 }
 
 function ProjectItem({ label, active, onClick, all = false }) {
@@ -49,6 +73,9 @@ export function Sidebar({
   selectedProject,
   onSelectProject,
   sessions = [],
+	sessionTotal = sessions.length,
+	sessionsHaveMore = false,
+	onLoadMoreSessions,
   selectedSession = 0,
   onSelectSession,
   scripts,
@@ -61,17 +88,39 @@ export function Sidebar({
   onStatusFilterChange,
 }) {
   const enabledScripts = scripts.filter((script) => script.enabled).length;
+	const [collapsed, setCollapsed] = useState({ sources: false, sessions: false, transforms: false });
+	const [sourceLimit, setSourceLimit] = useState(6);
+	const [sessionLimit, setSessionLimit] = useState(8);
+	const [scriptLimit, setScriptLimit] = useState(6);
+	const toggle = (section) => setCollapsed((current) => ({ ...current, [section]: !current[section] }));
+	const visibleProjects = includePinned(projects, sourceLimit, (item) => item === selectedProject);
+	const visibleSessions = includePinned(
+		sessions,
+		sessionLimit,
+		(item) => item.id === selectedSession || item.running,
+	);
+	const visibleScripts = scripts.slice(0, scriptLimit);
+	const sourceRemaining = Math.max(0, projects.length - sourceLimit);
+	const sessionRemaining = Math.max(0, sessionTotal - sessionLimit);
+	const scriptRemaining = Math.max(0, scripts.length - scriptLimit);
+	const showMoreSessions = async () => {
+		const nextLimit = sessionLimit + 10;
+		if (nextLimit > sessions.length && sessionsHaveMore && onLoadMoreSessions) {
+			await onLoadMoreSessions();
+		}
+		setSessionLimit(nextLimit);
+	};
 
   return html`<aside class="navigator">
     <div class="navigator-scroll">
-      <${NavSection} title="Sources" count=${projects.length}>
+      <${NavSection} title="Sources" count=${projects.length} collapsed=${collapsed.sources} onToggle=${() => toggle("sources")}>
         <${ProjectItem}
           label="All projects"
           all=${true}
           active=${selectedProject === ""}
           onClick=${() => onSelectProject("")}
         />
-        ${projects.map(
+        ${visibleProjects.map(
           (project) => html`<${ProjectItem}
             key=${project}
             label=${project}
@@ -84,9 +133,14 @@ export function Sidebar({
               Connect a relay to discover project sources.
             </p>`
           : null}
+		<${MoreButton}
+			remaining=${sourceRemaining}
+			expanded=${sourceLimit >= projects.length && projects.length > 6}
+			onClick=${() => setSourceLimit(sourceRemaining > 0 ? projects.length : 6)}
+		/>
       </>
 
-      <${NavSection} title="Sessions" count=${sessions.length}>
+      <${NavSection} title="Sessions" count=${sessionTotal} collapsed=${collapsed.sessions} onToggle=${() => toggle("sessions")}>
         <button
           class="nav-item ${selectedSession === 0 ? "active" : ""}"
           onClick=${() => onSelectSession && onSelectSession(0)}
@@ -94,7 +148,7 @@ export function Sidebar({
           <span class="nav-glyph">∞</span>
           <span class="nav-label">All traffic</span>
         </button>
-        ${sessions.map(
+        ${visibleSessions.map(
           (s) => html`<button
             key=${s.id}
             class="nav-item ${selectedSession === s.id ? "active" : ""}"
@@ -103,9 +157,11 @@ export function Sidebar({
           >
             <span class="nav-glyph">#${s.id}</span>
             <span class="nav-label">${fmtSessionLabel(s.started_at)}</span>
-            ${!s.ended_at
+            ${s.running
               ? html`<span class="live-dot online" title="running"></span>`
-              : html`<span class="nav-count">${s.captures}</span>`}
+			  : s.interrupted
+				? html`<span class="session-interrupted" title="interrupted session">!</span>`
+				: html`<span class="nav-count">${s.captures}</span>`}
           </button>`,
         )}
         ${sessions.length === 0
@@ -113,14 +169,21 @@ export function Sidebar({
               Run <code>wiretap intercept start</code> to record a session.
             </p>`
           : null}
+		<${MoreButton}
+			remaining=${Math.min(10, sessionRemaining)}
+			expanded=${sessionLimit >= sessionTotal && sessionTotal > 8}
+			onClick=${sessionRemaining > 0 ? showMoreSessions : () => setSessionLimit(8)}
+		/>
       </>
 
       <${NavSection}
         title="Transforms"
         count=${enabledScripts + "/" + scripts.length}
+		collapsed=${collapsed.transforms}
+		onToggle=${() => toggle("transforms")}
         action=${html`<button class="new-script-button" title="New transform" aria-label="New transform" onClick=${onNewScript}>＋</button>`}
       >
-        ${scripts.map(
+        ${visibleScripts.map(
           (script) => html`<div key=${script.id} class="nav-item">
             <input
               class="script-switch"
@@ -145,6 +208,11 @@ export function Sidebar({
               <span class="nav-label">Create first transform</span>
             </button>`
           : null}
+		<${MoreButton}
+			remaining=${Math.min(10, scriptRemaining)}
+			expanded=${scriptLimit >= scripts.length && scripts.length > 6}
+			onClick=${() => setScriptLimit(scriptRemaining > 0 ? scriptLimit + 10 : 6)}
+		/>
       </>
 
       <${NavSection} title="Lens">
