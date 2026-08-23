@@ -60,7 +60,7 @@ func newInterceptStartCmd(version string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := writePIDFile(deps.ConfigDir, os.Getpid()); err != nil {
+			if err := writePIDFile(deps.ConfigDir, os.Getpid(), sess.SessionID()); err != nil {
 				_ = sess.Stop(context.Background())
 				return fmt.Errorf("write pid file: %w", err)
 			}

@@ -62,6 +62,7 @@ function App() {
 
   const [project, setProject] = useState("");
   const [sessions, setSessions] = useState([]);
+  const [sessionTotal, setSessionTotal] = useState(0);
   const [sessionFilter, setSessionFilter] = useState(0); // 0 = all sessions
   const [methodFilter, setMethodFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -105,12 +106,29 @@ function App() {
       showToast("list captures: " + e);
     }
   };
-  const loadSessions = async () => {
+  const loadSessions = async (beforeID = 0) => {
     try {
-      setSessions((await api.listSessions()) || []);
+      const page = await api.listSessions(beforeID, 20);
+      const rows = page.sessions || [];
+      setSessionTotal(page.total || 0);
+      setSessions((current) => {
+        if (beforeID) {
+          const seen = new Set(current.map((session) => session.id));
+          return [...current, ...rows.filter((session) => !seen.has(session.id))];
+        }
+        const fresh = new Set(rows.map((session) => session.id));
+        return [...rows, ...current.filter((session) => !fresh.has(session.id))];
+      });
+      return rows.length;
     } catch (e) {
       showToast("list sessions: " + e);
+      return 0;
     }
+  };
+  const loadMoreSessions = () => {
+    const oldest = sessions[sessions.length - 1];
+    if (!oldest || sessions.length >= sessionTotal) return Promise.resolve(0);
+    return loadSessions(oldest.id);
   };
   const loadScripts = async () => {
     try {
@@ -359,6 +377,9 @@ function App() {
         selectedProject=${project}
         onSelectProject=${setProject}
         sessions=${sessions}
+        sessionTotal=${sessionTotal}
+        sessionsHaveMore=${sessions.length < sessionTotal}
+        onLoadMoreSessions=${loadMoreSessions}
         selectedSession=${sessionFilter}
         onSelectSession=${(id) => {
           setSessionFilter(id);

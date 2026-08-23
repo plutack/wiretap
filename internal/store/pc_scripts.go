@@ -111,6 +111,19 @@ func (s *PCStore) Scripts(ctx context.Context) ([]ScriptRow, error) {
 	return collectScripts(rows)
 }
 
+// ScriptSummaries lists script metadata without loading JavaScript bodies.
+func (s *PCStore) ScriptSummaries(ctx context.Context) ([]ScriptRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, name, "trigger", '', priority, enabled, created_at, updated_at
+		 FROM scripts ORDER BY "trigger", priority, id`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("PCStore.ScriptSummaries: %w", err)
+	}
+	defer rows.Close()
+	return collectScripts(rows)
+}
+
 // ScriptsByTrigger lists scripts for one trigger in priority order. When
 // enabledOnly is true, disabled scripts are excluded — this is what the
 // scripting chain runner loads before an interception/replay/webhook hook.

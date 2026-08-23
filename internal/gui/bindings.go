@@ -125,12 +125,20 @@ type StatusView struct {
 // intercept start` run). EndedAt is empty while the session is running — or
 // when it crashed without cleanup.
 type SessionView struct {
-	ID        int64  `json:"id"`
-	StartedAt string `json:"started_at"`         // RFC3339 UTC
-	EndedAt   string `json:"ended_at,omitempty"` // empty = running/crashed
-	Shell     string `json:"shell,omitempty"`
-	ProxyAddr string `json:"proxy_addr,omitempty"`
-	Captures  int    `json:"captures"`
+	ID          int64  `json:"id"`
+	StartedAt   string `json:"started_at"`         // RFC3339 UTC
+	EndedAt     string `json:"ended_at,omitempty"` // empty = running/crashed
+	Shell       string `json:"shell,omitempty"`
+	ProxyAddr   string `json:"proxy_addr,omitempty"`
+	Captures    int    `json:"captures"`
+	Running     bool   `json:"running"`
+	Interrupted bool   `json:"interrupted"`
+}
+
+type SessionPageView struct {
+	Sessions []SessionView `json:"sessions"`
+	Total    int           `json:"total"`
+	HasMore  bool          `json:"has_more"`
 }
 
 // ReplayResult is the return value of ReplayWebhook: the upstream HTTP status.
@@ -240,28 +248,38 @@ func (b *Bindings) ListCaptures(sessionID int64) ([]CaptureView, error) {
 	return captureSummary(rows), nil
 }
 
-// ListSessions returns recorded interception sessions, newest-first, for the
-// sidebar's session filter.
-func (b *Bindings) ListSessions() ([]SessionView, error) {
-	rows, err := b.app.InterceptSessions(context.Background(), listLimit)
-	if err != nil {
-		return nil, fmt.Errorf("list sessions: %w", err)
+// ListSessions returns one cursor-paginated page of recorded interception
+// sessions, newest-first, plus the unpaginated total for the sidebar count.
+func (b *Bindings) ListSessions(beforeID int64, limit int) (SessionPageView, error) {
+	if limit <= 0 || limit > listLimit {
+		limit = 20
 	}
+	rows, total, err := b.app.InterceptSessionsPage(context.Background(), beforeID, limit+1)
+	if err != nil {
+		return SessionPageView{}, fmt.Errorf("list sessions: %w", err)
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	activeSessionID := b.app.ActiveInterceptSessionID()
 	out := make([]SessionView, 0, len(rows))
 	for _, r := range rows {
 		v := SessionView{
-			ID:        r.ID,
-			StartedAt: r.StartedAt.Format(time.RFC3339),
-			Shell:     r.Shell,
-			ProxyAddr: r.ProxyAddr,
-			Captures:  r.Captures,
+			ID:          r.ID,
+			StartedAt:   r.StartedAt.Format(time.RFC3339),
+			Shell:       r.Shell,
+			ProxyAddr:   r.ProxyAddr,
+			Captures:    r.Captures,
+			Running:     r.ID == activeSessionID,
+			Interrupted: r.EndedAt.IsZero() && r.ID != activeSessionID,
 		}
 		if !r.EndedAt.IsZero() {
 			v.EndedAt = r.EndedAt.Format(time.RFC3339)
 		}
 		out = append(out, v)
 	}
-	return out, nil
+	return SessionPageView{Sessions: out, Total: total, HasMore: hasMore}, nil
 }
 
 // GetWebhook returns one webhook with body + headers populated for the detail
@@ -312,7 +330,7 @@ func (b *Bindings) Status() StatusView {
 // ListScripts returns every stored script (all triggers) for the editor
 // sidebar, ordered by trigger then priority.
 func (b *Bindings) ListScripts() ([]ScriptView, error) {
-	rows, err := b.app.Scripts(context.Background())
+	rows, err := b.app.ScriptSummaries(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("list scripts: %w", err)
 	}

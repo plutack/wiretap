@@ -136,6 +136,12 @@ func Start(ctx context.Context, deps Deps) (*Session, error) {
 	if err != nil {
 		sessionID = 0
 	}
+	sessionStarted := false
+	defer func() {
+		if !sessionStarted && sessionID != 0 {
+			_ = deps.PCStore.EndInterceptSession(context.Background(), sessionID, clock.Now())
+		}
+	}()
 
 	recorder := &storeRecorder{st: deps.PCStore, clock: clock, sessionID: sessionID}
 	proxyOpts := []proxy.Option{proxy.WithClock(clock)}
@@ -156,6 +162,7 @@ func Start(ctx context.Context, deps Deps) (*Session, error) {
 	httpSrv := &http.Server{Handler: api.Routes()}
 	go func() { _ = httpSrv.Serve(apiLn) }()
 
+	sessionStarted = true
 	return &Session{
 		proxy:        prox,
 		localAPI:     httpSrv,

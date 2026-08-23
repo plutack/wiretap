@@ -171,6 +171,30 @@ func TestPCStore_Scripts_OrderedByTriggerThenPriority(t *testing.T) {
 	}
 }
 
+func TestPCStore_ScriptSummaries_OmitBodies(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := freshPCStore(t)
+	if _, err := s.InsertScript(ctx, sampleScript("sign", "on_request", 10, true), fixedTime); err != nil {
+		t.Fatalf("InsertScript: %v", err)
+	}
+
+	rows, err := s.ScriptSummaries(ctx)
+	if err != nil {
+		t.Fatalf("ScriptSummaries: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Name != "sign" || rows[0].Body != "" {
+		t.Fatalf("summaries = %+v", rows)
+	}
+	full, err := s.ScriptByID(ctx, rows[0].ID)
+	if err != nil {
+		t.Fatalf("ScriptByID: %v", err)
+	}
+	if full.Body == "" {
+		t.Fatal("full script body was lost")
+	}
+}
+
 func TestPCStore_ScriptsByTrigger_EnabledFilter(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

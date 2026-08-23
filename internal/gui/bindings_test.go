@@ -418,6 +418,9 @@ func TestBindings_Scripts_SaveListGetDelete(t *testing.T) {
 	if len(list) != 1 || list[0].Name != "sig" || !list[0].Enabled || list[0].Priority != 5 {
 		t.Errorf("ListScripts = %+v", list)
 	}
+	if list[0].Body != "" {
+		t.Errorf("ListScripts body = %q, want omitted metadata-only body", list[0].Body)
+	}
 
 	// Get by id returns the full body.
 	got, err := b.GetScript(id)
@@ -453,6 +456,39 @@ func TestBindings_Scripts_SaveListGetDelete(t *testing.T) {
 	}
 	if _, err := b.GetScript(id); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("GetScript after delete err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestBindings_ListSessions_PaginatesWithTotal(t *testing.T) {
+	t.Parallel()
+	b, a := newBindings(t)
+	ctx := context.Background()
+	for i := range 5 {
+		if _, err := a.Store().CreateInterceptSession(ctx, time.Unix(int64(i+1), 0), "bash", ":0"); err != nil {
+			t.Fatalf("CreateInterceptSession %d: %v", i, err)
+		}
+	}
+
+	first, err := b.ListSessions(0, 2)
+	if err != nil {
+		t.Fatalf("first page: %v", err)
+	}
+	if first.Total != 5 || !first.HasMore || len(first.Sessions) != 2 {
+		t.Fatalf("first page = %+v", first)
+	}
+	second, err := b.ListSessions(first.Sessions[1].ID, 2)
+	if err != nil {
+		t.Fatalf("second page: %v", err)
+	}
+	if second.Total != 5 || !second.HasMore || len(second.Sessions) != 2 {
+		t.Fatalf("second page = %+v", second)
+	}
+	last, err := b.ListSessions(second.Sessions[1].ID, 2)
+	if err != nil {
+		t.Fatalf("last page: %v", err)
+	}
+	if last.Total != 5 || last.HasMore || len(last.Sessions) != 1 {
+		t.Fatalf("last page = %+v", last)
 	}
 }
 
