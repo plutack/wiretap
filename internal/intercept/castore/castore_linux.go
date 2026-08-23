@@ -19,10 +19,10 @@ import (
 // EnsureCA can distinguish "first run" from real I/O errors.
 var errNoCA = errors.New("castore: no persisted CA")
 
-// LinuxInstaller persists the CA under ConfigDir. The system trust store
-// install (TrustSystem) uses /usr/local/share/ca-certificates + update-ca-
-// certificates (the Debian/Ubuntu mechanism; works on most desktop Linux).
-// TrustSystem needs root; EnsureCA does not.
+// LinuxInstaller persists the CA under ConfigDir. TrustSystem selects the
+// native trust-store mechanism available on the host: Debian/Ubuntu's
+// update-ca-certificates or p11-kit's update-ca-trust (used by Arch and
+// Fedora-family systems). TrustSystem needs root; EnsureCA does not.
 //
 // LinuxInstaller is intentionally thin glue (file + one exec) and is not
 // unit-tested: exercising the real system trust store requires root and a
@@ -35,9 +35,35 @@ type LinuxInstaller struct {
 	ConfigDir string
 }
 
-// trustCertPath is the system path the update-ca-certificates tool scans for
-// single-file additions. One file is plenty for wiretap's single root.
-const trustCertPath = "/usr/local/share/ca-certificates/wiretap-ca.crt"
+// These are the native anchor locations for the supported Linux trust-store
+// implementations. One file is plenty for wiretap's single root.
+const (
+	debianTrustCertPath = "/usr/local/share/ca-certificates/wiretap-ca.crt"
+	p11KitTrustCertPath = "/etc/ca-certificates/trust-source/anchors/wiretap-ca.crt"
+)
+
+type linuxTrustStore struct {
+	certPath string
+	command  string
+	args     []string
+}
+
+func resolveLinuxTrustStore() (linuxTrustStore, error) {
+	if _, err := exec.LookPath("update-ca-certificates"); err == nil {
+		return linuxTrustStore{
+			certPath: debianTrustCertPath,
+			command:  "update-ca-certificates",
+		}, nil
+	}
+	if _, err := exec.LookPath("update-ca-trust"); err == nil {
+		return linuxTrustStore{
+			certPath: p11KitTrustCertPath,
+			command:  "update-ca-trust",
+			args:     []string{"extract"},
+		}, nil
+	}
+	return linuxTrustStore{}, fmt.Errorf("castore: no supported Linux trust-store updater found (need update-ca-certificates or update-ca-trust)")
+}
 
 // EnsureCA implements Installer. It reuses a persisted CA when present,
 // otherwise generates one and writes it under ConfigDir/ca. It does NOT
@@ -73,21 +99,27 @@ func (l *LinuxInstaller) EnsureCA(_ context.Context) (*CA, error) {
 	return ca, nil
 }
 
-// TrustSystem implements Installer. It copies the persisted CA cert into
-// /usr/local/share/ca-certificates/ and runs update-ca-certificates. Needs
-// root. Optional: the three supported tools (curl, git, node) + Python/Go
-// (via SSL_CERT_FILE) work without it. Call this once if you want other
-// tools (e.g. a system Python without SSL_CERT_FILE) to trust the CA too.
+// TrustSystem implements Installer. It copies the persisted CA cert into the
+// native Linux trust anchor directory and refreshes the system trust store.
+// Needs root. Optional: the three supported tools (curl, git, node) + Python/Go
+// (via SSL_CERT_FILE) work without it.
 func (l *LinuxInstaller) TrustSystem(ctx context.Context) error {
 	certPath := filepath.Join(l.ConfigDir, "ca", "wiretap-ca.crt")
 	certPEM, err := os.ReadFile(certPath)
 	if err != nil {
 		return fmt.Errorf("castore: read CA cert %s: %w (run `wiretap intercept start` first to generate it)", certPath, err)
 	}
-	if err := os.WriteFile(trustCertPath, certPEM, 0o644); err != nil {
-		return fmt.Errorf("castore: write trust store %s (need root?): %w", trustCertPath, err)
+	store, err := resolveLinuxTrustStore()
+	if err != nil {
+		return err
 	}
-	if err := runUpdateCA(ctx); err != nil {
+	if err := os.MkdirAll(filepath.Dir(store.certPath), 0o755); err != nil {
+		return fmt.Errorf("castore: create trust store directory %s (need root?): %w", filepath.Dir(store.certPath), err)
+	}
+	if err := os.WriteFile(store.certPath, certPEM, 0o644); err != nil {
+		return fmt.Errorf("castore: write trust store %s (need root?): %w", store.certPath, err)
+	}
+	if err := runUpdateCA(ctx, store); err != nil {
 		return fmt.Errorf("castore: %w", err)
 	}
 	return nil
@@ -97,10 +129,14 @@ func (l *LinuxInstaller) TrustSystem(ctx context.Context) error {
 // refreshes the trust store; the persisted CA files under ConfigDir are left
 // in place for cheap re-trust.
 func (l *LinuxInstaller) Uninstall(ctx context.Context) error {
-	if err := os.Remove(trustCertPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("castore: remove trust entry %s: %w", trustCertPath, err)
+	store, err := resolveLinuxTrustStore()
+	if err != nil {
+		return err
 	}
-	if err := runUpdateCA(ctx); err != nil {
+	if err := os.Remove(store.certPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("castore: remove trust entry %s: %w", store.certPath, err)
+	}
+	if err := runUpdateCA(ctx, store); err != nil {
 		return fmt.Errorf("castore: %w", err)
 	}
 	return nil
@@ -109,12 +145,12 @@ func (l *LinuxInstaller) Uninstall(ctx context.Context) error {
 // runUpdateCA invokes the distro's CA refresh command. Its output is intentionally
 // discarded: it is loud on misconfigured systems and quiet on success, and we
 // surface only a wrapped error.
-func runUpdateCA(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "update-ca-certificates")
+func runUpdateCA(ctx context.Context, store linuxTrustStore) error {
+	cmd := exec.CommandContext(ctx, store.command, store.args...)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("update-ca-certificates: %w", err)
+		return fmt.Errorf("%s: %w", store.command, err)
 	}
 	return nil
 }
