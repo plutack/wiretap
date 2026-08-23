@@ -33,6 +33,22 @@ tui:
   # Terminal UI color theme. The currently supported built-in theme is dark.
   theme: dark
 
+gui:
+  # Who draws the desktop window's title bar.
+  #
+  #   auto (default) — drop GTK's fallback bar and use the compositor's
+  #     native title bar on Linux desktops that draw server-side decorations
+  #     for frameless windows (COSMIC, KDE Plasma). Everywhere else the
+  #     normal decorated window is kept, because frameless means no bar at
+  #     all on GNOME, sway, Windows, and macOS.
+  #   always — force the native bar on every Linux desktop. Use this if your
+  #     compositor draws server-side decorations but is not in the auto list
+  #     (window has no bar under it otherwise).
+  #   never — always keep the standard decorated window.
+  #
+  # Read once at startup; restart the app after changing it.
+  native_titlebar: auto
+
 intercept:
   # Local HTTP/HTTPS interception proxy. Keep this on a loopback address unless
   # you explicitly intend to expose the proxy to other machines.
