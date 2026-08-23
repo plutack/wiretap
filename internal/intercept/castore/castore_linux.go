@@ -125,19 +125,37 @@ func (l *LinuxInstaller) TrustSystem(ctx context.Context) error {
 	return nil
 }
 
-// Uninstall implements Installer. It removes the system trust entry and
-// refreshes the trust store; the persisted CA files under ConfigDir are left
-// in place for cheap re-trust.
+// Uninstall implements Installer. It removes wiretap's anchor from every
+// supported trust-store location — not just the one the host resolves to
+// today, because the available updater can change between TrustSystem and
+// Uninstall (e.g. distro reinstall or migration), and a stale anchor would
+// leave a trusted wiretap root behind. Missing entries are fine. With no
+// updater installed nothing could have been trusted system-wide in the
+// first place, so uninstall succeeds as a no-op. The persisted CA files
+// under ConfigDir are left in place for cheap re-trust.
 func (l *LinuxInstaller) Uninstall(ctx context.Context) error {
-	store, err := resolveLinuxTrustStore()
-	if err != nil {
-		return err
+	for _, path := range []string{debianTrustCertPath, p11KitTrustCertPath} {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("castore: remove trust entry %s: %w", path, err)
+		}
 	}
-	if err := os.Remove(store.certPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("castore: remove trust entry %s: %w", store.certPath, err)
-	}
-	if err := runUpdateCA(ctx, store); err != nil {
-		return fmt.Errorf("castore: %w", err)
+	return refreshTrustStores(ctx)
+}
+
+// refreshTrustStores runs every installed trust-store updater so anchor
+// additions and removals propagate regardless of which mechanism the host
+// uses. Debian-family systems ship both tools; running both is harmless.
+func refreshTrustStores(ctx context.Context) error {
+	for _, store := range []linuxTrustStore{
+		{command: "update-ca-certificates"},
+		{command: "update-ca-trust", args: []string{"extract"}},
+	} {
+		if _, err := exec.LookPath(store.command); err != nil {
+			continue
+		}
+		if err := runUpdateCA(ctx, store); err != nil {
+			return fmt.Errorf("castore: %w", err)
+		}
 	}
 	return nil
 }
