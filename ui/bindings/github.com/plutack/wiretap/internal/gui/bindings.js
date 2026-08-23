@@ -215,9 +215,8 @@ export function SaveScript($in) {
 /**
  * SaveSettings validates and persists the whole form to config.yaml, then
  * restarts the relay tunnel when its endpoint changed. Interception settings
- * apply to the next `wiretap intercept start`; the native titlebar mode and
- * a store path change take effect after the app restarts (the open SQLite
- * handle is kept).
+ * apply to the next `wiretap intercept start`; a store path change takes
+ * effect after restart. The native titlebar callback applies immediately.
  * @param {$models.SettingsInput} $in
  * @returns {$CancellablePromise<$models.SettingsView>}
  */

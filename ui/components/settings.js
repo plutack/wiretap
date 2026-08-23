@@ -30,9 +30,9 @@ const THEME_OPTIONS = [
 ];
 
 const TITLEBAR_OPTIONS = [
-  { value: "auto", label: "auto (compositor decides)" },
-  { value: "always", label: "always (native bar)" },
-  { value: "never", label: "never (GTK bar)" },
+  { value: "auto", label: "auto (native bar)" },
+  { value: "always", label: "always show" },
+  { value: "never", label: "never (frameless)" },
 ];
 
 function SettingsCard({ title, hint, children }) {
@@ -181,7 +181,7 @@ export function Settings({ onToast, onSaved }) {
 
       <${SettingsCard}
         title="Desktop window"
-        hint="Who draws the window title bar: auto uses the compositor's native bar on desktops that provide server-side decorations (COSMIC, KDE Plasma) and GTK's fallback bar everywhere else. Applies after restarting wiretap."
+        hint="Controls the platform title bar and window buttons. Auto keeps the native bar. Never uses a frameless Linux window. Changes apply immediately."
       >
         <div class="grid grid-cols-2 gap-3">
           <${Field} label="Native title bar">

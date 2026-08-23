@@ -78,7 +78,16 @@ func runGUI(parent context.Context, version string) error {
 		fmt.Fprintf(os.Stderr, "wiretap: tunnel not started: %v\n", err)
 	}
 
-	bindings := gui.New(a, gui.WithVersion(version))
+	var window *application.WebviewWindow
+	bindings := gui.New(
+		a,
+		gui.WithVersion(version),
+		gui.WithTitlebarModeChanged(func(mode string) {
+			if window != nil {
+				window.SetFrameless(titlebarModeFrameless(mode))
+			}
+		}),
+	)
 
 	wailsApp := application.New(application.Options{
 		Name: "wiretap",
@@ -97,17 +106,10 @@ func runGUI(parent context.Context, version string) error {
 		},
 	})
 
-	// Frameless lets the compositor draw its native title bar on desktops
-	// that provide server-side decorations (COSMIC, KDE Plasma) — GTK's own
-	// fallback bar renders light-on-dark there and looks foreign. On
-	// desktops without SSD (GNOME, Sway) a frameless window would have no
-	// bar at all, so it stays off unless forced via config.
-	frameless := nativeTitlebarWanted(guiTitlebarMode(a), os.Getenv("XDG_CURRENT_DESKTOP"))
-
-	wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+	window = wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
 		URL:       "/",
 		Title:     "wiretap",
-		Frameless: frameless,
+		Frameless: titlebarModeFrameless(guiTitlebarMode(a)),
 		// Match the UI's --wt-bg (#080a0c) so the window never flashes white
 		// while the webview boots — the closest thing to "native dark mode"
 		// Wails offers; form-control popups follow the CSS color-scheme:dark.
