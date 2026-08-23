@@ -12,6 +12,7 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/dop251/goja v0.0.0-20260723142020-b4aef50fa347
 	github.com/dop251/goja_nodejs v0.0.0-20260212111938-1f56ff5bcf14
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/spf13/cobra v1.10.2
 	github.com/wailsapp/wails/v3 v3.0.0-beta.8
 	gopkg.in/yaml.v3 v3.0.1
@@ -32,7 +33,6 @@ require (
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
-	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/pprof v0.0.0-20250317173921-a4b03ec1a45e // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
