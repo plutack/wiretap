@@ -7,8 +7,53 @@
 import { Create as $Create } from "/wails/runtime.js";
 
 /**
+ * CaptureBodyView is one bounded or complete body fetched on demand.
+ */
+export class CaptureBodyView {
+    /**
+     * Creates a new CaptureBodyView instance.
+     * @param {Partial<CaptureBodyView>} [$$source = {}] - The source object to create the CaptureBodyView.
+     */
+    constructor($$source = {}) {
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["body_base64"] = undefined;
+        }
+        if (!("body_len" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["body_len"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["truncated"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CaptureBodyView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CaptureBodyView}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CaptureBodyView(/** @type {Partial<CaptureBodyView>} */($$parsedSource));
+    }
+}
+
+/**
  * CaptureView is the GUI DTO for a traffic capture. Bodies are omitted in list
- * responses; GetCapture fills them for the detail pane.
+ * responses; GetCapture fills bounded Base64 previews for the detail pane.
  */
 export class CaptureView {
     /**
@@ -71,13 +116,6 @@ export class CaptureView {
              * @member
              * @type {string | undefined}
              */
-            this["req_body"] = undefined;
-        }
-        if (/** @type {any} */(false)) {
-            /**
-             * @member
-             * @type {string | undefined}
-             */
             this["req_body_base64"] = undefined;
         }
         if (!("req_body_len" in $$source)) {
@@ -90,16 +128,16 @@ export class CaptureView {
         if (/** @type {any} */(false)) {
             /**
              * @member
-             * @type {{ [_ in string]?: string[] } | undefined}
+             * @type {boolean | undefined}
              */
-            this["resp_headers"] = undefined;
+            this["req_body_truncated"] = undefined;
         }
         if (/** @type {any} */(false)) {
             /**
              * @member
-             * @type {string | undefined}
+             * @type {{ [_ in string]?: string[] } | undefined}
              */
-            this["resp_body"] = undefined;
+            this["resp_headers"] = undefined;
         }
         if (/** @type {any} */(false)) {
             /**
@@ -114,6 +152,13 @@ export class CaptureView {
              * @type {number}
              */
             this["resp_body_len"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["resp_body_truncated"] = undefined;
         }
 
         Object.assign(this, $$source);
@@ -758,6 +803,13 @@ export class SettingsInput {
              */
             this["tui_theme"] = "";
         }
+        if (!("native_titlebar" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["native_titlebar"] = "";
+        }
         if (!("proxy_addr" in $$source)) {
             /**
              * @member
@@ -847,6 +899,13 @@ export class SettingsView {
              */
             this["tui_theme"] = "";
         }
+        if (!("native_titlebar" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["native_titlebar"] = "";
+        }
         if (!("proxy_addr" in $$source)) {
             /**
              * @member
@@ -913,10 +972,10 @@ export class SettingsView {
      * @returns {SettingsView}
      */
     static createFrom($$source = {}) {
-        const $$createField11_0 = $$createType0;
+        const $$createField12_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("projects" in $$parsedSource) {
-            $$parsedSource["projects"] = $$createField11_0($$parsedSource["projects"]);
+            $$parsedSource["projects"] = $$createField12_0($$parsedSource["projects"]);
         }
         return new SettingsView(/** @type {Partial<SettingsView>} */($$parsedSource));
     }

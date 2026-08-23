@@ -61,15 +61,27 @@ export function ExportWebhook(project, seq, target, client) {
 }
 
 /**
- * GetCapture returns one traffic capture with request/response headers and
- * bodies populated for the detail pane. Returns an error when the row is
- * absent (errors.Is, store.ErrNotFound).
+ * GetCapture returns capture metadata, headers, and bounded body previews.
  * @param {number} id
  * @returns {$CancellablePromise<$models.CaptureView>}
  */
 export function GetCapture(id) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetCapture", id).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType2($result);
+    }));
+}
+
+/**
+ * GetCaptureBody returns a request or response body prefix. limit <= 0 returns
+ * the complete body and should only be used for explicit user actions.
+ * @param {number} id
+ * @param {string} part
+ * @param {number} limit
+ * @returns {$CancellablePromise<$models.CaptureBodyView>}
+ */
+export function GetCaptureBody(id, part, limit) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetCaptureBody", id, part, limit).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType3($result);
     }));
 }
 
@@ -81,7 +93,7 @@ export function GetCapture(id) {
  */
 export function GetScript(id) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetScript", id).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType3($result);
+        return $$createType4($result);
     }));
 }
 
@@ -95,7 +107,7 @@ export function GetScript(id) {
  */
 export function GetSettings() {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetSettings").then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType5($result);
     }));
 }
 
@@ -109,7 +121,7 @@ export function GetSettings() {
  */
 export function GetWebhook(project, seq) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetWebhook", project, seq).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType6($result);
     }));
 }
 
@@ -122,7 +134,7 @@ export function GetWebhook(project, seq) {
  */
 export function ListCaptures(sessionID) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListCaptures", sessionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType6($result);
+        return $$createType7($result);
     }));
 }
 
@@ -133,7 +145,7 @@ export function ListCaptures(sessionID) {
  */
 export function ListScripts() {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListScripts").then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType8($result);
     }));
 }
 
@@ -144,7 +156,7 @@ export function ListScripts() {
  */
 export function ListSessions() {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListSessions").then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType9($result);
+        return $$createType10($result);
     }));
 }
 
@@ -157,7 +169,7 @@ export function ListSessions() {
  */
 export function ListWebhooks(project) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListWebhooks", project).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType10($result);
+        return $$createType11($result);
     }));
 }
 
@@ -171,7 +183,7 @@ export function ListWebhooks(project) {
  */
 export function RegisterRelay($in) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.RegisterRelay", $in).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType11($result);
+        return $$createType12($result);
     }));
 }
 
@@ -186,7 +198,7 @@ export function RegisterRelay($in) {
  */
 export function ReplayWebhook(project, seq, targetURL) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ReplayWebhook", project, seq, targetURL).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType12($result);
+        return $$createType13($result);
     }));
 }
 
@@ -203,14 +215,15 @@ export function SaveScript($in) {
 /**
  * SaveSettings validates and persists the whole form to config.yaml, then
  * restarts the relay tunnel when its endpoint changed. Interception settings
- * apply to the next `wiretap intercept start`; a store path change takes
- * effect after the app restarts (the open SQLite handle is kept).
+ * apply to the next `wiretap intercept start`; the native titlebar mode and
+ * a store path change take effect after the app restarts (the open SQLite
+ * handle is kept).
  * @param {$models.SettingsInput} $in
  * @returns {$CancellablePromise<$models.SettingsView>}
  */
 export function SaveSettings($in) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.SaveSettings", $in).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType5($result);
     }));
 }
 
@@ -236,7 +249,7 @@ export function SetScriptEnabled(id, enabled) {
  */
 export function Status() {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.Status").then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType13($result);
+        return $$createType14($result);
     }));
 }
 
@@ -250,7 +263,7 @@ export function Status() {
  */
 export function TestScript(req) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.TestScript", req).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType14($result);
+        return $$createType15($result);
     }));
 }
 
@@ -258,15 +271,16 @@ export function TestScript(req) {
 const $$createType0 = $models.TargetView.createFrom;
 const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = $models.CaptureView.createFrom;
-const $$createType3 = $models.ScriptView.createFrom;
-const $$createType4 = $models.SettingsView.createFrom;
-const $$createType5 = $models.WebhookView.createFrom;
-const $$createType6 = $Create.Array($$createType2);
-const $$createType7 = $Create.Array($$createType3);
-const $$createType8 = $models.SessionView.createFrom;
-const $$createType9 = $Create.Array($$createType8);
-const $$createType10 = $Create.Array($$createType5);
-const $$createType11 = $models.RegisterView.createFrom;
-const $$createType12 = $models.ReplayResult.createFrom;
-const $$createType13 = $models.StatusView.createFrom;
-const $$createType14 = $models.ScriptTestView.createFrom;
+const $$createType3 = $models.CaptureBodyView.createFrom;
+const $$createType4 = $models.ScriptView.createFrom;
+const $$createType5 = $models.SettingsView.createFrom;
+const $$createType6 = $models.WebhookView.createFrom;
+const $$createType7 = $Create.Array($$createType2);
+const $$createType8 = $Create.Array($$createType4);
+const $$createType9 = $models.SessionView.createFrom;
+const $$createType10 = $Create.Array($$createType9);
+const $$createType11 = $Create.Array($$createType6);
+const $$createType12 = $models.RegisterView.createFrom;
+const $$createType13 = $models.ReplayResult.createFrom;
+const $$createType14 = $models.StatusView.createFrom;
+const $$createType15 = $models.ScriptTestView.createFrom;

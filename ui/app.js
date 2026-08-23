@@ -73,6 +73,7 @@ function App() {
   const [queuedCount, setQueuedCount] = useState(0);
   const [pausedRows, setPausedRows] = useState(null);
   const lastVisibleCount = useRef(0);
+  const selectionRequest = useRef(0);
 
   const [toast, setToast] = useState("");
   const toastTimer = useRef(null);
@@ -145,7 +146,10 @@ function App() {
     if (!selection) return undefined;
 
     const closeOnEscape = (event) => {
-      if (event.key === "Escape") setSelection(null);
+      if (event.key === "Escape") {
+        selectionRequest.current += 1;
+        setSelection(null);
+      }
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
@@ -174,34 +178,45 @@ function App() {
 
   // --- selection handlers ------------------------------------------------
   const openWebhook = async (proj, seq) => {
+    const request = ++selectionRequest.current;
     try {
       const w = await api.getWebhook(proj, seq);
+      if (request !== selectionRequest.current) return;
       setSelection({ kind: "webhook", data: w });
     } catch (e) {
+      if (request !== selectionRequest.current) return;
       showToast("get webhook: " + e);
     }
   };
   const openCapture = async (id) => {
+    const request = ++selectionRequest.current;
     try {
       const c = await api.getCapture(id);
+      if (request !== selectionRequest.current) return;
       setSelection({ kind: "traffic", data: c });
     } catch (e) {
+      if (request !== selectionRequest.current) return;
       showToast("get capture: " + e);
     }
   };
   const openScript = async (s) => {
+    const request = ++selectionRequest.current;
     try {
       const full = await api.getScript(s.id);
+      if (request !== selectionRequest.current) return;
       setSelection({ kind: "script", data: full });
     } catch (e) {
+      if (request !== selectionRequest.current) return;
       showToast("get script: " + e);
     }
   };
-  const newScript = () =>
+  const newScript = () => {
+    selectionRequest.current += 1;
     setSelection({
       kind: "script",
       data: { id: 0, name: "", trigger: "on_request", body: "", priority: 0, enabled: true },
     });
+  };
 
   const toggleScript = async (id, enabled) => {
     try {
@@ -247,7 +262,10 @@ function App() {
   const displayedWebhooks = pausedRows ? pausedRows.webhooks : visibleWebhooks;
   const displayedCaptures = pausedRows ? pausedRows.captures : visibleCaptures;
 
-  const closeDetail = () => setSelection(null);
+  const closeDetail = () => {
+    selectionRequest.current += 1;
+    setSelection(null);
+  };
 
   const detailPane = () => {
     if (!selection) return null;
@@ -265,6 +283,8 @@ function App() {
         capture=${selection.data}
         onExport=${(target, client) =>
           api.exportCapture(selection.data.id, target, client)}
+        onLoadBody=${(part, limit) =>
+          api.getCaptureBody(selection.data.id, part, limit)}
         onClose=${closeDetail}
       />`;
     if (selection.kind === "script")
@@ -279,11 +299,13 @@ function App() {
   };
 
   const changeTab = (tab) => {
+    selectionRequest.current += 1;
     setActiveTab(tab);
     setSelection(null);
   };
 
   const toggleSettings = () => {
+    selectionRequest.current += 1;
     setSelection(null);
     setActiveTab((tab) => (tab === "settings" ? "webhooks" : "settings"));
   };
