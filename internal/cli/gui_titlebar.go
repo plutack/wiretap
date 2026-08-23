@@ -11,40 +11,21 @@ import (
 // logic is unit-testable in default builds; gui.go applies it to the Wails
 // window options.
 
-// ssdDesktops are Linux sessions whose compositors draw server-side window
-// decorations for frameless clients. XDG_CURRENT_DESKTOP is colon-separated
-// and vendors prefix (e.g. "X-COSMIC"), so match on tokens/prefixes.
-//
-// Windows and macOS are deliberately absent: on Windows a frameless window
-// has no bar unless the app draws one, and macOS's native NSWindow bar
-// (traffic lights) is always provided by the toolkit — on both, the normal
-// decorated window is already the native look. nativeTitlebarWanted never
-// goes frameless off Linux regardless of the config value.
-var ssdDesktops = []string{"COSMIC", "KDE"}
-
-// nativeTitlebarWanted reports whether the window should be frameless so
-// the compositor's native title bar is used. mode comes from
-// gui.native_titlebar ("auto"/"always"/"never"); desktop is
-// XDG_CURRENT_DESKTOP.
-func nativeTitlebarWanted(mode, desktop string) bool {
+// titlebarModeFrameless converts gui.native_titlebar to Wails' inverse
+// Frameless option. Wails/GTK implements Frameless=true by disabling window
+// decorations entirely; it does not request compositor decorations. Keep the
+// safe native frame for auto/always and go frameless only after an explicit
+// Linux "never" selection. Other platforms always retain their native frame.
+func titlebarModeFrameless(mode string) bool {
 	if runtime.GOOS != "linux" {
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "always":
-		return true
 	case "never":
+		return true
+	default:
 		return false
 	}
-	for _, token := range strings.Split(strings.ToUpper(desktop), ":") {
-		token = strings.TrimSpace(token)
-		for _, want := range ssdDesktops {
-			if token == want || strings.HasPrefix(token, want+"-") || strings.HasPrefix(token, "X-"+want) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // guiTitlebarMode resolves the configured title-bar preference ("auto",
