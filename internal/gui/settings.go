@@ -22,33 +22,35 @@ import (
 // paths for display, and the relay registration state (credentials minus the
 // secret token).
 type SettingsView struct {
-	ConfigPath    string   `json:"config_path"`
-	RelayURL      string   `json:"relay_url"`
-	ForwardURL    string   `json:"forward_url"`
-	StorePath     string   `json:"store_path"`
-	StoreDefault  string   `json:"store_default"`
-	TUITheme      string   `json:"tui_theme"`
-	ProxyAddr     string   `json:"proxy_addr"`
-	LocalAPIAddr  string   `json:"local_api_addr"`
-	Shell         string   `json:"shell"`
-	Registered    bool     `json:"registered"`
-	ClientID      string   `json:"client_id,omitempty"`
-	Projects      []string `json:"projects,omitempty"`
-	CredsPath     string   `json:"creds_path"`
-	TunnelRunning bool     `json:"tunnel_running"`
+	ConfigPath     string   `json:"config_path"`
+	RelayURL       string   `json:"relay_url"`
+	ForwardURL     string   `json:"forward_url"`
+	StorePath      string   `json:"store_path"`
+	StoreDefault   string   `json:"store_default"`
+	TUITheme       string   `json:"tui_theme"`
+	NativeTitlebar string   `json:"native_titlebar"`
+	ProxyAddr      string   `json:"proxy_addr"`
+	LocalAPIAddr   string   `json:"local_api_addr"`
+	Shell          string   `json:"shell"`
+	Registered     bool     `json:"registered"`
+	ClientID       string   `json:"client_id,omitempty"`
+	Projects       []string `json:"projects,omitempty"`
+	CredsPath      string   `json:"creds_path"`
+	TunnelRunning  bool     `json:"tunnel_running"`
 }
 
 // SettingsInput is the editable subset SaveSettings writes back. Empty
 // strings are meaningful ("use the default"), so the whole form is sent
 // every time rather than a patch.
 type SettingsInput struct {
-	RelayURL     string `json:"relay_url"`
-	ForwardURL   string `json:"forward_url"`
-	StorePath    string `json:"store_path"`
-	TUITheme     string `json:"tui_theme"`
-	ProxyAddr    string `json:"proxy_addr"`
-	LocalAPIAddr string `json:"local_api_addr"`
-	Shell        string `json:"shell"`
+	RelayURL       string `json:"relay_url"`
+	ForwardURL     string `json:"forward_url"`
+	StorePath      string `json:"store_path"`
+	TUITheme       string `json:"tui_theme"`
+	NativeTitlebar string `json:"native_titlebar"`
+	ProxyAddr      string `json:"proxy_addr"`
+	LocalAPIAddr   string `json:"local_api_addr"`
+	Shell          string `json:"shell"`
 }
 
 // RegisterInput is the relay registration form: the relay URL (HTTPS base or
@@ -80,14 +82,15 @@ func (b *Bindings) GetSettings() (SettingsView, error) {
 		return SettingsView{}, fmt.Errorf("load config: %w", err)
 	}
 	v := SettingsView{
-		RelayURL:      cfg.Relay.URL,
-		ForwardURL:    cfg.Relay.ForwardURL,
-		StorePath:     cfg.Store.Path,
-		TUITheme:      cfg.TUI.Theme,
-		ProxyAddr:     cfg.Intercept.ProxyAddr,
-		LocalAPIAddr:  cfg.Intercept.LocalAPIAddr,
-		Shell:         cfg.Intercept.Shell,
-		TunnelRunning: b.app.TunnelRunning(),
+		RelayURL:       cfg.Relay.URL,
+		ForwardURL:     cfg.Relay.ForwardURL,
+		StorePath:      cfg.Store.Path,
+		TUITheme:       cfg.TUI.Theme,
+		NativeTitlebar: cfg.GUI.NativeTitlebar,
+		ProxyAddr:      cfg.Intercept.ProxyAddr,
+		LocalAPIAddr:   cfg.Intercept.LocalAPIAddr,
+		Shell:          cfg.Intercept.Shell,
+		TunnelRunning:  b.app.TunnelRunning(),
 	}
 	if p, err := b.app.ConfigPath(); err == nil {
 		v.ConfigPath = p
@@ -108,8 +111,9 @@ func (b *Bindings) GetSettings() (SettingsView, error) {
 
 // SaveSettings validates and persists the whole form to config.yaml, then
 // restarts the relay tunnel when its endpoint changed. Interception settings
-// apply to the next `wiretap intercept start`; a store path change takes
-// effect after the app restarts (the open SQLite handle is kept).
+// apply to the next `wiretap intercept start`; the native titlebar mode and
+// a store path change take effect after the app restarts (the open SQLite
+// handle is kept).
 func (b *Bindings) SaveSettings(in SettingsInput) (SettingsView, error) {
 	cur, err := b.app.Config()
 	if err != nil {
@@ -132,12 +136,16 @@ func (b *Bindings) SaveSettings(in SettingsInput) (SettingsView, error) {
 	if err := validateShell(in.Shell); err != nil {
 		return SettingsView{}, err
 	}
+	if err := validateTitlebarMode(in.NativeTitlebar); err != nil {
+		return SettingsView{}, err
+	}
 
 	cfg := *cur // copy; writers never mutate the shared snapshot
 	cfg.Relay.URL = relayURL
 	cfg.Relay.ForwardURL = strings.TrimSpace(in.ForwardURL)
 	cfg.Store.Path = strings.TrimSpace(in.StorePath)
 	cfg.TUI.Theme = strings.TrimSpace(in.TUITheme)
+	cfg.GUI.NativeTitlebar = strings.TrimSpace(in.NativeTitlebar)
 	cfg.Intercept.ProxyAddr = strings.TrimSpace(in.ProxyAddr)
 	cfg.Intercept.LocalAPIAddr = strings.TrimSpace(in.LocalAPIAddr)
 	cfg.Intercept.Shell = strings.TrimSpace(in.Shell)
@@ -265,6 +273,17 @@ func validateAddr(label, addr string) error {
 		return fmt.Errorf("settings: %s must be host:port: %w", label, err)
 	}
 	return nil
+}
+
+// validateTitlebarMode accepts empty (unset — the runtime treats it as the
+// "auto" default) or one of the three documented gui.native_titlebar modes.
+func validateTitlebarMode(raw string) error {
+	switch strings.TrimSpace(raw) {
+	case "", "auto", "always", "never":
+		return nil
+	default:
+		return fmt.Errorf("settings: unknown native titlebar mode %q (use auto, always, or never)", raw)
+	}
 }
 
 func validateShell(shell string) error {
