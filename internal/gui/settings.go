@@ -111,9 +111,8 @@ func (b *Bindings) GetSettings() (SettingsView, error) {
 
 // SaveSettings validates and persists the whole form to config.yaml, then
 // restarts the relay tunnel when its endpoint changed. Interception settings
-// apply to the next `wiretap intercept start`; the native titlebar mode and
-// a store path change take effect after the app restarts (the open SQLite
-// handle is kept).
+// apply to the next `wiretap intercept start`; a store path change takes
+// effect after restart. The native titlebar callback applies immediately.
 func (b *Bindings) SaveSettings(in SettingsInput) (SettingsView, error) {
 	cur, err := b.app.Config()
 	if err != nil {
@@ -152,6 +151,9 @@ func (b *Bindings) SaveSettings(in SettingsInput) (SettingsView, error) {
 
 	if err := b.app.SaveConfig(cfg); err != nil {
 		return SettingsView{}, fmt.Errorf("save config: %w", err)
+	}
+	if cfg.GUI.NativeTitlebar != cur.GUI.NativeTitlebar && b.onTitlebarModeChange != nil {
+		b.onTitlebarModeChange(cfg.GUI.NativeTitlebar)
 	}
 	if cfg.Relay.URL != cur.Relay.URL {
 		if err := b.app.RestartTunnel(context.Background()); err != nil {

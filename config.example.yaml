@@ -34,19 +34,14 @@ tui:
   theme: dark
 
 gui:
-  # Who draws the desktop window's title bar.
+  # Whether wiretap keeps the desktop's native title bar and window controls.
   #
-  #   auto (default) — drop GTK's fallback bar and use the compositor's
-  #     native title bar on Linux desktops that draw server-side decorations
-  #     for frameless windows (COSMIC, KDE Plasma). Everywhere else the
-  #     normal decorated window is kept, because frameless means no bar at
-  #     all on GNOME, sway, Windows, and macOS.
-  #   always — force the native bar on every Linux desktop. Use this if your
-  #     compositor draws server-side decorations but is not in the auto list
-  #     (window has no bar under it otherwise).
-  #   never — always keep the standard decorated window.
+  #   auto (default) — keep the normal platform title bar.
+  #   always — explicitly keep the normal platform title bar.
+  #   never — request a frameless Linux window. Windows and macOS retain their
+  #     native frame so the app cannot lose all window controls.
   #
-  # Read once at startup; restart the app after changing it.
+  # Changes made in the GUI Settings screen apply immediately.
   native_titlebar: auto
 
 intercept:

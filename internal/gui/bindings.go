@@ -38,8 +38,9 @@ const (
 // Bindings is the struct registered with wails.Run as the bound App. Every
 // exported method becomes a callable in the frontend's wailsjs bindings.
 type Bindings struct {
-	app     *app.App
-	version string
+	app                  *app.App
+	version              string
+	onTitlebarModeChange func(string)
 }
 
 // Option configures a Bindings.
@@ -47,6 +48,13 @@ type Option func(*Bindings)
 
 // WithVersion sets the version string reported by Status (from the build).
 func WithVersion(v string) Option { return func(b *Bindings) { b.version = v } }
+
+// WithTitlebarModeChanged applies a saved titlebar mode to the live desktop
+// window. Keeping the callback generic preserves this package's Wails-free
+// test surface.
+func WithTitlebarModeChanged(fn func(string)) Option {
+	return func(b *Bindings) { b.onTitlebarModeChange = fn }
+}
 
 // New builds a binding layer over a (already-Open) *app.App. The caller owns the
 // App lifecycle (Open/StartTunnel/Close); the bindings are read-only w.r.t. it

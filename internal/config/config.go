@@ -54,11 +54,9 @@ type TUIConfig struct {
 
 // GUIConfig holds desktop dashboard preferences.
 type GUIConfig struct {
-	// NativeTitlebar selects who draws the window title bar. "auto" (the
-	// default) marks the window frameless on desktops whose compositor
-	// provides server-side decorations (COSMIC, KDE Plasma) so its native
-	// bar is used instead of GTK's fallback; "always"/"never" force the
-	// choice for every desktop.
+	// NativeTitlebar selects whether the platform window frame is retained.
+	// "auto" and "always" keep it; "never" requests a frameless Linux
+	// window. Other platforms always keep their native controls.
 	NativeTitlebar string `yaml:"native_titlebar"`
 }
 
