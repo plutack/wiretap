@@ -31,6 +31,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 
 	guiassets "github.com/plutack/wiretap"
 	"github.com/plutack/wiretap/internal/app"
@@ -61,6 +62,9 @@ func newGUICmd(version string) *cobra.Command {
 // runGUI is the launch glue, kept out of the cobra closure so it reads cleanly.
 // It owns the *app.App lifecycle for the duration of the window.
 func runGUI(parent context.Context, version string) error {
+	themeCtx, stopThemeWatcher := context.WithCancel(parent)
+	defer stopThemeWatcher()
+
 	mgr := config.NewManager()
 	a := app.New(mgr, app.WithScriptEngine(newScriptEngine(), logScriptError))
 
@@ -104,6 +108,16 @@ func runGUI(parent context.Context, version string) error {
 		OnShutdown: func() {
 			_ = a.Close()
 		},
+	})
+
+	// Wails' Linux frame is a GTK decoration, separate from the webview and
+	// therefore unaffected by the UI's CSS theme. Apply the standard desktop
+	// portal preference once the display is available and track later changes.
+	wailsApp.Event.OnApplicationEvent(events.Linux.ApplicationStartup, func(*application.ApplicationEvent) {
+		applyGTKSystemTheme()
+		go watchGTKSystemTheme(themeCtx, func() {
+			application.InvokeAsync(applyGTKSystemTheme)
+		})
 	})
 
 	window = wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
