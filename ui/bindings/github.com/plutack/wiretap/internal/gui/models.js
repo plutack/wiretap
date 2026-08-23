@@ -694,6 +694,52 @@ export class ScriptView {
     }
 }
 
+export class SessionPageView {
+    /**
+     * Creates a new SessionPageView instance.
+     * @param {Partial<SessionPageView>} [$$source = {}] - The source object to create the SessionPageView.
+     */
+    constructor($$source = {}) {
+        if (!("sessions" in $$source)) {
+            /**
+             * @member
+             * @type {SessionView[]}
+             */
+            this["sessions"] = [];
+        }
+        if (!("total" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["total"] = 0;
+        }
+        if (!("has_more" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["has_more"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SessionPageView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {SessionPageView}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType4;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("sessions" in $$parsedSource) {
+            $$parsedSource["sessions"] = $$createField0_0($$parsedSource["sessions"]);
+        }
+        return new SessionPageView(/** @type {Partial<SessionPageView>} */($$parsedSource));
+    }
+}
+
 /**
  * SessionView is the GUI DTO for one interception session (a `wiretap
  * intercept start` run). EndedAt is empty while the session is running — or
@@ -748,6 +794,20 @@ export class SessionView {
              * @type {number}
              */
             this["captures"] = 0;
+        }
+        if (!("running" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["running"] = false;
+        }
+        if (!("interrupted" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["interrupted"] = false;
         }
 
         Object.assign(this, $$source);
@@ -1100,7 +1160,7 @@ export class TargetView {
      * @returns {TargetView}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType4;
+        const $$createField3_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("clients" in $$parsedSource) {
             $$parsedSource["clients"] = $$createField3_0($$parsedSource["clients"]);
@@ -1207,5 +1267,7 @@ export class WebhookView {
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = $Create.Map($Create.Any, $$createType0);
 const $$createType2 = $Create.Map($Create.Any, $Create.Any);
-const $$createType3 = ClientView.createFrom;
+const $$createType3 = SessionView.createFrom;
 const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = ClientView.createFrom;
+const $$createType6 = $Create.Array($$createType5);

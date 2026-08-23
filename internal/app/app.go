@@ -371,6 +371,13 @@ func (a *App) InterceptSessions(ctx context.Context, limit int) ([]store.Interce
 	return a.store.InterceptSessions(ctx, limit)
 }
 
+func (a *App) InterceptSessionsPage(ctx context.Context, beforeID int64, limit int) ([]store.InterceptSessionRow, int, error) {
+	if a.store == nil {
+		return nil, 0, errors.New("app: store not open")
+	}
+	return a.store.InterceptSessionsPage(ctx, beforeID, limit)
+}
+
 // CaptureByID loads one traffic capture with its full headers and bodies
 // populated. Returns store.ErrNotFound (wrapped) when absent.
 func (a *App) CaptureByID(ctx context.Context, id int64) (*store.TrafficCaptureRow, error) {

@@ -342,10 +342,27 @@ func (s *PCStore) EndInterceptSession(ctx context.Context, id int64, endedAt tim
 // InterceptSessions lists sessions newest-first with their capture counts.
 // limit <= 0 returns all.
 func (s *PCStore) InterceptSessions(ctx context.Context, limit int) ([]InterceptSessionRow, error) {
+	rows, _, err := s.InterceptSessionsPage(ctx, 0, limit)
+	return rows, err
+}
+
+// InterceptSessionsPage lists sessions newest-first. beforeID == 0 starts at
+// the newest row; otherwise only rows older than beforeID are returned. Total
+// is the count across all sessions, independent of the page cursor.
+func (s *PCStore) InterceptSessionsPage(ctx context.Context, beforeID int64, limit int) ([]InterceptSessionRow, int, error) {
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM intercept_sessions`).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("PCStore.InterceptSessionsPage count: %w", err)
+	}
+
 	q := `SELECT s.id, s.started_at, COALESCE(s.ended_at, 0), COALESCE(s.shell, ''), COALESCE(s.proxy_addr, ''),
 		(SELECT COUNT(*) FROM traffic_captures c WHERE c.session_id = s.id)
 		FROM intercept_sessions s`
 	args := []any{}
+	if beforeID > 0 {
+		q += " WHERE s.id < ?"
+		args = append(args, beforeID)
+	}
 	if limit > 0 {
 		q += " ORDER BY s.id DESC LIMIT ?"
 		args = append(args, limit)
@@ -354,7 +371,7 @@ func (s *PCStore) InterceptSessions(ctx context.Context, limit int) ([]Intercept
 	}
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("PCStore.InterceptSessions: %w", err)
+		return nil, 0, fmt.Errorf("PCStore.InterceptSessionsPage: %w", err)
 	}
 	defer rows.Close()
 	var out []InterceptSessionRow
@@ -362,7 +379,7 @@ func (s *PCStore) InterceptSessions(ctx context.Context, limit int) ([]Intercept
 		var r InterceptSessionRow
 		var started, ended int64
 		if err := rows.Scan(&r.ID, &started, &ended, &r.Shell, &r.ProxyAddr, &r.Captures); err != nil {
-			return nil, fmt.Errorf("PCStore.InterceptSessions scan: %w", err)
+			return nil, 0, fmt.Errorf("PCStore.InterceptSessionsPage scan: %w", err)
 		}
 		r.StartedAt = time.Unix(started, 0).UTC()
 		if ended != 0 {
@@ -371,7 +388,7 @@ func (s *PCStore) InterceptSessions(ctx context.Context, limit int) ([]Intercept
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("PCStore.InterceptSessions rows: %w", err)
+		return nil, 0, fmt.Errorf("PCStore.InterceptSessionsPage rows: %w", err)
 	}
-	return out, nil
+	return out, total, nil
 }
