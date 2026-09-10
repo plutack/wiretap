@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.8 — 2026-09-10
+
+### Composer layout
+
+- Made the request and response panels stretch to the same height.
+- Centered the empty response state across the full response panel instead of
+  leaving an exposed block beneath it.
+
 ## v0.2.7 — 2026-09-10
 
 ### Compose recipes
