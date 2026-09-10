@@ -468,6 +468,7 @@ function App() {
 							onApplyRecipe=${api.applyComposeRecipe}
 							onSend=${api.sendComposedRequest}
 							onToast=${showToast}
+							compact=${selection?.kind === "script"}
 						/>`
                     : activeTab === "webhooks"
                     ? html`<${WebhookList}
@@ -485,7 +486,7 @@ function App() {
                           : null}
                       />`}
                 </section>
-                ${activeTab === "composer" ? null : detailPane()}
+				${detailPane()}
               </main>`}
       </div>
     </div>
