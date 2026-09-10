@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -338,6 +339,53 @@ func TestApp_ReplayWebhook(t *testing.T) {
 	}
 	if gotBody != `{"hello":"world"}` {
 		t.Errorf("upstream body = %q", gotBody)
+	}
+}
+
+func TestApp_SendRequest_ReturnsResponse(t *testing.T) {
+	t.Parallel()
+	a, _ := openTestApp(t)
+	var gotBody string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Reply", "yes")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	t.Cleanup(upstream.Close)
+	a.replayTransport = http.DefaultTransport
+
+	result, err := a.SendRequest(context.Background(), "post", upstream.URL+"/test", http.Header{"X-Test": []string{"one"}}, []byte(`{"hello":"world"}`), false)
+	if err != nil {
+		t.Fatalf("SendRequest: %v", err)
+	}
+	if result.Status != http.StatusCreated || result.Headers.Get("X-Reply") != "yes" || string(result.Body) != `{"ok":true}` {
+		t.Fatalf("response = %+v body=%q", result, result.Body)
+	}
+	if gotBody != `{"hello":"world"}` || result.Truncated || result.BodyLen != len(result.Body) {
+		t.Fatalf("request body=%q response=%+v", gotBody, result)
+	}
+}
+
+func TestApp_SendRequest_ValidatesURLAndBoundsResponse(t *testing.T) {
+	t.Parallel()
+	a, _ := openTestApp(t)
+	if _, err := a.SendRequest(context.Background(), "GET", "file:///tmp/nope", http.Header{}, nil, false); err == nil {
+		t.Fatal("non-HTTP URL should be rejected")
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, strings.Repeat("x", 2*1024*1024+10))
+	}))
+	t.Cleanup(upstream.Close)
+	a.replayTransport = http.DefaultTransport
+	result, err := a.SendRequest(context.Background(), "GET", upstream.URL, http.Header{}, nil, false)
+	if err != nil {
+		t.Fatalf("SendRequest: %v", err)
+	}
+	if !result.Truncated || len(result.Body) != 2*1024*1024 || result.BodyLen < 2*1024*1024+1 {
+		t.Fatalf("bounded response = len %d total %d truncated %v", len(result.Body), result.BodyLen, result.Truncated)
 	}
 }
 

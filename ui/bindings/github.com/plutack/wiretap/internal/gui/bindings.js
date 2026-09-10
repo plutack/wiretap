@@ -253,6 +253,17 @@ export function SaveSettings($in) {
 }
 
 /**
+ * SendComposedRequest validates and sends one arbitrary request from the GUI.
+ * @param {$models.ComposeRequestInput} $in
+ * @returns {$CancellablePromise<$models.ComposeResponseView>}
+ */
+export function SendComposedRequest($in) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.SendComposedRequest", $in).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType13($result);
+    }));
+}
+
+/**
  * SetScriptEnabled toggles the enabled flag on one script (sidebar checkbox).
  * @param {number} id
  * @param {boolean} enabled
@@ -274,7 +285,7 @@ export function SetScriptEnabled(id, enabled) {
  */
 export function Status() {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.Status").then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType13($result);
+        return $$createType14($result);
     }));
 }
 
@@ -288,7 +299,7 @@ export function Status() {
  */
 export function TestScript(req) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.TestScript", req).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType14($result);
+        return $$createType15($result);
     }));
 }
 
@@ -306,5 +317,6 @@ const $$createType9 = $models.SessionPageView.createFrom;
 const $$createType10 = $Create.Array($$createType6);
 const $$createType11 = $models.RegisterView.createFrom;
 const $$createType12 = $models.ReplayResult.createFrom;
-const $$createType13 = $models.StatusView.createFrom;
-const $$createType14 = $models.ScriptTestView.createFrom;
+const $$createType13 = $models.ComposeResponseView.createFrom;
+const $$createType14 = $models.StatusView.createFrom;
+const $$createType15 = $models.ScriptTestView.createFrom;
