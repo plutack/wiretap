@@ -100,6 +100,39 @@ func TestRegister_RequestAndResponse(t *testing.T) {
 	}
 }
 
+func TestClientProjectRoutes_UseClientAuth(t *testing.T) {
+	t.Parallel()
+	var calls int
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, token, ok := r.BasicAuth()
+		if !ok || id != "cid" || token != "ctok" {
+			writeErr(t, w, http.StatusUnauthorized, "auth_failed", "bad auth")
+			return
+		}
+		calls++
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/client/projects":
+			var in ProjectRequest
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			_ = json.NewEncoder(w).Encode(ClientProjectsResponse{Projects: []string{in.Path}})
+		case r.Method == http.MethodDelete && r.URL.Path == "/client/projects/project-a":
+			_ = json.NewEncoder(w).Encode(ClientProjectsResponse{Projects: []string{}})
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	})
+	c := stubServer(t, h, WithClientAuth("cid", "ctok"))
+	if out, err := c.AddClientProject(context.Background(), "project-a"); err != nil || len(out.Projects) != 1 {
+		t.Fatalf("AddClientProject = %+v, %v", out, err)
+	}
+	if out, err := c.RemoveClientProject(context.Background(), "project-a"); err != nil || len(out.Projects) != 0 {
+		t.Fatalf("RemoveClientProject = %+v, %v", out, err)
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
+	}
+}
+
 func TestClient_AdminRoutes_Authed(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()

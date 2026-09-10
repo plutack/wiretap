@@ -272,15 +272,57 @@ func TestBindings_RegisterRelay_Validation(t *testing.T) {
 	t.Parallel()
 	b, _, _ := newSettingsBindings(t)
 	cases := []RegisterInput{
-		{AdminToken: "t", Projects: []string{"p"}},                                     // no URL
-		{RelayURL: "https://r.example.com", Projects: []string{"p"}},                   // no token
-		{RelayURL: "https://r.example.com", AdminToken: "t"},                           // no projects
-		{RelayURL: "https://r.example.com", AdminToken: "t", Projects: []string{"  "}}, // blank project
+		{AdminToken: "t", Projects: []string{"p"}},                   // no URL
+		{RelayURL: "https://r.example.com", Projects: []string{"p"}}, // no token
 	}
 	for _, in := range cases {
 		if _, err := b.RegisterRelay(in); err == nil {
 			t.Errorf("RegisterRelay(%+v): expected validation error", in)
 		}
+	}
+}
+
+func TestBindings_ManageProjectsPreservesRegistration(t *testing.T) {
+	t.Parallel()
+	b, a, starts := newSettingsBindings(t)
+	projects := []string{"alpha"}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, token, ok := r.BasicAuth()
+		if !ok || id != "c1" || token != "t1" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.Method == http.MethodPost {
+			projects = []string{"alpha", "beta"}
+		} else if r.Method == http.MethodDelete {
+			projects = []string{"beta"}
+		}
+		_ = json.NewEncoder(w).Encode(api.ClientProjectsResponse{Projects: projects})
+	}))
+	defer srv.Close()
+	cfg := config.Default()
+	cfg.Relay.URL = "ws" + strings.TrimPrefix(srv.URL, "http") + "/tunnel"
+	if err := a.SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SaveRelayCredentials(config.Credentials{ClientID: "c1", ClientToken: "t1", Projects: []string{"alpha"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	view, err := b.AddRelayProject("beta")
+	if err != nil || strings.Join(view.Projects, ",") != "alpha,beta" {
+		t.Fatalf("AddRelayProject view=%+v err=%v", view, err)
+	}
+	view, err = b.RemoveRelayProject("alpha")
+	if err != nil || strings.Join(view.Projects, ",") != "beta" {
+		t.Fatalf("RemoveRelayProject view=%+v err=%v", view, err)
+	}
+	creds, _ := a.RelayCredentials()
+	if creds.ClientID != "c1" || creds.ClientToken != "t1" {
+		t.Fatalf("registration changed: %+v", creds)
+	}
+	if starts.Load() != 2 {
+		t.Fatalf("tunnel restarts = %d, want 2", starts.Load())
 	}
 }
 

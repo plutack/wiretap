@@ -158,6 +158,37 @@ func TestRelayStore_ProjectsByClient_Sorted(t *testing.T) {
 	}
 }
 
+func TestRelayStore_UnbindProject_OnlyOwnerAndCascades(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := freshRelayStore(t)
+	if err := s.CreateClient(ctx, "c1", "t1", "", fixedTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateClient(ctx, "c2", "t2", "", fixedTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.BindProject(ctx, "project-a", "c1", fixedTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertWebhook(ctx, WebhookRow{Project: "project-a", Seq: 1, ReceivedAt: fixedTime, Method: "POST", HeadersJSON: "{}"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UnbindProject(ctx, "project-a", "c2"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("non-owner unbind err = %v, want ErrNotFound", err)
+	}
+	if err := s.UnbindProject(ctx, "project-a", "c1"); err != nil {
+		t.Fatalf("owner UnbindProject: %v", err)
+	}
+	if _, err := s.Project(ctx, "project-a"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("project after unbind err = %v, want ErrNotFound", err)
+	}
+	rows, _, err := s.ListWebhooks(ctx, "project-a", 0, 10)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("webhooks after unbind = %v, err %v; want empty", rows, err)
+	}
+}
+
 func TestRelayStore_ReclaimProject(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

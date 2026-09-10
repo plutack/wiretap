@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/plutack/wiretap/internal/api"
+	"github.com/plutack/wiretap/internal/config"
 )
 
 // withTestRelayClient overrides the newRelayClient seam so commands talk to
@@ -48,6 +49,66 @@ func TestRelayCmd_Register(t *testing.T) {
 	}
 	if !strings.Contains(out, "c1") || !strings.Contains(out, "t1") {
 		t.Errorf("stdout = %q, want client_id and token", out)
+	}
+}
+
+func TestRelayCmd_RegisterWithoutProjects(t *testing.T) {
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var got api.RegisterRequest
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		if len(got.Projects) != 0 {
+			t.Errorf("projects = %v, want empty", got.Projects)
+		}
+		_ = json.NewEncoder(w).Encode(api.RegisterResponse{ClientID: "c1", ClientToken: "t1"})
+	})
+	withTestRelayClient(t, h)
+	if _, _, err := runCmd(t, "dev", "relay", "register", "--admin-token", "test-admin", "--name", "lappy"); err != nil {
+		t.Fatalf("register without projects: %v", err)
+	}
+}
+
+func TestRelayCmd_ProjectsAddAndRemovePreserveCredentials(t *testing.T) {
+	base := withTempConfigManager(t)
+	mgr := config.NewManager(config.WithBaseDir(base))
+	if _, err := mgr.Init(false); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.SaveCredentials(config.Credentials{ClientID: "c1", ClientToken: "t1", Projects: []string{"alpha"}}); err != nil {
+		t.Fatal(err)
+	}
+	projects := []string{"alpha"}
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, token, ok := r.BasicAuth()
+		if !ok || id != "c1" || token != "t1" {
+			writeJSONTest(t, w, http.StatusUnauthorized, api.ErrorResponse{Code: "auth_failed", Message: "bad auth"})
+			return
+		}
+		if r.Method == http.MethodPost {
+			projects = []string{"alpha", "beta"}
+		} else if r.Method == http.MethodDelete {
+			projects = []string{"beta"}
+		}
+		_ = json.NewEncoder(w).Encode(api.ClientProjectsResponse{Projects: projects})
+	})
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	if _, _, err := runCmd(t, "dev", "relay", "--url", srv.URL, "projects", "add", "beta"); err != nil {
+		t.Fatalf("projects add: %v", err)
+	}
+	creds, _ := mgr.LoadCredentials()
+	if creds.ClientID != "c1" || creds.ClientToken != "t1" || strings.Join(creds.Projects, ",") != "alpha,beta" {
+		t.Fatalf("credentials after add = %+v", creds)
+	}
+	if _, _, err := runCmd(t, "dev", "relay", "--url", srv.URL, "projects", "remove", "alpha"); err == nil {
+		t.Fatal("remove without --force should fail")
+	}
+	if _, _, err := runCmd(t, "dev", "relay", "--url", srv.URL, "projects", "remove", "alpha", "--force"); err != nil {
+		t.Fatalf("projects remove: %v", err)
+	}
+	creds, _ = mgr.LoadCredentials()
+	if creds.ClientID != "c1" || creds.ClientToken != "t1" || strings.Join(creds.Projects, ",") != "beta" {
+		t.Fatalf("credentials after remove = %+v", creds)
 	}
 }
 

@@ -78,7 +78,8 @@ wiretap uses a self-hosted public relay. The desktop establishes an outbound Web
    wiretap relay \
      --url https://relay.example.com \
      --admin-token YOUR_ADMIN_TOKEN \
-     register --projects project-a --name laptop --save
+     register --name laptop --save
+   wiretap relay --url https://relay.example.com projects add project-a
    ```
 
 3. Set the desktop tunnel endpoint in your configuration:
@@ -97,6 +98,21 @@ wiretap uses a self-hosted public relay. The desktop establishes an outbound Web
    ```
 
 The first URL segment identifies the registered project. Any remaining path is preserved for inspection and replay.
+
+Registration creates a desktop identity and credentials. To add another
+project later without replacing that identity, use:
+
+```sh
+wiretap relay projects add project-b
+```
+
+`relay register` also accepts no `--projects`; initial project flags are kept
+as a setup convenience. Removing a project requires
+`wiretap relay projects remove project-b --force` because removal also deletes
+that project's queued relay-side webhook history.
+
+Each project currently has one owning desktop client. Project sharing and
+multiple independent subscribers are not supported yet.
 
 ### TUI dashboard
 
