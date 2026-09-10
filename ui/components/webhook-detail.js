@@ -18,7 +18,7 @@ function headerValue(headers, name) {
   return Array.isArray(v) ? v.join(", ") : String(v);
 }
 
-export function WebhookDetail({ webhook, onReplay, onExport, onClose, defaultTarget = "" }) {
+export function WebhookDetail({ webhook, onReplay, onCompose, onExport, onClose, defaultTarget = "" }) {
   // Prefill the replay target with the configured forward URL (settings →
   // relay.forward_url) so a manual re-delivery is one click.
   const [targetURL, setTargetURL] = useState(defaultTarget);
@@ -85,6 +85,8 @@ export function WebhookDetail({ webhook, onReplay, onExport, onClose, defaultTar
               : `replayed → HTTP ${replayState.status}`}
         </p>`}
       </section>
+
+      ${onCompose ? html`<section class="inspector-section"><${Button} onClick=${onCompose}>Open in composer</></section>` : null}
 
       ${onExport
         ? html`<${ExportSnippet}

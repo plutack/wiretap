@@ -7,6 +7,7 @@ import { CodeBlock } from "./code-block.js";
 import { DetailPane, DetailBody, BodySection } from "./detail-pane.js";
 import { ExportSnippet } from "./export-snippet.js";
 import { fmtBytes, fmtTime } from "../lib/format.js";
+import { Button } from "./ui.js";
 
 // Pull a header value case-insensitively (header maps are {name:[values]}).
 function headerValue(headers, name) {
@@ -18,7 +19,7 @@ function headerValue(headers, name) {
   return Array.isArray(v) ? v.join(", ") : String(v);
 }
 
-export function TrafficDetail({ capture, onExport, onLoadBody, onClose }) {
+export function TrafficDetail({ capture, onExport, onLoadBody, onCompose, onClose }) {
   const reqCT = headerValue(capture.req_headers, "content-type");
   const respCT = headerValue(capture.resp_headers, "content-type");
 
@@ -54,6 +55,8 @@ export function TrafficDetail({ capture, onExport, onLoadBody, onClose }) {
                   loadBody=${onLoadBody ? (limit) => onLoadBody("request", limit) : null}
                 />
       </>
+
+      ${onCompose ? html`<section class="inspector-section"><${Button} onClick=${onCompose}>Open request in composer</></section>` : null}
 
       <section class="inspector-section">
         <div class="inspector-label">Response headers</div>

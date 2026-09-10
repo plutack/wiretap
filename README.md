@@ -8,6 +8,7 @@ wiretap combines three workflows in one local tool:
 - **Webhook ingress** — receive webhooks through a self-hosted relay, including deliveries sent while your desktop is offline.
 - **Payload transforms** — use local JavaScript to inspect, modify, or reject requests, responses, replays, and webhooks.
 - **Code export** — turn any stored capture or webhook into a ready-to-run snippet (curl, fetch, python-requests, go, and ~15 more) via an embedded [httpsnippet](https://github.com/Kong/httpsnippet) engine — no Node.js required.
+- **Request composer** — author HTTP requests, import JSON payloads or request envelopes, apply replay transforms, and inspect bounded responses from the GUI.
 
 Use the desktop GUI, terminal UI, or CLI against the same local data.
 
@@ -66,6 +67,35 @@ Snippets reproduce the request half of the exchange (hop-by-hop and
 `Content-Length` headers are dropped so the generated code recomputes them).
 Webhook exports target the relay's public ingress URL derived from your
 configured tunnel endpoint.
+
+## Compose and import requests
+
+Open **Compose** in the GUI to send an arbitrary HTTP request. The composer
+supports method, URL, headers, text/JSON bodies, optional `on_replay`
+transforms, and response inspection with status, headers, body size, and
+duration. An existing webhook or captured request can be opened directly in
+the composer from its detail pane.
+
+Importing a normal `.json` file uses that document as the request body and
+defaults to `POST` with `Content-Type: application/json`. A request envelope
+can set the complete request instead:
+
+```json
+{
+  "method": "POST",
+  "url": "http://127.0.0.1:8080/webhook",
+  "headers": {
+    "Content-Type": ["application/json"],
+    "X-Test-Event": ["order.created"]
+  },
+  "body": {"order_id": "test-123"},
+  "apply_transforms": true
+}
+```
+
+Only absolute `http://` and `https://` destinations are accepted. Responses
+are capped to a 2 MiB preview so an unexpectedly large endpoint response does
+not freeze the desktop UI.
 
 ## Receive public webhooks
 
