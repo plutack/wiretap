@@ -40,12 +40,16 @@ const (
 	// OnWebhook runs when a webhook arrives from the relay, before it is
 	// stored. It can validate, transform, or reject.
 	OnWebhook Trigger = "on_webhook"
+	// OnCompose is an explicitly selected preparation recipe. Unlike the
+	// pipeline triggers above it never runs automatically: the composer feeds
+	// it source text and turns its mutated request into an editable draft.
+	OnCompose Trigger = "on_compose"
 )
 
 // Valid reports whether t is one of the known triggers.
 func (t Trigger) Valid() bool {
 	switch t {
-	case OnRequest, OnResponse, OnReplay, OnWebhook:
+	case OnRequest, OnResponse, OnReplay, OnWebhook, OnCompose:
 		return true
 	default:
 		return false

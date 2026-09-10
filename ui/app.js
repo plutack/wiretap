@@ -61,6 +61,7 @@ function App() {
   const [webhooks, setWebhooks] = useState([]);
   const [captures, setCaptures] = useState([]);
   const [scripts, setScripts] = useState([]);
+	const [composeRecipes, setComposeRecipes] = useState([]);
   const [composerRequest, setComposerRequest] = useState(null);
 
   const [project, setProject] = useState("");
@@ -140,11 +141,19 @@ function App() {
       showToast("list scripts: " + e);
     }
   };
+	const loadComposeRecipes = async () => {
+		try {
+			setComposeRecipes((await api.listComposeRecipes()) || []);
+		} catch (e) {
+			showToast("list compose recipes: " + e);
+		}
+	};
 
   // Status and transform metadata have their own slower refresh cadence.
   useEffect(() => {
     loadStatus();
     loadScripts();
+		loadComposeRecipes();
     const s = setInterval(loadStatus, 5000);
     return () => clearInterval(s);
   }, []);
@@ -257,6 +266,7 @@ function App() {
     try {
       await api.setScriptEnabled(id, enabled);
       loadScripts();
+			loadComposeRecipes();
     } catch (e) {
       showToast("toggle script: " + e);
     }
@@ -264,12 +274,14 @@ function App() {
   const saveScript = async (input) => {
     const id = await api.saveScript(input);
     await loadScripts();
+		await loadComposeRecipes();
     showToast(input.id ? `Updated script ${id}` : `Created script ${id}`);
     return id;
   };
   const deleteScript = async (id) => {
     await api.deleteScript(id);
     await loadScripts();
+		await loadComposeRecipes();
     showToast(`Deleted script ${id}`);
   };
 
@@ -400,6 +412,7 @@ function App() {
       onRefresh=${() => {
         loadStatus();
         loadScripts();
+				loadComposeRecipes();
         if (activeTab === "webhooks") loadWebhooks();
         else if (activeTab === "traffic") loadCaptures();
       }}
@@ -449,7 +462,13 @@ function App() {
               <main class="workspace-main">
                 <section class="event-stage">
                   ${activeTab === "composer"
-                    ? html`<${RequestComposer} initialRequest=${composerRequest} onSend=${api.sendComposedRequest} onToast=${showToast} />`
+						? html`<${RequestComposer}
+							initialRequest=${composerRequest}
+							recipes=${composeRecipes}
+							onApplyRecipe=${api.applyComposeRecipe}
+							onSend=${api.sendComposedRequest}
+							onToast=${showToast}
+						/>`
                     : activeTab === "webhooks"
                     ? html`<${WebhookList}
                         webhooks=${displayedWebhooks}

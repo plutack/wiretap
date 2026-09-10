@@ -166,6 +166,34 @@ type ComposeResponseView struct {
 	DurationMS int64               `json:"duration_ms"`
 }
 
+// ComposeRecipeView describes an enabled, user-authored source-to-request
+// adapter available in the composer.
+type ComposeRecipeView struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// ComposeRecipeInput is raw source text plus the base destination supplied to
+// a selected preparation recipe.
+type ComposeRecipeInput struct {
+	RecipeID string `json:"recipe_id"`
+	Source   string `json:"source"`
+	BaseURL  string `json:"base_url"`
+}
+
+// ComposeRecipeDraftView is the editable request produced by a recipe. Recipe
+// application never sends it and deliberately disables the automatic replay
+// chain until the user opts back in.
+type ComposeRecipeDraftView struct {
+	Method          string              `json:"method"`
+	URL             string              `json:"url"`
+	Headers         map[string][]string `json:"headers"`
+	Body            string              `json:"body"`
+	ApplyTransforms bool                `json:"apply_transforms"`
+	Logs            []string            `json:"logs,omitempty"`
+}
+
 // ScriptView is the GUI + wailsjs DTO for a stored script. It mirrors
 // store.ScriptRow with JSON-friendly field names; timestamps are RFC3339 UTC.
 type ScriptView struct {
@@ -254,6 +282,38 @@ func (b *Bindings) SendComposedRequest(in ComposeRequestInput) (ComposeResponseV
 		Status: result.Status, Headers: map[string][]string(result.Headers),
 		BodyBase64: base64.StdEncoding.EncodeToString(result.Body), BodyLen: result.BodyLen,
 		Truncated: result.Truncated, DurationMS: result.DurationMS,
+	}, nil
+}
+
+// ListComposeRecipes returns enabled user-authored preparation recipes.
+func (b *Bindings) ListComposeRecipes() ([]ComposeRecipeView, error) {
+	rows, err := b.app.ComposeRecipes(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("list compose recipes: %w", err)
+	}
+	out := make([]ComposeRecipeView, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, ComposeRecipeView{ID: row.ID, Name: row.Name, Description: row.Description})
+	}
+	return out, nil
+}
+
+// ApplyComposeRecipe prepares an editable request from arbitrary source text.
+// It is side-effect free: no HTTP request is sent from this method.
+func (b *Bindings) ApplyComposeRecipe(in ComposeRecipeInput) (ComposeRecipeDraftView, error) {
+	if strings.TrimSpace(in.RecipeID) == "" {
+		return ComposeRecipeDraftView{}, errors.New("apply compose recipe: recipe is required")
+	}
+	if strings.TrimSpace(in.Source) == "" {
+		return ComposeRecipeDraftView{}, errors.New("apply compose recipe: source is required")
+	}
+	draft, err := b.app.ApplyComposeRecipe(context.Background(), in.RecipeID, in.Source, in.BaseURL)
+	if err != nil {
+		return ComposeRecipeDraftView{}, err
+	}
+	return ComposeRecipeDraftView{
+		Method: draft.Method, URL: draft.URL, Headers: map[string][]string(draft.Headers),
+		Body: draft.Body, ApplyTransforms: false, Logs: draft.Logs,
 	}, nil
 }
 

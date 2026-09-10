@@ -29,6 +29,18 @@ export function AddRelayProject(project) {
 }
 
 /**
+ * ApplyComposeRecipe prepares an editable request from arbitrary source text.
+ * It is side-effect free: no HTTP request is sent from this method.
+ * @param {$models.ComposeRecipeInput} $in
+ * @returns {$CancellablePromise<$models.ComposeRecipeDraftView>}
+ */
+export function ApplyComposeRecipe($in) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ApplyComposeRecipe", $in).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType1($result);
+    }));
+}
+
+/**
  * DeleteScript removes a script by id.
  * @param {number} id
  * @returns {$CancellablePromise<void>}
@@ -55,7 +67,7 @@ export function ExportCapture(id, target, client) {
  */
 export function ExportTargets() {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ExportTargets").then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType2($result);
+        return $$createType3($result);
     }));
 }
 
@@ -79,7 +91,7 @@ export function ExportWebhook(project, seq, target, client) {
  */
 export function GetCapture(id) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetCapture", id).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType3($result);
+        return $$createType4($result);
     }));
 }
 
@@ -93,7 +105,7 @@ export function GetCapture(id) {
  */
 export function GetCaptureBody(id, part, limit) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetCaptureBody", id, part, limit).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType5($result);
     }));
 }
 
@@ -105,7 +117,7 @@ export function GetCaptureBody(id, part, limit) {
  */
 export function GetScript(id) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetScript", id).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType6($result);
     }));
 }
 
@@ -133,7 +145,7 @@ export function GetSettings() {
  */
 export function GetWebhook(project, seq) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetWebhook", project, seq).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType6($result);
+        return $$createType7($result);
     }));
 }
 
@@ -146,7 +158,17 @@ export function GetWebhook(project, seq) {
  */
 export function ListCaptures(sessionID) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListCaptures", sessionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType8($result);
+    }));
+}
+
+/**
+ * ListComposeRecipes returns enabled user-authored preparation recipes.
+ * @returns {$CancellablePromise<$models.ComposeRecipeView[]>}
+ */
+export function ListComposeRecipes() {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListComposeRecipes").then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType10($result);
     }));
 }
 
@@ -157,7 +179,7 @@ export function ListCaptures(sessionID) {
  */
 export function ListScripts() {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListScripts").then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType8($result);
+        return $$createType11($result);
     }));
 }
 
@@ -170,7 +192,7 @@ export function ListScripts() {
  */
 export function ListSessions(beforeID, limit) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListSessions", beforeID, limit).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType9($result);
+        return $$createType12($result);
     }));
 }
 
@@ -183,7 +205,7 @@ export function ListSessions(beforeID, limit) {
  */
 export function ListWebhooks(project) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListWebhooks", project).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType10($result);
+        return $$createType13($result);
     }));
 }
 
@@ -197,7 +219,7 @@ export function ListWebhooks(project) {
  */
 export function RegisterRelay($in) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.RegisterRelay", $in).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType11($result);
+        return $$createType14($result);
     }));
 }
 
@@ -224,7 +246,7 @@ export function RemoveRelayProject(project) {
  */
 export function ReplayWebhook(project, seq, targetURL) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ReplayWebhook", project, seq, targetURL).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType12($result);
+        return $$createType15($result);
     }));
 }
 
@@ -259,7 +281,7 @@ export function SaveSettings($in) {
  */
 export function SendComposedRequest($in) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.SendComposedRequest", $in).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType13($result);
+        return $$createType16($result);
     }));
 }
 
@@ -285,7 +307,7 @@ export function SetScriptEnabled(id, enabled) {
  */
 export function Status() {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.Status").then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType14($result);
+        return $$createType17($result);
     }));
 }
 
@@ -299,24 +321,27 @@ export function Status() {
  */
 export function TestScript(req) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.TestScript", req).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType15($result);
+        return $$createType18($result);
     }));
 }
 
 // Private type creation functions
 const $$createType0 = $models.SettingsView.createFrom;
-const $$createType1 = $models.TargetView.createFrom;
-const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = $models.CaptureView.createFrom;
-const $$createType4 = $models.CaptureBodyView.createFrom;
-const $$createType5 = $models.ScriptView.createFrom;
-const $$createType6 = $models.WebhookView.createFrom;
-const $$createType7 = $Create.Array($$createType3);
-const $$createType8 = $Create.Array($$createType5);
-const $$createType9 = $models.SessionPageView.createFrom;
-const $$createType10 = $Create.Array($$createType6);
-const $$createType11 = $models.RegisterView.createFrom;
-const $$createType12 = $models.ReplayResult.createFrom;
-const $$createType13 = $models.ComposeResponseView.createFrom;
-const $$createType14 = $models.StatusView.createFrom;
-const $$createType15 = $models.ScriptTestView.createFrom;
+const $$createType1 = $models.ComposeRecipeDraftView.createFrom;
+const $$createType2 = $models.TargetView.createFrom;
+const $$createType3 = $Create.Array($$createType2);
+const $$createType4 = $models.CaptureView.createFrom;
+const $$createType5 = $models.CaptureBodyView.createFrom;
+const $$createType6 = $models.ScriptView.createFrom;
+const $$createType7 = $models.WebhookView.createFrom;
+const $$createType8 = $Create.Array($$createType4);
+const $$createType9 = $models.ComposeRecipeView.createFrom;
+const $$createType10 = $Create.Array($$createType9);
+const $$createType11 = $Create.Array($$createType6);
+const $$createType12 = $models.SessionPageView.createFrom;
+const $$createType13 = $Create.Array($$createType7);
+const $$createType14 = $models.RegisterView.createFrom;
+const $$createType15 = $models.ReplayResult.createFrom;
+const $$createType16 = $models.ComposeResponseView.createFrom;
+const $$createType17 = $models.StatusView.createFrom;
+const $$createType18 = $models.ScriptTestView.createFrom;

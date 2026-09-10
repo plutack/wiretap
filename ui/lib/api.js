@@ -5,6 +5,7 @@
 // and gives one place to add error shaping later.
 import {
   AddRelayProject,
+	ApplyComposeRecipe,
   DeleteScript,
   ExportCapture,
   ExportTargets,
@@ -15,6 +16,7 @@ import {
   GetSettings,
   GetWebhook,
   ListCaptures,
+	ListComposeRecipes,
   ListScripts,
   ListSessions,
   ListWebhooks,
@@ -54,4 +56,6 @@ export const api = {
   addRelayProject: (project) => AddRelayProject(project),
   removeRelayProject: (project) => RemoveRelayProject(project),
   sendComposedRequest: (input) => SendComposedRequest(input),
+	listComposeRecipes: () => ListComposeRecipes(),
+	applyComposeRecipe: (input) => ApplyComposeRecipe(input),
 };
