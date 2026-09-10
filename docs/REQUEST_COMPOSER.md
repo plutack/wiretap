@@ -39,9 +39,14 @@ network request, and it leaves **Apply on_replay transforms** disabled on the
 generated draft unless the user turns it back on.
 
 Wiretap includes no provider-specific recipes in the application. Recipes are
-user-owned local scripts. A copyable example for the Nuvion Heroku Bridge/Fuse
-workflow is available at
-[`docs/recipes/nuvion-heroku-webhook.js`](recipes/nuvion-heroku-webhook.js).
+user-owned local scripts. The neutral
+[`source-record-to-webhook.js`](recipes/source-record-to-webhook.js) example
+shows the complete flow with a `path`, optional headers, and a nested payload.
+
+When a transform is open from the sidebar, Compose remains visible beside it.
+The transform test bench also accepts an editable sample method, URL, headers,
+body, and response status. This makes `on_compose` recipes testable with the
+same source shape they will receive in the composer.
 
 ## Importing JSON
 

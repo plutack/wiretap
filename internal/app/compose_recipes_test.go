@@ -91,38 +91,28 @@ func TestApp_ApplyComposeRecipeRejectsSource(t *testing.T) {
 	}
 }
 
-func TestDocumentedNuvionRecipeHandlesBridgeAndFuse(t *testing.T) {
+func TestDocumentedComposeRecipeBuildsWebhook(t *testing.T) {
 	t.Parallel()
-	body, err := os.ReadFile("../../docs/recipes/nuvion-heroku-webhook.js")
+	body, err := os.ReadFile("../../docs/recipes/source-record-to-webhook.js")
 	if err != nil {
 		t.Fatalf("read documented recipe: %v", err)
 	}
 	a := openTestAppWithEngine(t)
 	id, err := a.CreateScript(context.Background(), store.ScriptRow{
-		Name: "nuvion", Trigger: string(scripting.OnCompose), Body: string(body), Enabled: true,
+		Name: "source record", Trigger: string(scripting.OnCompose), Body: string(body), Enabled: true,
 	})
 	if err != nil {
 		t.Fatalf("CreateScript: %v", err)
 	}
-	tests := []struct {
-		name, source, wantURL, wantBody string
-	}{
-		{"bridge", `{"message":{"data":{"body":{"event_category":"customer","event_id":"bridge-1"},"headers":{"host":"remote.example","content-type":"application/json","x-request-id":"req-1"}}}}`, "http://localhost:1700/webhook/bridge", `{"event_category":"customer","event_id":"bridge-1"}`},
-		{"fuse", `{"message":{"data":{"body":{"type":"account_opened","event_id":"fuse-1"},"headers":{"host":"remote.example","content-type":"application/json","x-request-id":"req-2"}}}}`, "http://localhost:1700/webhook/fuse", `{"type":"account_opened","event_id":"fuse-1"}`},
+	draft, err := a.ApplyComposeRecipe(context.Background(), "script:"+formatID(id), `{"path":"/hooks/orders","headers":{"X-Event-Source":"sandbox"},"payload":{"event":"order.created","id":"evt_123"}}`, "http://localhost:1700/")
+	if err != nil {
+		t.Fatalf("ApplyComposeRecipe: %v", err)
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			draft, err := a.ApplyComposeRecipe(context.Background(), "script:"+formatID(id), tc.source, "http://localhost:1700")
-			if err != nil {
-				t.Fatalf("ApplyComposeRecipe: %v", err)
-			}
-			if draft.Method != "POST" || draft.URL != tc.wantURL || draft.Body != tc.wantBody {
-				t.Errorf("draft = %+v", draft)
-			}
-			if draft.Headers.Get("Host") != "" || draft.Headers.Get("X-Request-ID") == "" || draft.Headers.Get("Content-Type") != "application/json" {
-				t.Errorf("headers = %v", draft.Headers)
-			}
-		})
+	if draft.Method != "POST" || draft.URL != "http://localhost:1700/hooks/orders" || draft.Body != `{"event":"order.created","id":"evt_123"}` {
+		t.Errorf("draft = %+v", draft)
+	}
+	if draft.Headers.Get("X-Event-Source") != "sandbox" || draft.Headers.Get("Content-Type") != "application/json" {
+		t.Errorf("headers = %v", draft.Headers)
 	}
 }
 

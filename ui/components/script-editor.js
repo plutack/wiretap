@@ -15,6 +15,13 @@ import { Dropdown } from "./dropdown.js";
 import { diffLines, hasChanges } from "../lib/diff.js";
 
 const TRIGGERS = ["on_request", "on_response", "on_replay", "on_webhook", "on_compose"];
+const SAMPLE = {
+  method: "POST",
+  url: "http://localhost:1700/hooks/orders",
+  headers: '{\n  "Content-Type": "application/json",\n  "X-Source": "sandbox"\n}',
+  body: '{\n  "event": "order.created",\n  "id": "evt_123"\n}',
+  status: "200",
+};
 
 export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
   const [name, setName] = useState(script.name || "");
@@ -23,6 +30,11 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
   const [enabled, setEnabled] = useState(script.enabled ?? true);
   const [saveState, setSaveState] = useState(null); // {msg, error}
   const [testResult, setTestResult] = useState(null); // ScriptTestView | {error}
+  const [sampleMethod, setSampleMethod] = useState(SAMPLE.method);
+  const [sampleURL, setSampleURL] = useState(SAMPLE.url);
+  const [sampleHeaders, setSampleHeaders] = useState(SAMPLE.headers);
+  const [sampleBody, setSampleBody] = useState(SAMPLE.body);
+  const [sampleStatus, setSampleStatus] = useState(SAMPLE.status);
 
   const taRef = useRef(null);
   const cmRef = useRef(null);
@@ -66,6 +78,11 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
     setEnabled(script.enabled ?? true);
     setSaveState(null);
     setTestResult(null);
+    setSampleMethod(SAMPLE.method);
+    setSampleURL(SAMPLE.url);
+    setSampleHeaders(SAMPLE.headers);
+    setSampleBody(SAMPLE.body);
+    setSampleStatus(SAMPLE.status);
   }, [script.id]);
 
   const currentBody = () =>
@@ -130,21 +147,28 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
   };
 
   const handleTest = async () => {
+    let headers;
+    try {
+      const parsed = JSON.parse(sampleHeaders || "{}");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("expected a JSON object");
+      headers = Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, Array.isArray(value) ? value.join(", ") : String(value)]));
+    } catch (e) {
+      setTestResult({ error: `sample headers: ${String(e)}` });
+      return;
+    }
     setTestResult({ pending: true });
-    // A minimal sample exchange; the script body decides what it inspects.
-    const sampleBody = '{"hello":"world"}';
     try {
       const result = await onTest({
         body: currentBody(),
-        method: "POST",
-        url: "https://example.com/webhook",
-        headers: { "Content-Type": "application/json" },
+        method: sampleMethod,
+        url: sampleURL,
+        headers,
         req_body: sampleBody,
-        status: 200,
+        status: Number(sampleStatus) || 0,
       });
       // Keep the input body alongside the result so the panel can render a
       // before/after diff of what the transform changed.
-      setTestResult({ ...result, input_body: sampleBody });
+      setTestResult({ ...result, input_body: sampleBody, input_headers: headers });
     } catch (e) {
       // Only ErrScriptEngineUnavailable is thrown; script exceptions come back
       // in result.error instead.
@@ -223,18 +247,12 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
         </div>
       </div>
 
-      <div class="mb-4 flex items-center gap-2 border-b border-neutral-800 pb-4">
+      <div class="mb-3 flex items-center gap-2">
         <button
           onClick=${handleSave}
           class="btn btn-primary"
         >
           Save
-        </button>
-        <button
-          onClick=${handleTest}
-          class="btn btn-ghost"
-        >
-          Test run
         </button>
         <button
           onClick=${handleDelete}
@@ -252,6 +270,22 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
       >
         ${saveState.error || saveState.msg}
       </p>`}
+
+      <section class="transform-testbench">
+        <div class="transform-testbench-head">
+          <div><strong>Sample request</strong><span>Test this transform without sending anything</span></div>
+          <button onClick=${handleTest} class="btn btn-ghost">Run sample</button>
+        </div>
+        <div class="transform-sample-target">
+          <select aria-label="Sample request method" value=${sampleMethod} onChange=${(e) => setSampleMethod(e.target.value)}>
+            ${["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => html`<option value=${method}>${method}</option>`)}
+          </select>
+          <input aria-label="Sample request URL" class="font-mono" value=${sampleURL} onInput=${(e) => setSampleURL(e.target.value)} />
+          <input aria-label="Sample response status" class="transform-sample-status font-mono" type="number" value=${sampleStatus} onInput=${(e) => setSampleStatus(e.target.value)} title="Sample response status" />
+        </div>
+        <label class="transform-sample-field"><span>Headers <small>JSON object</small></span><textarea spellcheck="false" value=${sampleHeaders} onInput=${(e) => setSampleHeaders(e.target.value)}></textarea></label>
+        <label class="transform-sample-field"><span>Request body <small>JSON or text</small></span><textarea class="transform-sample-body" spellcheck="false" value=${sampleBody} onInput=${(e) => setSampleBody(e.target.value)}></textarea></label>
+      </section>
 
       ${testResult && html`<${TestPanel} result=${testResult} />`}
     </div>
@@ -285,6 +319,10 @@ function TestPanel({ result }) {
       <dt class="text-neutral-500">status</dt>
       <dd class="text-neutral-300">${result.status}</dd>
     </dl>
+    <div class="mb-2">
+      <span class="text-neutral-500">request headers</span>
+      <pre class="mt-1 max-h-32 overflow-auto rounded bg-neutral-900 p-1.5 font-mono whitespace-pre-wrap">${JSON.stringify(result.req_headers || {}, null, 2)}</pre>
+    </div>
     <${BodyDiff} before=${result.input_body} after=${result.req_body} />
     ${result.req_body &&
     html`<div class="mb-2">
