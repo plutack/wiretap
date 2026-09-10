@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -480,6 +481,44 @@ func TestBindings_Scripts_SaveListGetDelete(t *testing.T) {
 	}
 	if _, err := b.GetScript(id); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("GetScript after delete err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestBindings_ComposeRecipes_ListAndApply(t *testing.T) {
+	t.Parallel()
+	b, _ := newBindingsWithEngine(t)
+	id, err := b.SaveScript(ScriptInput{
+		Name: "log adapter", Trigger: string(scripting.OnCompose), Enabled: true,
+		Body: `
+			const source = json.parse(request.body);
+			request.method = "PATCH";
+			request.url = request.url + "/hook";
+			request.headers["X-Event"] = source.id;
+			request.body = json.stringify(source.payload);
+		`,
+	})
+	if err != nil {
+		t.Fatalf("SaveScript: %v", err)
+	}
+	recipes, err := b.ListComposeRecipes()
+	if err != nil {
+		t.Fatalf("ListComposeRecipes: %v", err)
+	}
+	if len(recipes) != 1 || recipes[0].Name != "log adapter" {
+		t.Fatalf("recipes = %+v", recipes)
+	}
+	draft, err := b.ApplyComposeRecipe(ComposeRecipeInput{
+		RecipeID: fmt.Sprintf("script:%d", id), BaseURL: "http://localhost:1700",
+		Source: `{"id":"evt-9","payload":{"ok":true}}`,
+	})
+	if err != nil {
+		t.Fatalf("ApplyComposeRecipe: %v", err)
+	}
+	if draft.Method != "PATCH" || draft.URL != "http://localhost:1700/hook" || draft.ApplyTransforms {
+		t.Errorf("draft = %+v", draft)
+	}
+	if http.Header(draft.Headers).Get("X-Event") != "evt-9" || draft.Body != `{"ok":true}` {
+		t.Errorf("draft headers/body = %v %q", draft.Headers, draft.Body)
 	}
 }
 

@@ -2,7 +2,8 @@
 -- internal/scripting. One row per script.
 --
 -- "trigger" is quoted throughout because it is a reserved SQLite keyword; the
--- value is one of on_request / on_response / on_replay / on_webhook.
+-- value is one of on_request / on_response / on_replay / on_webhook /
+-- on_compose. The database deliberately leaves this extensible.
 -- priority orders chained scripts sharing a trigger (lower runs first).
 -- enabled is 0/1; timestamps are unix seconds.
 CREATE TABLE IF NOT EXISTS scripts (

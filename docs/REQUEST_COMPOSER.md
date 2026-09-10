@@ -4,6 +4,10 @@ The desktop GUI's **Compose** workspace sends ad-hoc HTTP requests without
 requiring a previously captured webhook. It is intended for exercising local
 development endpoints and replaying representative JSON payloads.
 
+The workspace has two input modes. **Manual request** is the original composer.
+**Source recipe** converts an arbitrary log or provider envelope into a complete
+editable request before anything is sent.
+
 ## Creating a request
 
 Choose a method, enter an absolute HTTP or HTTPS URL, edit the headers JSON,
@@ -17,6 +21,27 @@ must be absolute HTTP(S) URLs.
 
 Requests use a 30-second timeout and bypass the interception proxy, matching
 the existing local webhook replay behavior.
+
+## Preparing a request with a recipe
+
+A compose recipe is a normal local JavaScript transform with the `on_compose`
+trigger. Create it from the **Transforms** section, save and enable it, then
+choose it under **Compose > Source recipe**.
+
+Paste source text or import a JSON file, enter the target base URL, and select
+**Transform request**. The source is exposed as `request.body`; the target base
+URL is exposed as `request.url`. The recipe can replace the method, URL,
+headers, and body using the standard scripting API.
+
+Recipe execution is a preparation step only. Wiretap returns to the manual
+composer with the generated request visible and editable. It does not send a
+network request, and it leaves **Apply on_replay transforms** disabled on the
+generated draft unless the user turns it back on.
+
+Wiretap includes no provider-specific recipes in the application. Recipes are
+user-owned local scripts. A copyable example for the Nuvion Heroku Bridge/Fuse
+workflow is available at
+[`docs/recipes/nuvion-heroku-webhook.js`](recipes/nuvion-heroku-webhook.js).
 
 ## Importing JSON
 

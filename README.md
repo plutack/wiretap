@@ -76,6 +76,13 @@ transforms, and response inspection with status, headers, body size, and
 duration. An existing webhook or captured request can be opened directly in
 the composer from its detail pane.
 
+For provider logs and other non-request-shaped input, switch to **Source
+recipe**. An enabled `on_compose` script can extract nested payloads and
+headers, filter transport noise, and build the URL, method, headers, and body.
+Wiretap then opens the result as a normal editable draft; recipe application
+does not send it. Recipes are user-authored and selected per use, rather than
+hard-coded or run globally.
+
 Importing a normal `.json` file uses that document as the request body and
 defaults to `POST` with `Content-Type: application/json`. A request envelope
 can set the complete request instead:

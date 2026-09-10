@@ -222,6 +222,174 @@ export class ClientView {
 }
 
 /**
+ * ComposeRecipeDraftView is the editable request produced by a recipe. Recipe
+ * application never sends it and deliberately disables the automatic replay
+ * chain until the user opts back in.
+ */
+export class ComposeRecipeDraftView {
+    /**
+     * Creates a new ComposeRecipeDraftView instance.
+     * @param {Partial<ComposeRecipeDraftView>} [$$source = {}] - The source object to create the ComposeRecipeDraftView.
+     */
+    constructor($$source = {}) {
+        if (!("method" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["method"] = "";
+        }
+        if (!("url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["url"] = "";
+        }
+        if (!("headers" in $$source)) {
+            /**
+             * @member
+             * @type {{ [_ in string]?: string[] }}
+             */
+            this["headers"] = {};
+        }
+        if (!("body" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["body"] = "";
+        }
+        if (!("apply_transforms" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["apply_transforms"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["logs"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ComposeRecipeDraftView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ComposeRecipeDraftView}
+     */
+    static createFrom($$source = {}) {
+        const $$createField2_0 = $$createType1;
+        const $$createField5_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("headers" in $$parsedSource) {
+            $$parsedSource["headers"] = $$createField2_0($$parsedSource["headers"]);
+        }
+        if ("logs" in $$parsedSource) {
+            $$parsedSource["logs"] = $$createField5_0($$parsedSource["logs"]);
+        }
+        return new ComposeRecipeDraftView(/** @type {Partial<ComposeRecipeDraftView>} */($$parsedSource));
+    }
+}
+
+/**
+ * ComposeRecipeInput is raw source text plus the base destination supplied to
+ * a selected preparation recipe.
+ */
+export class ComposeRecipeInput {
+    /**
+     * Creates a new ComposeRecipeInput instance.
+     * @param {Partial<ComposeRecipeInput>} [$$source = {}] - The source object to create the ComposeRecipeInput.
+     */
+    constructor($$source = {}) {
+        if (!("recipe_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["recipe_id"] = "";
+        }
+        if (!("source" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["source"] = "";
+        }
+        if (!("base_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["base_url"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ComposeRecipeInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ComposeRecipeInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ComposeRecipeInput(/** @type {Partial<ComposeRecipeInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * ComposeRecipeView describes an enabled, user-authored source-to-request
+ * adapter available in the composer.
+ */
+export class ComposeRecipeView {
+    /**
+     * Creates a new ComposeRecipeView instance.
+     * @param {Partial<ComposeRecipeView>} [$$source = {}] - The source object to create the ComposeRecipeView.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("description" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["description"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ComposeRecipeView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ComposeRecipeView}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ComposeRecipeView(/** @type {Partial<ComposeRecipeView>} */($$parsedSource));
+    }
+}
+
+/**
  * ComposeRequestInput is an arbitrary request authored in the GUI.
  */
 export class ComposeRequestInput {
