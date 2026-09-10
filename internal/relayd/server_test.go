@@ -115,6 +115,64 @@ func TestHandleRegister_Success(t *testing.T) {
 	}
 }
 
+func TestHandleRegister_AllowsNoInitialProjects(t *testing.T) {
+	t.Parallel()
+	s, _, c := freshServer(t)
+	out, err := c.Register(context.Background(), api.RegisterRequest{DisplayName: "lappy"})
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if out.ClientID == "" || len(out.Projects) != 0 {
+		t.Fatalf("Register response = %+v", out)
+	}
+	if projects, err := s.store.ProjectsByClient(context.Background(), out.ClientID); err != nil || len(projects) != 0 {
+		t.Fatalf("projects = %v, err %v; want empty", projects, err)
+	}
+}
+
+func TestHandleClientProjects_AddAndRemoveWithoutRotatingCredentials(t *testing.T) {
+	t.Parallel()
+	s, hs, _ := freshServer(t)
+	makeClientFor(t, s, "c1", "t1", "project-a")
+	owner, err := api.NewClient(hs.URL, api.WithClientAuth("c1", "t1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	added, err := owner.AddClientProject(context.Background(), "project-b")
+	if err != nil {
+		t.Fatalf("AddClientProject: %v", err)
+	}
+	if strings.Join(added.Projects, ",") != "project-a,project-b" {
+		t.Fatalf("projects after add = %v", added.Projects)
+	}
+	client, err := s.store.Client(context.Background(), "c1")
+	if err != nil || client.ClientToken != "t1" {
+		t.Fatalf("credentials changed: client=%+v err=%v", client, err)
+	}
+	removed, err := owner.RemoveClientProject(context.Background(), "project-a")
+	if err != nil {
+		t.Fatalf("RemoveClientProject: %v", err)
+	}
+	if strings.Join(removed.Projects, ",") != "project-b" {
+		t.Fatalf("projects after remove = %v", removed.Projects)
+	}
+}
+
+func TestHandleClientProjects_RejectsBadCredentialsAndOtherOwner(t *testing.T) {
+	t.Parallel()
+	s, hs, _ := freshServer(t)
+	makeClientFor(t, s, "c1", "t1", "project-a")
+	makeClientFor(t, s, "c2", "t2")
+	bad, _ := api.NewClient(hs.URL, api.WithClientAuth("c1", "wrong"))
+	if _, err := bad.AddClientProject(context.Background(), "project-b"); !api.IsUnauthorized(err) {
+		t.Fatalf("bad credentials err = %v, want unauthorized", err)
+	}
+	other, _ := api.NewClient(hs.URL, api.WithClientAuth("c2", "t2"))
+	if _, err := other.RemoveClientProject(context.Background(), "project-a"); !api.IsNotFound(err) {
+		t.Fatalf("other owner remove err = %v, want not found", err)
+	}
+}
+
 func TestHandleRegister_RejectsBadProjectName(t *testing.T) {
 	t.Parallel()
 	_, _, c := freshServer(t)
