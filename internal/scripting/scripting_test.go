@@ -27,6 +27,7 @@ func TestTrigger_Valid(t *testing.T) {
 		{"on_response", OnResponse, true},
 		{"on_replay", OnReplay, true},
 		{"on_webhook", OnWebhook, true},
+		{"on_compose", OnCompose, true},
 		{"empty", Trigger(""), false},
 		{"unknown", Trigger("on_boot"), false},
 	}

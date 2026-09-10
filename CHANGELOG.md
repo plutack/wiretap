@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.2.7 — 2026-09-10
+
+### Compose recipes
+
+- Added user-authored `on_compose` transforms that convert arbitrary source
+  text, provider payloads, or log envelopes into complete request drafts.
+- Added source file import and clipboard paste, selectable enabled recipes, and
+  a configurable target base URL.
+- Recipe application is side-effect free: generated method, URL, headers, and
+  body return to the manual composer for review before delivery.
+- Provider recipes remain local and user-managed. No Heroku, Bridge, Fuse, or
+  other provider logic is hard-coded into Wiretap.
+
+### Composer layout
+
+- Separated manual request authoring from source-recipe preparation with a
+  clear mode switch.
+- Reduced the oversized empty response area and placed headers and body in a
+  denser side-by-side editor on wide displays.
+- Added explicit empty, validation, preparation, and error states while
+  preserving the existing JSON import, captured-request handoff, replay
+  transforms, and response inspection workflow.
+
 ## v0.2.6 — 2026-09-10
 
 ### Request composer
