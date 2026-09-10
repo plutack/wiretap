@@ -23,6 +23,7 @@ import {
   ReplayWebhook,
   SaveScript,
   SaveSettings,
+  SendComposedRequest,
   SetScriptEnabled,
   Status,
   TestScript,
@@ -52,4 +53,5 @@ export const api = {
   registerRelay: (input) => RegisterRelay(input),
   addRelayProject: (project) => AddRelayProject(project),
   removeRelayProject: (project) => RemoveRelayProject(project),
+  sendComposedRequest: (input) => SendComposedRequest(input),
 };

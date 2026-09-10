@@ -11,6 +11,8 @@ export {
     CaptureBodyView,
     CaptureView,
     ClientView,
+    ComposeRequestInput,
+    ComposeResponseView,
     RegisterInput,
     RegisterView,
     ReplayResult,

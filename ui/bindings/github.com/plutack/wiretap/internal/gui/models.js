@@ -222,6 +222,139 @@ export class ClientView {
 }
 
 /**
+ * ComposeRequestInput is an arbitrary request authored in the GUI.
+ */
+export class ComposeRequestInput {
+    /**
+     * Creates a new ComposeRequestInput instance.
+     * @param {Partial<ComposeRequestInput>} [$$source = {}] - The source object to create the ComposeRequestInput.
+     */
+    constructor($$source = {}) {
+        if (!("method" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["method"] = "";
+        }
+        if (!("url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["url"] = "";
+        }
+        if (!("headers" in $$source)) {
+            /**
+             * @member
+             * @type {{ [_ in string]?: string[] }}
+             */
+            this["headers"] = {};
+        }
+        if (!("body" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["body"] = "";
+        }
+        if (!("apply_transforms" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["apply_transforms"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ComposeRequestInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ComposeRequestInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField2_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("headers" in $$parsedSource) {
+            $$parsedSource["headers"] = $$createField2_0($$parsedSource["headers"]);
+        }
+        return new ComposeRequestInput(/** @type {Partial<ComposeRequestInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * ComposeResponseView is the bounded response shown by the composer.
+ */
+export class ComposeResponseView {
+    /**
+     * Creates a new ComposeResponseView instance.
+     * @param {Partial<ComposeResponseView>} [$$source = {}] - The source object to create the ComposeResponseView.
+     */
+    constructor($$source = {}) {
+        if (!("status" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["status"] = 0;
+        }
+        if (!("headers" in $$source)) {
+            /**
+             * @member
+             * @type {{ [_ in string]?: string[] }}
+             */
+            this["headers"] = {};
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["body_base64"] = undefined;
+        }
+        if (!("body_len" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["body_len"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["truncated"] = undefined;
+        }
+        if (!("duration_ms" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["duration_ms"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ComposeResponseView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ComposeResponseView}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("headers" in $$parsedSource) {
+            $$parsedSource["headers"] = $$createField1_0($$parsedSource["headers"]);
+        }
+        return new ComposeResponseView(/** @type {Partial<ComposeResponseView>} */($$parsedSource));
+    }
+}
+
+/**
  * RegisterInput is the relay registration form: the relay URL (HTTPS base or
  * wss tunnel form — both accepted), the admin token (used once, not stored),
  * the project paths to claim, and an optional display name.

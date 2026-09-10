@@ -14,6 +14,7 @@ import { TrafficList } from "./components/traffic-list.js";
 import { TrafficDetail } from "./components/traffic-detail.js";
 import { ScriptEditor } from "./components/script-editor.js";
 import { Settings } from "./components/settings.js";
+import { RequestComposer } from "./components/request-composer.js";
 import { CommandPalette } from "./components/palette.js";
 import { copyText } from "./lib/clipboard.js";
 import { applyDisplayPrefs, loadDisplayPrefs } from "./lib/prefs.js";
@@ -32,7 +33,7 @@ function CommandDeck({ activeTab, onChange, counts, onSearch, project, filtered,
   >
     <span aria-hidden="true">${glyph}</span>
     <span>${label}</span>
-    <span class="mode-count">${counts[id] ?? 0}</span>
+    ${counts[id] == null ? null : html`<span class="mode-count">${counts[id]}</span>`}
   </button>`;
 
   return html`<div class="command-deck">
@@ -40,15 +41,16 @@ function CommandDeck({ activeTab, onChange, counts, onSearch, project, filtered,
       <nav class="mode-tabs" aria-label="Signal stream">
         ${tab("webhooks", "Ingress", "↘")}
         ${tab("traffic", "Traffic", "⇄")}
+        ${tab("composer", "Compose", "↗")}
       </nav>
-      <${SearchBar}
+      ${activeTab === "composer" ? html`<div class="workspace-summary">Manual HTTP request workbench</div>` : html`<${SearchBar}
         onSearch=${onSearch}
         placeholder=${activeTab === "webhooks" ? "Filter source, method, or route…" : "Filter method, host, or URL…"}
-      />
-      <div class="workspace-summary">
+      />`}
+      ${activeTab === "composer" ? null : html`<div class="workspace-summary">
         ${project ? `source:${project} · ` : ""}${filtered} visible
         ${followControl}
-      </div>
+      </div>`}
     </div>
   </div>`;
 }
@@ -59,6 +61,7 @@ function App() {
   const [webhooks, setWebhooks] = useState([]);
   const [captures, setCaptures] = useState([]);
   const [scripts, setScripts] = useState([]);
+  const [composerRequest, setComposerRequest] = useState(null);
 
   const [project, setProject] = useState("");
   const [sessions, setSessions] = useState([]);
@@ -149,7 +152,7 @@ function App() {
   // Keep both stream counts warm so switching tabs never starts from an empty
   // count. Settings pauses the stream polling because it has no live rows.
   useEffect(() => {
-    if (activeTab === "settings") return undefined;
+    if (activeTab === "settings" || activeTab === "composer") return undefined;
     const tick = () => {
       loadWebhooks();
       loadCaptures();
@@ -186,6 +189,7 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (activeTab === "composer" || activeTab === "settings") return;
     const count = activeTab === "webhooks" ? webhooks.length : captures.length;
     if (count > lastVisibleCount.current && !follow) {
       setQueuedCount((n) => n + count - lastVisibleCount.current);
@@ -234,6 +238,19 @@ function App() {
       kind: "script",
       data: { id: 0, name: "", trigger: "on_request", body: "", priority: 0, enabled: true },
     });
+  };
+
+  const openComposer = (request = null) => {
+    selectionRequest.current += 1;
+    setSelection(null);
+    setComposerRequest(request ? { ...request, nonce: Date.now() } : null);
+    setActiveTab("composer");
+  };
+
+  const decodeBase64Text = (value) => {
+    const raw = atob(value || "");
+    const bytes = Uint8Array.from(raw, (char) => char.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
   };
 
   const toggleScript = async (id, enabled) => {
@@ -292,6 +309,13 @@ function App() {
         webhook=${selection.data}
         defaultTarget=${(status && status.forward_url) || ""}
         onReplay=${api.replayWebhook}
+        onCompose=${() => openComposer({
+          method: selection.data.method || "POST",
+          url: (status && status.forward_url) || "",
+          headers: selection.data.headers || {},
+          body: selection.data.body || "",
+          apply_transforms: true,
+        })}
         onExport=${(target, client) =>
           api.exportWebhook(selection.data.project, selection.data.seq, target, client)}
         onClose=${closeDetail}
@@ -303,6 +327,14 @@ function App() {
           api.exportCapture(selection.data.id, target, client)}
         onLoadBody=${(part, limit) =>
           api.getCaptureBody(selection.data.id, part, limit)}
+        onCompose=${async () => {
+          const body = await api.getCaptureBody(selection.data.id, "request", 0);
+          openComposer({
+            method: selection.data.method || "GET", url: selection.data.url || "",
+            headers: selection.data.req_headers || {}, body: decodeBase64Text(body.body_base64),
+            apply_transforms: true,
+          });
+        }}
         onClose=${closeDetail}
       />`;
     if (selection.kind === "script")
@@ -331,6 +363,7 @@ function App() {
   const paletteActions = [
     { id: "webhooks", label: "Show ingress", glyph: "↘", run: () => changeTab("webhooks") },
     { id: "traffic", label: "Show traffic", glyph: "⇄", run: () => changeTab("traffic") },
+    { id: "composer", label: "Compose request", glyph: "↗", run: () => openComposer() },
     { id: "settings", label: "Open settings", glyph: "⚙", run: toggleSettings },
     { id: "transform", label: "New transform", glyph: "+", run: newScript },
     { id: "clear", label: "Clear filters", glyph: "×", run: () => { setSearch(""); setMethodFilter(""); setStatusFilter(""); setProject(""); setSessionFilter(0); } },
@@ -404,10 +437,10 @@ function App() {
           : html`<${CommandDeck}
                 activeTab=${activeTab}
                 onChange=${changeTab}
-                counts=${{ webhooks: displayedWebhooks.length, traffic: displayedCaptures.length }}
+                counts=${{ webhooks: displayedWebhooks.length, traffic: displayedCaptures.length, composer: null }}
                 onSearch=${setSearch}
                 project=${project}
-                filtered=${activeTab === "webhooks" ? displayedWebhooks.length : displayedCaptures.length}
+                filtered=${activeTab === "webhooks" ? displayedWebhooks.length : activeTab === "traffic" ? displayedCaptures.length : 0}
                 followControl=${html`<span class="follow-cluster">
                   ${followButton}
                   ${queuedCount > 0 ? html`<button class="new-events-pill" onClick=${() => { setFollow(true); setPausedRows(null); setQueuedCount(0); }}>${queuedCount} new event${queuedCount === 1 ? "" : "s"}</button>` : null}
@@ -415,7 +448,9 @@ function App() {
               />
               <main class="workspace-main">
                 <section class="event-stage">
-                  ${activeTab === "webhooks"
+                  ${activeTab === "composer"
+                    ? html`<${RequestComposer} initialRequest=${composerRequest} onSend=${api.sendComposedRequest} onToast=${showToast} />`
+                    : activeTab === "webhooks"
                     ? html`<${WebhookList}
                         webhooks=${displayedWebhooks}
                         onSelect=${openWebhook}
@@ -431,7 +466,7 @@ function App() {
                           : null}
                       />`}
                 </section>
-                ${detailPane()}
+                ${activeTab === "composer" ? null : detailPane()}
               </main>`}
       </div>
     </div>
