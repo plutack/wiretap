@@ -58,6 +58,30 @@ func TestBindings_Status_StoreOpenNoTunnel(t *testing.T) {
 	}
 }
 
+func TestBindings_SendComposedRequest(t *testing.T) {
+	t.Parallel()
+	b, _ := newBindings(t)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut || r.Header.Get("X-Test") != "yes" {
+			t.Errorf("request = %s headers=%v", r.Method, r.Header)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"accepted":true}`))
+	}))
+	t.Cleanup(upstream.Close)
+	view, err := b.SendComposedRequest(ComposeRequestInput{
+		Method: "PUT", URL: upstream.URL, Headers: map[string][]string{"X-Test": {"yes"}}, Body: `{}`,
+	})
+	if err != nil {
+		t.Fatalf("SendComposedRequest: %v", err)
+	}
+	body, _ := base64.StdEncoding.DecodeString(view.BodyBase64)
+	if view.Status != http.StatusAccepted || string(body) != `{"accepted":true}` || view.BodyLen != len(body) {
+		t.Fatalf("view = %+v body=%q", view, body)
+	}
+}
+
 // TestBindings_Status_ReflectsConnectedProjects exercises the test seam
 // App.SetConnectedProjects: production wires it via the tunnel's OnConnect
 // callback (see app.defaultTunnelFactory); tests inject the snapshot directly

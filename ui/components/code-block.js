@@ -123,7 +123,7 @@ export function BodyViewer({
   const copy = async () => {
     try {
       let value = formatted.text;
-      if (previewTruncated) {
+      if (previewTruncated && loadBody) {
         const result = await fetchBody(0, "copy");
         if (!result) return;
         value = bytesToText(decodeBase64(result.body_base64));
@@ -136,8 +136,8 @@ export function BodyViewer({
     setTimeout(() => setCopyState("idle"), 1600);
   };
   const download = async () => {
-    const result = previewTruncated ? await fetchBody(0, "save") : null;
-    if (previewTruncated && !result) return;
+    const result = previewTruncated && loadBody ? await fetchBody(0, "save") : null;
+    if (previewTruncated && loadBody && !result) return;
     const downloadBytes = result ? decodeBase64(result.body_base64) : bytes;
     const url = URL.createObjectURL(new Blob([downloadBytes], { type: type || "application/octet-stream" }));
     const a = document.createElement("a");
@@ -172,14 +172,14 @@ export function BodyViewer({
         ${loadState === "save" ? "Loading…" : "Save"}
       </button>
       ${effectiveMode !== "image" ? html`<button class="body-action" disabled=${loadState !== "idle"} onClick=${copy}>
-        ${loadState === "copy" ? "Loading…" : copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : previewTruncated ? "Copy all" : "Copy"}
+        ${loadState === "copy" ? "Loading…" : copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : previewTruncated && loadBody ? "Copy all" : previewTruncated ? "Copy preview" : "Copy"}
       </button>` : null}
     </div>
     ${previewTruncated ? html`<div class="body-large-warning">
       Showing ${Math.round(bytes.length / 1024)} KB of ${Math.round(totalLength / 1024)} KB as plain text to keep the inspector responsive.
-      <button class="body-action" disabled=${loadState !== "idle"} onClick=${showMore}>
+      ${loadBody ? html`<button class="body-action" disabled=${loadState !== "idle"} onClick=${showMore}>
         ${loadState === "preview" ? "Loading…" : "Show more"}
-      </button>
+      </button>` : null}
       ${loadState === "failed" ? html`<span>Could not load more.</span>` : null}
     </div>` : selectedMode === "pretty" && !canHighlight ? html`<div class="body-large-warning">
       Syntax highlighting is disabled above ${Math.round(HIGHLIGHT_LIMIT / 1024)} KB; displaying one plain-text node.

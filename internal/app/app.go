@@ -25,8 +25,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -465,6 +467,71 @@ func (a *App) ReplayWebhook(ctx context.Context, project string, seq int64, targ
 	}
 	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
 	return resp.StatusCode, nil
+}
+
+// ComposedResponse is the bounded response returned by SendRequest.
+type ComposedResponse struct {
+	Status     int
+	Headers    http.Header
+	Body       []byte
+	BodyLen    int
+	Truncated  bool
+	DurationMS int64
+}
+
+// SendRequest sends an arbitrary user-composed HTTP request. When transforms
+// is true, enabled on_replay scripts run before the request is built.
+func (a *App) SendRequest(ctx context.Context, method, targetURL string, headers http.Header, body []byte, transforms bool) (*ComposedResponse, error) {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	if method == "" {
+		method = http.MethodPost
+	}
+	parsedURL, parseErr := url.Parse(strings.TrimSpace(targetURL))
+	if parseErr != nil || parsedURL.Host == "" || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		return nil, fmt.Errorf("app: composed request URL must be absolute http(s): %q", targetURL)
+	}
+	var err error
+	if transforms {
+		method, targetURL, headers, body, err = a.runReplayScripts(ctx, method, targetURL, headers, body)
+		if err != nil {
+			return nil, err
+		}
+	}
+	parsedURL, parseErr = url.Parse(strings.TrimSpace(targetURL))
+	if parseErr != nil || parsedURL.Host == "" || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		return nil, fmt.Errorf("app: transformed request URL must be absolute http(s): %q", targetURL)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, targetURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("app: build composed request: %w", err)
+	}
+	req.Header = headers.Clone()
+	started := time.Now()
+	client := &http.Client{Transport: a.replayTransport, Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("app: send composed request to %s: %w", targetURL, err)
+	}
+	defer resp.Body.Close()
+	const responseLimit = 2 * 1024 * 1024
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, responseLimit+1))
+	if err != nil {
+		return nil, fmt.Errorf("app: read composed response: %w", err)
+	}
+	truncated := len(responseBody) > responseLimit
+	if truncated {
+		responseBody = responseBody[:responseLimit]
+	}
+	bodyLen := len(responseBody)
+	if resp.ContentLength >= 0 {
+		bodyLen = int(resp.ContentLength)
+	} else if truncated {
+		bodyLen = responseLimit + 1
+	}
+	return &ComposedResponse{
+		Status: resp.StatusCode, Headers: resp.Header.Clone(), Body: responseBody,
+		BodyLen: bodyLen, Truncated: truncated, DurationMS: time.Since(started).Milliseconds(),
+	}, nil
 }
 
 // runReplayScripts runs enabled on_replay scripts against the outbound replay

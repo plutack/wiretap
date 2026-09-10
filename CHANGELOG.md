@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.2.6 — 2026-09-10
+
+### Request composer
+
+- Added a GUI Compose workspace for arbitrary HTTP requests with editable
+  method, URL, multi-value headers, and text or JSON bodies.
+- Added plain JSON and request-envelope file import.
+- Existing webhooks and captured requests can now be opened as editable
+  composer drafts.
+- Composed requests can run enabled `on_replay` transforms and display response
+  status, headers, content, size, duration, and truncation state.
+- Restricted destinations to absolute HTTP(S) URLs, retained the existing
+  30-second replay timeout, and bounded response previews to 2 MiB.
+
 ## v0.2.5 — 2026-09-10
 
 ### Project management

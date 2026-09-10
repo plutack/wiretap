@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/plutack/wiretap/internal/app"
@@ -146,6 +147,25 @@ type ReplayResult struct {
 	Status int `json:"status"`
 }
 
+// ComposeRequestInput is an arbitrary request authored in the GUI.
+type ComposeRequestInput struct {
+	Method          string              `json:"method"`
+	URL             string              `json:"url"`
+	Headers         map[string][]string `json:"headers"`
+	Body            string              `json:"body"`
+	ApplyTransforms bool                `json:"apply_transforms"`
+}
+
+// ComposeResponseView is the bounded response shown by the composer.
+type ComposeResponseView struct {
+	Status     int                 `json:"status"`
+	Headers    map[string][]string `json:"headers"`
+	BodyBase64 string              `json:"body_base64,omitempty"`
+	BodyLen    int                 `json:"body_len"`
+	Truncated  bool                `json:"truncated,omitempty"`
+	DurationMS int64               `json:"duration_ms"`
+}
+
 // ScriptView is the GUI + wailsjs DTO for a stored script. It mirrors
 // store.ScriptRow with JSON-friendly field names; timestamps are RFC3339 UTC.
 type ScriptView struct {
@@ -209,6 +229,32 @@ func (b *Bindings) ListWebhooks(project string) ([]WebhookView, error) {
 		return nil, fmt.Errorf("list webhooks: %w", err)
 	}
 	return webhookSummary(rows), nil
+}
+
+// SendComposedRequest validates and sends one arbitrary request from the GUI.
+func (b *Bindings) SendComposedRequest(in ComposeRequestInput) (ComposeResponseView, error) {
+	if strings.TrimSpace(in.URL) == "" {
+		return ComposeResponseView{}, errors.New("send request: URL is required")
+	}
+	headers := http.Header{}
+	for key, values := range in.Headers {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		for _, value := range values {
+			headers.Add(key, value)
+		}
+	}
+	result, err := b.app.SendRequest(context.Background(), in.Method, strings.TrimSpace(in.URL), headers, []byte(in.Body), in.ApplyTransforms)
+	if err != nil {
+		return ComposeResponseView{}, err
+	}
+	return ComposeResponseView{
+		Status: result.Status, Headers: map[string][]string(result.Headers),
+		BodyBase64: base64.StdEncoding.EncodeToString(result.Body), BodyLen: result.BodyLen,
+		Truncated: result.Truncated, DurationMS: result.DurationMS,
+	}, nil
 }
 
 // GetCapture returns capture metadata, headers, and bounded body previews.
