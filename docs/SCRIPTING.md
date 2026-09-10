@@ -10,6 +10,10 @@ priority, enabled flag, and JavaScript body. Enabled scripts with the same
 trigger run from the lowest priority number to the highest. Each script sees
 the mutations made by earlier scripts.
 
+`on_compose` is different from the automatic pipeline triggers. It appears as
+a selectable source recipe in the Compose workspace and runs only when the user
+chooses **Transform request**.
+
 ## End-to-end walkthrough
 
 This section walks through one full loop: capture real traffic, then rewrite
@@ -208,6 +212,25 @@ Secrets are currently stored as part of the script body in local SQLite. Do not
 embed production secrets unless that storage model is acceptable for your
 machine.
 
+### `on_compose`
+
+Runs only when explicitly selected under **Compose > Source recipe**. The raw
+source text is provided as `request.body`, while `request.url` contains the
+target base URL entered in the GUI. Mutate the request into the complete draft
+the user should review:
+
+```js
+const source = json.parse(request.body);
+request.method = "POST";
+request.url = request.url.replace(/\/+$/, "") + "/webhook/provider";
+request.headers["Content-Type"] = "application/json";
+request.body = json.stringify(source.message.data.body);
+```
+
+The recipe cannot access files or the network, and applying it does not send
+the draft. Provider-specific recipes are not bundled into Wiretap. Create and
+manage them as local scripts.
+
 ### `on_webhook`
 
 Runs after a webhook arrives over the relay tunnel but before it is inserted in
@@ -249,6 +272,7 @@ script and exercise the appropriate live trigger when header behavior matters.
   SQLite database at execution time; a restart is not required after saving.
 - The GUI and TUI start the relay tunnel. `on_webhook` and `on_replay` therefore
   work there. `on_request` and `on_response` require `wiretap intercept start`.
+- `on_compose` is GUI-only and always requires an explicit recipe selection.
 - Lower priority numbers run first. Equal priorities preserve database order;
   use distinct priorities when ordering matters.
 - Script errors are non-fatal to the chain. Check the GUI test result or stderr

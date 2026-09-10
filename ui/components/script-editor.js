@@ -14,7 +14,7 @@ import { copyText, pasteText } from "../lib/clipboard.js";
 import { Dropdown } from "./dropdown.js";
 import { diffLines, hasChanges } from "../lib/diff.js";
 
-const TRIGGERS = ["on_request", "on_response", "on_replay", "on_webhook"];
+const TRIGGERS = ["on_request", "on_response", "on_replay", "on_webhook", "on_compose"];
 
 export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
   const [name, setName] = useState(script.name || "");

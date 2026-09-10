@@ -44,8 +44,8 @@ func (a *App) ScriptByID(ctx context.Context, id int64) (*store.ScriptRow, error
 	return a.store.ScriptByID(ctx, id)
 }
 
-// CreateScript inserts a new script and returns its id. The trigger must be one
-// of the four known triggers; the body is stored verbatim (not evaluated here).
+// CreateScript inserts a new script and returns its id. The trigger must be a
+// known pipeline trigger or on_compose; the body is stored verbatim.
 func (a *App) CreateScript(ctx context.Context, sc store.ScriptRow) (int64, error) {
 	if a.store == nil {
 		return 0, errStoreNotOpen
