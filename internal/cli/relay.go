@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/plutack/wiretap/internal/api"
+	"github.com/plutack/wiretap/internal/app"
 	"github.com/plutack/wiretap/internal/config"
 )
 
@@ -99,10 +101,9 @@ func newRelayRegisterCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringSliceVarP(&projects, "projects", "p", nil, "project paths to claim (required)")
+	cmd.Flags().StringSliceVarP(&projects, "projects", "p", nil, "optional initial project paths (use `relay projects add` later)")
 	cmd.Flags().StringVarP(&displayName, "name", "n", "", "human-readable client display name")
 	cmd.Flags().BoolVar(&saveCreds, "save", false, "save credentials to ~/.config/wiretap/relay-credentials.json")
-	_ = cmd.MarkFlagRequired("projects")
 	return cmd
 }
 
@@ -185,7 +186,87 @@ func newRelayProjectsCmd() *cobra.Command {
 		Short: "Project administration",
 	}
 	cmd.AddCommand(newRelayProjectsListCmd())
+	cmd.AddCommand(newRelayProjectsAddCmd())
+	cmd.AddCommand(newRelayProjectsRemoveCmd())
 	cmd.AddCommand(newRelayProjectsReclaimCmd())
+	return cmd
+}
+
+// newRelayOwnerClient uses the saved one-time registration credentials for
+// ordinary project changes. These commands intentionally do not accept or
+// require the relay admin token.
+func newRelayOwnerClient(cmd *cobra.Command) (*api.HTTPClient, *config.Credentials, error) {
+	relayURL, _ := cmd.Flags().GetString("url")
+	if strings.TrimSpace(relayURL) == "" {
+		cfg, err := newConfigManager().Load()
+		if err != nil {
+			return nil, nil, fmt.Errorf("load config: %w", err)
+		}
+		relayURL = cfg.Relay.URL
+	}
+	base := app.IngressBaseURL(relayURL)
+	if base == "" {
+		return nil, nil, fmt.Errorf("no relay URL configured; register this desktop first")
+	}
+	creds, err := newConfigManager().LoadCredentials()
+	if err != nil {
+		return nil, nil, fmt.Errorf("load relay credentials: %w", err)
+	}
+	c, err := api.NewClient(base, api.WithClientAuth(creds.ClientID, creds.ClientToken))
+	return c, creds, err
+}
+
+func newRelayProjectsAddCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "add <path>",
+		Short: "Add a project to this registered client without rotating credentials",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, creds, err := newRelayOwnerClient(cmd)
+			if err != nil {
+				return err
+			}
+			out, err := c.AddClientProject(cmd.Context(), strings.Trim(args[0], "/"))
+			if err != nil {
+				return err
+			}
+			creds.Projects = out.Projects
+			if err := newConfigManager().SaveCredentials(*creds); err != nil {
+				return fmt.Errorf("project added on relay, but saving credentials failed: %w", err)
+			}
+			printJSON(cmd, out)
+			return nil
+		},
+	}
+}
+
+func newRelayProjectsRemoveCmd() *cobra.Command {
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "remove <path>",
+		Short: "Remove one of this client's projects",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !force {
+				return fmt.Errorf("removing a project deletes its queued relay webhooks; pass --force to continue")
+			}
+			c, creds, err := newRelayOwnerClient(cmd)
+			if err != nil {
+				return err
+			}
+			out, err := c.RemoveClientProject(cmd.Context(), strings.Trim(args[0], "/"))
+			if err != nil {
+				return err
+			}
+			creds.Projects = out.Projects
+			if err := newConfigManager().SaveCredentials(*creds); err != nil {
+				return fmt.Errorf("project removed on relay, but saving credentials failed: %w", err)
+			}
+			printJSON(cmd, out)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&force, "force", false, "confirm deletion of the project's queued relay webhooks")
 	return cmd
 }
 

@@ -52,6 +52,8 @@ export function Settings({ onToast, onSaved }) {
   // except through RegisterRelay's own save path).
   const [reg, setReg] = useState({ url: "", token: "", projects: "", name: "" });
   const [registering, setRegistering] = useState(false);
+  const [projectDraft, setProjectDraft] = useState("");
+  const [projectBusy, setProjectBusy] = useState(false);
   const [displayPrefs, setDisplayPrefs] = useState(loadDisplayPrefs());
   const updateDisplay = (key) => (event) => {
     const next = { ...displayPrefs, [key]: event.target.value };
@@ -125,6 +127,38 @@ export function Settings({ onToast, onSaved }) {
     }
   };
 
+  const addProject = async () => {
+    const project = projectDraft.trim().replace(/^\/+|\/+$/g, "");
+    if (!project) return;
+    setProjectBusy(true);
+    try {
+      const s = await api.addRelayProject(project);
+      setView(s);
+      setProjectDraft("");
+      onToast(`Added project ${project}`);
+      onSaved && onSaved();
+    } catch (e) {
+      onToast("add project: " + e, 6000);
+    } finally {
+      setProjectBusy(false);
+    }
+  };
+
+  const removeProject = async (project) => {
+    if (!window.confirm(`Remove ${project}? This deletes its queued webhook history from the relay. Local deliveries remain available.`)) return;
+    setProjectBusy(true);
+    try {
+      const s = await api.removeRelayProject(project);
+      setView(s);
+      onToast(`Removed project ${project}`);
+      onSaved && onSaved();
+    } catch (e) {
+      onToast("remove project: " + e, 6000);
+    } finally {
+      setProjectBusy(false);
+    }
+  };
+
   return html`<div class="h-full overflow-y-auto">
     <div class="mx-auto flex max-w-2xl flex-col gap-4 p-4 pb-16">
       <${SettingsCard}
@@ -168,6 +202,32 @@ export function Settings({ onToast, onSaved }) {
         </div>
       </>
 
+      ${view.registered ? html`<${SettingsCard}
+        title="Projects"
+        hint="Add or remove webhook paths for this desktop. These changes keep the existing client ID and token."
+      >
+        <div class="space-y-2">
+          ${(view.projects || []).map((project) => html`<div class="flex items-center justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2">
+            <span class="font-mono text-sm text-neutral-200">${project}</span>
+            <${Button} class="btn-xs" variant="danger" disabled=${projectBusy} onClick=${() => removeProject(project)}>Remove</>
+          </div>`)}
+          ${(view.projects || []).length === 0 ? html`<p class="text-xs text-neutral-500">No projects are currently assigned.</p>` : null}
+        </div>
+        <div class="flex gap-2">
+          <${Input}
+            class="font-mono"
+            placeholder="new-project"
+            value=${projectDraft}
+            disabled=${projectBusy}
+            onInput=${(e) => setProjectDraft(e.target.value)}
+            onKeyDown=${(e) => e.key === "Enter" && addProject()}
+          />
+          <${Button} variant="primary" disabled=${projectBusy || !projectDraft.trim()} onClick=${addProject}>
+            ${projectBusy ? "Updating…" : "Add project"}
+          </>
+        </div>
+      </>` : null}
+
       <${SettingsCard} title="Display" hint="Adjust readability and row density for this desktop. These preferences are stored locally.">
         <div class="grid grid-cols-2 gap-3">
           <${Field} label="Text size">
@@ -194,9 +254,9 @@ export function Settings({ onToast, onSaved }) {
         </div>
       </>
 
-      <${SettingsCard}
-        title="Relay registration"
-        hint="Registers this PC with your relay and claims project paths (same as 'wiretap relay register --save'). The admin token is used once and never stored."
+      ${!view.registered ? html`<${SettingsCard}
+        title="Register this desktop"
+        hint="One-time setup that creates this desktop's client ID and token. After registration, use the separate Projects section to add paths without rotating credentials."
       >
         <${Field} label="Relay URL">
           <${Input}
@@ -216,10 +276,10 @@ export function Settings({ onToast, onSaved }) {
           />
         </>
         <div class="grid grid-cols-2 gap-3">
-          <${Field} label="Project paths (comma-separated)">
+          <${Field} label="Initial projects (optional)">
             <${Input}
               class="font-mono"
-              placeholder="project-a, project-b"
+              placeholder="project-a, project-b (or add later)"
               value=${reg.projects}
               onInput=${(e) => setReg({ ...reg, projects: e.target.value })}
             />
@@ -234,16 +294,16 @@ export function Settings({ onToast, onSaved }) {
         </div>
         <div>
           <${Button} variant="primary" disabled=${registering} onClick=${register}>
-            ${registering ? "Registering…" : view.registered ? "Re-register" : "Register"}
+            ${registering ? "Registering…" : "Register desktop"}
           </>
         </div>
-        ${view.registered
-          ? html`<p class="text-xs text-neutral-600">
-              Credentials live in <span class="font-mono">${view.creds_path}</span>.
-              Re-registering issues a fresh client id + token.
-            </p>`
-          : null}
-      </>
+      </>` : html`<${SettingsCard}
+        title="Desktop registration"
+        hint="Registration is complete. Project changes above preserve this identity; registering again is not used to add projects."
+      >
+        <p class="text-sm text-neutral-300">Registered as <span class="font-mono">${view.client_id}</span>.</p>
+        <p class="text-xs text-neutral-600">Credentials live in <span class="font-mono">${view.creds_path}</span>.</p>
+      </>`}
 
       <${SettingsCard}
         title="Interception"

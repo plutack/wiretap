@@ -17,6 +17,18 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as $models from "./models.js";
 
 /**
+ * AddRelayProject claims a path for the currently registered desktop without
+ * issuing a new client id/token, then reconnects using the updated project set.
+ * @param {string} project
+ * @returns {$CancellablePromise<$models.SettingsView>}
+ */
+export function AddRelayProject(project) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.AddRelayProject", project).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
+}
+
+/**
  * DeleteScript removes a script by id.
  * @param {number} id
  * @returns {$CancellablePromise<void>}
@@ -43,7 +55,7 @@ export function ExportCapture(id, target, client) {
  */
 export function ExportTargets() {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ExportTargets").then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType1($result);
+        return $$createType2($result);
     }));
 }
 
@@ -67,7 +79,7 @@ export function ExportWebhook(project, seq, target, client) {
  */
 export function GetCapture(id) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetCapture", id).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType2($result);
+        return $$createType3($result);
     }));
 }
 
@@ -81,7 +93,7 @@ export function GetCapture(id) {
  */
 export function GetCaptureBody(id, part, limit) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetCaptureBody", id, part, limit).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType3($result);
+        return $$createType4($result);
     }));
 }
 
@@ -93,7 +105,7 @@ export function GetCaptureBody(id, part, limit) {
  */
 export function GetScript(id) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetScript", id).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType5($result);
     }));
 }
 
@@ -107,7 +119,7 @@ export function GetScript(id) {
  */
 export function GetSettings() {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetSettings").then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType0($result);
     }));
 }
 
@@ -190,6 +202,18 @@ export function RegisterRelay($in) {
 }
 
 /**
+ * RemoveRelayProject releases a path owned by the currently registered
+ * desktop. The GUI confirms the relay-side history deletion before calling.
+ * @param {string} project
+ * @returns {$CancellablePromise<$models.SettingsView>}
+ */
+export function RemoveRelayProject(project) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.RemoveRelayProject", project).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
+}
+
+/**
  * ReplayWebhook re-POSTs a stored webhook to targetURL and returns the upstream
  * HTTP status. Delegates to app.App.ReplayWebhook (byte-exact body + hop-by-hop
  * stripping already handled there).
@@ -224,7 +248,7 @@ export function SaveScript($in) {
  */
 export function SaveSettings($in) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.SaveSettings", $in).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType0($result);
     }));
 }
 
@@ -269,15 +293,15 @@ export function TestScript(req) {
 }
 
 // Private type creation functions
-const $$createType0 = $models.TargetView.createFrom;
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $models.CaptureView.createFrom;
-const $$createType3 = $models.CaptureBodyView.createFrom;
-const $$createType4 = $models.ScriptView.createFrom;
-const $$createType5 = $models.SettingsView.createFrom;
+const $$createType0 = $models.SettingsView.createFrom;
+const $$createType1 = $models.TargetView.createFrom;
+const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = $models.CaptureView.createFrom;
+const $$createType4 = $models.CaptureBodyView.createFrom;
+const $$createType5 = $models.ScriptView.createFrom;
 const $$createType6 = $models.WebhookView.createFrom;
-const $$createType7 = $Create.Array($$createType2);
-const $$createType8 = $Create.Array($$createType4);
+const $$createType7 = $Create.Array($$createType3);
+const $$createType8 = $Create.Array($$createType5);
 const $$createType9 = $models.SessionPageView.createFrom;
 const $$createType10 = $Create.Array($$createType6);
 const $$createType11 = $models.RegisterView.createFrom;

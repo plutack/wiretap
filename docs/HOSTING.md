@@ -22,6 +22,12 @@ The same knobs exist as `-addr`, `-db`, and `-admin-token` flags; flags win
 over env vars. An unauthenticated `GET /health` returns the running version
 and is meant for health checks.
 
+The admin token is needed to register a desktop identity. After registration,
+that desktop can add and remove its own project paths through the authenticated
+`/client/projects` API using its client ID/token; those changes do not issue
+new credentials. Removing a project also removes its queued relay-side webhook
+history.
+
 ## 1. Deploy on Coolify
 
 Coolify already runs Caddy as its proxy, so TLS certificates and WebSocket
@@ -100,19 +106,37 @@ Keep the listening port bound to `localhost` and let the proxy own 80/443.
 
 ## 3. Register a desktop
 
-On the desktop, initialize the config and register one or more project paths:
+On the desktop, initialize the config and register the desktop identity:
 
 ```sh
 wiretap config init
 wiretap relay \
   --url https://relay.example.com \
   --admin-token replace-with-the-admin-token \
-  register --projects project-a,project-b --name laptop --save
+  register --name laptop --save
 ```
 
-`--save` writes `client_id`, `client_token`, and the claimed projects to
+`--save` writes `client_id`, `client_token`, and the project list to
 `~/.config/wiretap/relay-credentials.json` with mode `0600`. It intentionally
 does not save the more privileged relay admin token.
+
+Claim projects separately using the saved client credentials. This does not
+create a new client or rotate its token:
+
+```sh
+wiretap relay --url https://relay.example.com projects add project-a
+wiretap relay --url https://relay.example.com projects add project-b
+```
+
+For backward compatibility, `register --projects project-a,project-b` can
+still claim initial projects during registration. Do not run `register` again
+to add a project: registration deliberately creates a new client identity.
+
+To release a project, run `wiretap relay projects remove project-b --force`.
+The confirmation is required because removing the route deletes its queued
+relay-side webhook history. Webhooks already stored on the desktop remain in
+the local database. A project currently has one owning desktop; multiple
+subscriber delivery is not part of this release.
 
 Set the tunnel endpoint in `~/.config/wiretap/config.yaml`:
 
@@ -130,6 +154,13 @@ configured value for `wss://relay.example.com/tunnel`.
 Start `wiretap gui` or `wiretap tui`. The status should show the connected
 project paths. The desktop always dials outward, so no inbound desktop port or
 third-party tunneling service is required.
+
+### Upgrading to v0.2.5
+
+Upgrade `wiretap-relay` before using the new project Add/Remove controls or
+CLI commands. Older relays do not expose the authenticated `/client/projects`
+routes. Existing registrations, credentials, projects, webhook history, and
+SQLite databases require no migration or re-registration.
 
 ## 4. Send and replay webhooks
 

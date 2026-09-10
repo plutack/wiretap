@@ -9,11 +9,11 @@
 package api
 
 // RegisterRequest is the body of POST /register. The admin_token authenticates
-// the call; projects is the set of paths this client wants to claim.
-// display_name is an optional human label shown in admin listings.
+// the call. Projects is an optional set of initial paths kept for compatibility;
+// normal project changes use the authenticated /client/projects routes.
 type RegisterRequest struct {
 	AdminToken  string   `json:"admin_token"`
-	Projects    []string `json:"projects"`
+	Projects    []string `json:"projects,omitempty"`
 	DisplayName string   `json:"display_name,omitempty"`
 }
 
@@ -24,6 +24,17 @@ type RegisterResponse struct {
 	ClientID    string   `json:"client_id"`
 	ClientToken string   `json:"client_token"`
 	Projects    []string `json:"projects"`
+}
+
+// ProjectRequest is the body of POST /client/projects. The authenticated
+// client becomes the owner; adding a project never rotates client credentials.
+type ProjectRequest struct {
+	Path string `json:"path"`
+}
+
+// ClientProjectsResponse is returned after an owner project mutation.
+type ClientProjectsResponse struct {
+	Projects []string `json:"projects"`
 }
 
 // HealthResponse is the body of GET /health. tunnel_count is the number of

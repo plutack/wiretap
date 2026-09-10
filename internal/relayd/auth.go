@@ -4,6 +4,7 @@
 //   - POST /:project (webhook ingress, no auth — projects are write-open)
 //   - /admin/* (requires X-Admin-Token)
 //   - /register (requires X-Admin-Token)
+//   - /client/* (requires client_id/client_token)
 //   - /tunnel (WebSocket; requires client_id/client_token)
 //
 // All handlers are wired by the Server.Routes method so production code and
@@ -12,6 +13,7 @@
 package relayd
 
 import (
+	"context"
 	"crypto/subtle"
 	"net/http"
 
@@ -33,20 +35,16 @@ func (s *Server) requireAdmin(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// requireClient asserts that the request was authenticated as a specific
-// client_id by the tunnel layer. Not used yet by HTTP routes (admin token
-// covers owner-only ops in the MVP); included here as the seam the replay
-// route will use once we add per-client auth on top of admin.
-//
-//nolint:unused // reserved for future per-client HTTP routes
+// requireClient authenticates client HTTP routes with the same basic
+// credentials used by the tunnel and exposes the client id to the handler.
 func (s *Server) requireClient(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, ok := r.Context().Value(clientIDKey{}).(string)
-		if !ok || id == "" {
-			writeErr(w, http.StatusUnauthorized, "auth_failed", "client auth required")
+		client, err := s.authClientByBasic(r)
+		if err != nil {
+			writeErr(w, http.StatusUnauthorized, "auth_failed", "missing or invalid client credentials")
 			return
 		}
-		h(w, r)
+		h(w, r.WithContext(context.WithValue(r.Context(), clientIDKey{}, client.ClientID)))
 	}
 }
 

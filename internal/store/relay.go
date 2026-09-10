@@ -111,6 +111,20 @@ func (s *RelayStore) BindProject(ctx context.Context, path, clientID string, now
 	return wrapExec(err, "BindProject", path)
 }
 
+// UnbindProject releases a project only when clientID is its current owner.
+// The project foreign key cascades to its relay-side webhook buffer.
+func (s *RelayStore) UnbindProject(ctx context.Context, path, clientID string) error {
+	res, err := s.db.ExecContext(ctx, "DELETE FROM projects WHERE path = ? AND client_id = ?", path, clientID)
+	if err != nil {
+		return fmt.Errorf("UnbindProject %q: %w", path, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("UnbindProject %q: %w", path, ErrNotFound)
+	}
+	return nil
+}
+
 // Project looks up a project by path. Returns ErrNotFound when absent.
 func (s *RelayStore) Project(ctx context.Context, path string) (*ProjectRow, error) {
 	row := s.db.QueryRowContext(ctx,

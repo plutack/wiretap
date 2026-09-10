@@ -71,6 +71,76 @@ type RegisterView struct {
 	TunnelURL string   `json:"tunnel_url"`
 }
 
+// AddRelayProject claims a path for the currently registered desktop without
+// issuing a new client id/token, then reconnects using the updated project set.
+func (b *Bindings) AddRelayProject(project string) (SettingsView, error) {
+	project = strings.Trim(strings.TrimSpace(project), "/")
+	if project == "" {
+		return SettingsView{}, errors.New("add project: project path is required")
+	}
+	client, creds, err := b.ownerRelayClient()
+	if err != nil {
+		return SettingsView{}, err
+	}
+	out, err := client.AddClientProject(context.Background(), project)
+	if err != nil {
+		return SettingsView{}, fmt.Errorf("add project: %w", err)
+	}
+	creds.Projects = out.Projects
+	if err := b.app.SaveRelayCredentials(*creds); err != nil {
+		return SettingsView{}, fmt.Errorf("project added on relay, but saving credentials failed: %w", err)
+	}
+	if err := b.app.RestartTunnel(context.Background()); err != nil {
+		return SettingsView{}, fmt.Errorf("project added, but tunnel restart failed: %w", err)
+	}
+	return b.GetSettings()
+}
+
+// RemoveRelayProject releases a path owned by the currently registered
+// desktop. The GUI confirms the relay-side history deletion before calling.
+func (b *Bindings) RemoveRelayProject(project string) (SettingsView, error) {
+	project = strings.Trim(strings.TrimSpace(project), "/")
+	if project == "" {
+		return SettingsView{}, errors.New("remove project: project path is required")
+	}
+	client, creds, err := b.ownerRelayClient()
+	if err != nil {
+		return SettingsView{}, err
+	}
+	out, err := client.RemoveClientProject(context.Background(), project)
+	if err != nil {
+		return SettingsView{}, fmt.Errorf("remove project: %w", err)
+	}
+	creds.Projects = out.Projects
+	if err := b.app.SaveRelayCredentials(*creds); err != nil {
+		return SettingsView{}, fmt.Errorf("project removed on relay, but saving credentials failed: %w", err)
+	}
+	if err := b.app.RestartTunnel(context.Background()); err != nil {
+		return SettingsView{}, fmt.Errorf("project removed, but tunnel restart failed: %w", err)
+	}
+	return b.GetSettings()
+}
+
+func (b *Bindings) ownerRelayClient() (*api.HTTPClient, *config.Credentials, error) {
+	cfg, err := b.app.Config()
+	if err != nil {
+		return nil, nil, fmt.Errorf("load config: %w", err)
+	}
+	base := app.IngressBaseURL(cfg.Relay.URL)
+	if base == "" {
+		return nil, nil, errors.New("manage projects: register this desktop first")
+	}
+	creds, err := b.app.RelayCredentials()
+	if err != nil || creds.ClientID == "" || creds.ClientToken == "" {
+		return nil, nil, errors.New("manage projects: saved relay credentials are required; register this desktop first")
+	}
+	client, err := api.NewClient(base, api.WithClientAuth(creds.ClientID, creds.ClientToken))
+	if err != nil {
+		return nil, nil, fmt.Errorf("manage projects: %w", err)
+	}
+	return client, creds, nil
+}
+
 // GetSettings returns the current configuration + registration state for the
 // settings screen. Missing config/credential files are not errors — the view
 // simply reflects defaults / "not registered". The config is re-read from
@@ -179,8 +249,6 @@ func (b *Bindings) RegisterRelay(in RegisterInput) (RegisterView, error) {
 		return RegisterView{}, errors.New("register: relay URL is required")
 	case strings.TrimSpace(in.AdminToken) == "":
 		return RegisterView{}, errors.New("register: admin token is required")
-	case len(projects) == 0:
-		return RegisterView{}, errors.New("register: at least one project path is required")
 	}
 
 	tunnelURL, err := app.TunnelURLFromBase(in.RelayURL)
