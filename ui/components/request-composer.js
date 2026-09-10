@@ -36,7 +36,7 @@ function responseContentType(headers) {
   return pair ? String(pair[1]?.[0] || "") : "";
 }
 
-export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, onSend, onToast }) {
+export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, onSend, onToast, compact = false }) {
   const [mode, setMode] = useState("manual");
   const [request, setRequest] = useState(initialRequest || EMPTY);
   const [headersText, setHeadersText] = useState(JSON.stringify((initialRequest || EMPTY).headers, null, 2));
@@ -47,6 +47,8 @@ export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, o
   const [baseURL, setBaseURL] = useState("http://localhost:1700");
   const [source, setSource] = useState("");
   const [preparing, setPreparing] = useState(false);
+  const [requestTab, setRequestTab] = useState("body");
+  const [responseTab, setResponseTab] = useState("body");
   const fileRef = useRef(null);
   const sourceFileRef = useRef(null);
 
@@ -147,11 +149,15 @@ export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, o
   const recipeOptions = recipes.map((recipe) => ({ value: recipe.id, label: recipe.name }));
   const selectedRecipe = recipes.find((recipe) => recipe.id === recipeID);
 
-  return html`<div class="composer-shell">
+  const headerCount = (() => {
+    try { return Object.keys(JSON.parse(headersText || "{}")).length; } catch { return "!"; }
+  })();
+
+  return html`<div class="composer-shell ${compact ? "is-compact" : ""}">
     <header class="composer-header">
       <div>
         <h2>Request composer</h2>
-        <p>Build directly or turn captured source data into an editable request.</p>
+        <p>Prepare, inspect, and send a request from one workspace.</p>
       </div>
       <div class="composer-mode-switch" role="tablist" aria-label="Composer input mode">
         <button role="tab" aria-selected=${mode === "manual"} class=${mode === "manual" ? "active" : ""} onClick=${() => { setMode("manual"); setError(""); }}>Manual request</button>
@@ -161,6 +167,10 @@ export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, o
 
     ${mode === "recipe" ? html`
       <section class="recipe-workspace">
+        <div class="recipe-intro">
+          <span class="recipe-step">1</span>
+          <div><strong>Paste the source record</strong><p>Your recipe reads this text from <code>request.body</code> and turns it into a request draft.</p></div>
+        </div>
         <div class="recipe-toolbar">
           <div class="recipe-field recipe-select-field">
             <label>Recipe</label>
@@ -180,20 +190,23 @@ export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, o
           <span>Create a transform with the <code>on_compose</code> trigger, then enable it.</span>
         </div>`}
         <div class="recipe-source-head">
-          <label>Source JSON</label>
+          <label>Source data <span>JSON or plain text</span></label>
           <div>
             <input ref=${sourceFileRef} type="file" accept="application/json,.json" class="hidden" onChange=${importSourceFile} />
             <${Button} onClick=${() => sourceFileRef.current?.click()}>Import file</>
             <${Button} onClick=${pasteSource}>Paste</>
           </div>
         </div>
-        <textarea class="composer-editor recipe-source" spellcheck="false" placeholder="Paste the complete log or provider payload here" value=${source} onInput=${(e) => setSource(e.target.value)}></textarea>
+        <textarea class="composer-editor recipe-source" spellcheck="false" placeholder=${`{
+  "path": "/hooks/orders",
+  "payload": { "event": "order.created", "id": "evt_123" }
+}`} value=${source} onInput=${(e) => setSource(e.target.value)}></textarea>
         ${error ? html`<div class="composer-error">${error}</div>` : null}
         <p class="recipe-safety">A recipe prepares a draft only. Review the generated URL, headers, and body before sending.</p>
       </section>
     ` : html`
       <div class="composer-manual-actions">
-        <span>Edit every part of the request before delivery.</span>
+        <span>Request draft</span>
         <div>
           <input ref=${fileRef} type="file" accept="application/json,.json" class="hidden" onChange=${importFile} />
           <${Button} onClick=${() => fileRef.current?.click()}>Import request JSON</>
@@ -207,16 +220,14 @@ export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, o
             <${Input} class="font-mono" placeholder="http://127.0.0.1:8080/webhook" value=${request.url} onInput=${(e) => setRequest({ ...request, url: e.target.value })} />
             <${Button} variant="primary" disabled=${sending || !request.url.trim()} onClick=${send}>${sending ? "Sending..." : "Send"}</>
           </div>
-          <div class="composer-editors">
-            <div class="composer-editor-field">
-              <label class="composer-label">Headers <span>JSON object</span></label>
-              <textarea class="composer-editor composer-headers" spellcheck="false" value=${headersText} onInput=${(e) => setHeadersText(e.target.value)}></textarea>
-            </div>
-            <div class="composer-editor-field">
-              <label class="composer-label">Body <span>text or JSON</span></label>
-              <textarea class="composer-editor composer-body" spellcheck="false" value=${request.body} onInput=${(e) => setRequest({ ...request, body: e.target.value })}></textarea>
-            </div>
+          <div class="composer-editor-tabs" role="tablist" aria-label="Request parts">
+            <button role="tab" aria-selected=${requestTab === "body"} class=${requestTab === "body" ? "active" : ""} onClick=${() => setRequestTab("body")}>Body</button>
+            <button role="tab" aria-selected=${requestTab === "headers"} class=${requestTab === "headers" ? "active" : ""} onClick=${() => setRequestTab("headers")}>Headers <span>${headerCount}</span></button>
+            <span class="composer-tab-hint">${requestTab === "body" ? "text or JSON" : "JSON object; values may be strings or arrays"}</span>
           </div>
+          ${requestTab === "headers"
+            ? html`<textarea aria-label="Request headers JSON" class="composer-editor composer-request-editor" spellcheck="false" value=${headersText} onInput=${(e) => setHeadersText(e.target.value)}></textarea>`
+            : html`<textarea aria-label="Request body" class="composer-editor composer-request-editor" spellcheck="false" value=${request.body} onInput=${(e) => setRequest({ ...request, body: e.target.value })}></textarea>`}
           <label class="composer-transform-toggle">
             <input class="checkbox" type="checkbox" checked=${request.apply_transforms} onChange=${(e) => setRequest({ ...request, apply_transforms: e.target.checked })} />
             Apply enabled <code>on_replay</code> transforms before sending
@@ -232,10 +243,15 @@ export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, o
               <span>${fmtBytes(response.body_len)}</span>
               ${response.truncated ? html`<span class="text-amber-400">preview truncated</span>` : null}
             </div>
-            <div class="composer-label">Response headers</div>
-            <${HeaderTable} headers=${response.headers} />
-            <div class="composer-label">Response body</div>
-            <${CodeBlock} bodyBase64=${response.body_base64} bodyLength=${response.body_len} truncated=${response.truncated} contentType=${responseContentType(response.headers)} />
+            <div class="composer-editor-tabs" role="tablist" aria-label="Response parts">
+              <button role="tab" aria-selected=${responseTab === "body"} class=${responseTab === "body" ? "active" : ""} onClick=${() => setResponseTab("body")}>Body</button>
+              <button role="tab" aria-selected=${responseTab === "headers"} class=${responseTab === "headers" ? "active" : ""} onClick=${() => setResponseTab("headers")}>Headers <span>${Object.keys(response.headers || {}).length}</span></button>
+            </div>
+            <div class="composer-response-content">
+              ${responseTab === "headers"
+                ? html`<${HeaderTable} headers=${response.headers} />`
+                : html`<${CodeBlock} bodyBase64=${response.body_base64} bodyLength=${response.body_len} truncated=${response.truncated} contentType=${responseContentType(response.headers)} />`}
+            </div>
           ` : html`<div class="composer-response-empty"><span>↗</span><strong>Response inspector</strong><p>Send the request to inspect status, headers, body, and timing.</p></div>`}
         </div>
       </section>
