@@ -1,0 +1,51 @@
+# Changelog
+
+## v0.2.5 — 2026-09-10
+
+### Project management
+
+- Separated desktop registration from day-to-day project management.
+- Added `wiretap relay projects add <path>` to claim another project using
+  saved client credentials without creating a new client ID or token.
+- Added `wiretap relay projects remove <path> --force` to release an owned
+  project and update the local credentials file.
+- Made `--projects` optional during `wiretap relay register`. Initial projects
+  remain supported for backward compatibility and convenient first-time setup.
+- Made repeated Add requests by the same owner idempotent, so retrying after a
+  lost response does not fail or rotate credentials.
+
+### Desktop GUI
+
+- Added a dedicated Projects settings card with individual project rows and an
+  Add project action.
+- Added project removal with an explicit warning about relay-side history.
+- Reframed registration as a one-time desktop identity operation and removed
+  the misleading Re-register action from the normal project workflow.
+- Restart the relay tunnel automatically after GUI project changes so the new
+  subscription set takes effect immediately.
+
+### Relay API and security
+
+- Added `POST /client/projects` and `DELETE /client/projects/{project}`.
+- Project mutations use the existing client ID/token over HTTP Basic auth;
+  the relay admin token is not stored or required for ordinary project changes.
+- A client can remove only a project it owns. Attempts by another client return
+  not found without exposing ownership information.
+- Removing a project deletes that project's queued relay-side webhook history
+  through the existing SQLite foreign-key cascade. Already-downloaded desktop
+  history is unaffected.
+
+### Compatibility and limitations
+
+- Existing credentials, relay databases, registrations, and projects continue
+  to work without migration or re-registration.
+- Upgrade the relay before using the new Add/Remove clients; older relays do
+  not provide the new `/client/projects` endpoints.
+- A project still has exactly one owning desktop client. Multiple independent
+  subscribers and per-subscriber delivery cursors are not included.
+
+### Verification
+
+- Added API client, relay handler, storage, CLI, and GUI integration coverage
+  for credential preservation, authorization, optional initial projects,
+  project mutation, relay-history cleanup, and tunnel restart behavior.

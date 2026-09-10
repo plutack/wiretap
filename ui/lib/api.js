@@ -4,6 +4,7 @@
 // (ui/bindings, produced by `wails3 generate bindings -b -noevents -names`)
 // and gives one place to add error shaping later.
 import {
+  AddRelayProject,
   DeleteScript,
   ExportCapture,
   ExportTargets,
@@ -18,6 +19,7 @@ import {
   ListSessions,
   ListWebhooks,
   RegisterRelay,
+  RemoveRelayProject,
   ReplayWebhook,
   SaveScript,
   SaveSettings,
@@ -48,4 +50,6 @@ export const api = {
   getSettings: () => GetSettings(),
   saveSettings: (input) => SaveSettings(input),
   registerRelay: (input) => RegisterRelay(input),
+  addRelayProject: (project) => AddRelayProject(project),
+  removeRelayProject: (project) => RemoveRelayProject(project),
 };

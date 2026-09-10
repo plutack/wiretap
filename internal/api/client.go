@@ -218,6 +218,25 @@ func (c *HTTPClient) Register(ctx context.Context, req RegisterRequest) (*Regist
 	return &out, nil
 }
 
+// AddClientProject claims a new path for the authenticated client without
+// creating a new client id or token.
+func (c *HTTPClient) AddClientProject(ctx context.Context, project string) (*ClientProjectsResponse, error) {
+	var out ClientProjectsResponse
+	if err := c.do(ctx, http.MethodPost, "/client/projects", ProjectRequest{Path: project}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RemoveClientProject releases a path owned by the authenticated client.
+func (c *HTTPClient) RemoveClientProject(ctx context.Context, project string) (*ClientProjectsResponse, error) {
+	var out ClientProjectsResponse
+	if err := c.do(ctx, http.MethodDelete, "/client/projects/"+url.PathEscape(project), nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ListClients calls GET /admin/clients. Requires admin auth.
 func (c *HTTPClient) ListClients(ctx context.Context) (*ListClientsResponse, error) {
 	var out ListClientsResponse

@@ -78,6 +78,8 @@ func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("POST /register", s.requireAdmin(s.handleRegister))
+	mux.HandleFunc("POST /client/projects", s.requireClient(s.handleAddClientProject))
+	mux.HandleFunc("DELETE /client/projects/{project}", s.requireClient(s.handleRemoveClientProject))
 	mux.HandleFunc("GET /admin/clients", s.requireAdmin(s.handleListClients))
 	mux.HandleFunc("GET /admin/clients/{clientID}", s.requireAdmin(s.handleGetClient))
 	mux.HandleFunc("DELETE /admin/clients/{clientID}", s.requireAdmin(s.handleDeleteClient))
@@ -90,6 +92,62 @@ func (s *Server) Routes() http.Handler {
 	// everything after is preserved as the webhook's "path" column.
 	mux.HandleFunc("/", s.handleIngress)
 	return mux
+}
+
+// handleAddClientProject claims one new path for the existing authenticated
+// client. Unlike registration, this never creates or rotates credentials.
+func (s *Server) handleAddClientProject(w http.ResponseWriter, r *http.Request) {
+	clientID, _ := r.Context().Value(clientIDKey{}).(string)
+	var req api.ProjectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return
+	}
+	req.Path = strings.Trim(strings.TrimSpace(req.Path), "/")
+	if !projectPathRE.MatchString(req.Path) {
+		writeErr(w, http.StatusBadRequest, "invalid_path", fmt.Sprintf("project %q does not match %s", req.Path, projectPathRE.String()))
+		return
+	}
+	if err := s.store.BindProject(r.Context(), req.Path, clientID, s.clock.Now()); err != nil {
+		if errors.Is(err, store.ErrConflict) {
+			// Treat a retry by the same owner as success. This matters when the
+			// first response was lost after the insert committed.
+			if current, lookupErr := s.store.Project(r.Context(), req.Path); lookupErr == nil && current.ClientID == clientID {
+				s.writeClientProjects(w, r, clientID)
+				return
+			}
+			writeErr(w, http.StatusConflict, "conflict", fmt.Sprintf("project %q is already claimed", req.Path))
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	s.writeClientProjects(w, r, clientID)
+}
+
+// handleRemoveClientProject releases one path owned by the authenticated
+// client. SQLite cascades deletion to relay-side webhooks for that path.
+func (s *Server) handleRemoveClientProject(w http.ResponseWriter, r *http.Request) {
+	clientID, _ := r.Context().Value(clientIDKey{}).(string)
+	project := r.PathValue("project")
+	if err := s.store.UnbindProject(r.Context(), project, clientID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "project is not owned by this client")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	s.writeClientProjects(w, r, clientID)
+}
+
+func (s *Server) writeClientProjects(w http.ResponseWriter, r *http.Request, clientID string) {
+	projects, err := s.store.ProjectsByClient(r.Context(), clientID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, api.ClientProjectsResponse{Projects: projects})
 }
 
 // handleHealth returns a static liveness payload. We do not probe the store
@@ -109,10 +167,6 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req api.RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
-		return
-	}
-	if len(req.Projects) == 0 {
-		writeErr(w, http.StatusBadRequest, "invalid_request", "at least one project is required")
 		return
 	}
 	for _, p := range req.Projects {
