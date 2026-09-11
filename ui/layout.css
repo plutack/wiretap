@@ -731,6 +731,12 @@ textarea:focus-visible {
   line-height: 1;
 }
 
+.transform-heading-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
 .nav-more {
 	display: flex;
 	width: calc(100% - 16px);

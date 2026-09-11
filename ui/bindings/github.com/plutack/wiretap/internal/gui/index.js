@@ -29,5 +29,6 @@ export {
     SettingsView,
     StatusView,
     TargetView,
+    TransformFileView,
     WebhookView
 } from "./models.js";

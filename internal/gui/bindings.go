@@ -218,6 +218,16 @@ type ScriptInput struct {
 	Enabled  bool   `json:"enabled"`
 }
 
+// TransformFileView is an imported portable transform. ID is intentionally
+// absent: the GUI opens this as an unsaved draft for review and testing.
+type TransformFileView struct {
+	Name     string `json:"name"`
+	Trigger  string `json:"trigger"`
+	Body     string `json:"body"`
+	Priority int    `json:"priority"`
+	Enabled  bool   `json:"enabled"`
+}
+
 // ScriptTestRequest is the test-run payload: the script body plus a sample
 // exchange (usually filled from the selected capture/webhook).
 type ScriptTestRequest struct {
@@ -455,6 +465,32 @@ func (b *Bindings) GetScript(id int64) (ScriptView, error) {
 		return ScriptView{}, fmt.Errorf("get script %d: %w", id, err)
 	}
 	return scriptView(*sc), nil
+}
+
+// ParseTransformFile validates a portable transform file and returns an
+// unsaved editor draft. Parsing never writes to the database.
+func (b *Bindings) ParseTransformFile(contents string) (TransformFileView, error) {
+	def, err := app.DecodeTransformFile([]byte(contents))
+	if err != nil {
+		return TransformFileView{}, err
+	}
+	return TransformFileView{
+		Name: def.Name, Trigger: def.Trigger, Body: def.Program,
+		Priority: def.Priority, Enabled: def.Enabled,
+	}, nil
+}
+
+// FormatTransformFile validates editor state and returns portable JSON. File
+// creation remains in the frontend so this binding needs no filesystem access.
+func (b *Bindings) FormatTransformFile(in ScriptInput) (string, error) {
+	out, err := app.EncodeTransformFile(app.TransformDefinition{
+		Name: in.Name, Trigger: in.Trigger, Program: in.Body,
+		Priority: in.Priority, Enabled: in.Enabled,
+	})
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 // SaveScript creates (ID == 0) or updates a script and returns its id. The
