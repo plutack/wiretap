@@ -1,16 +1,15 @@
 // Package secretstore provides the minimal credential-store surface used by
-// relay administration. Production delegates to the operating system keyring.
+// relay administration and the local relay client.
 package secretstore
 
 import (
 	"errors"
 	"fmt"
 
-	"github.com/99designs/keyring"
+	"github.com/zalando/go-keyring"
 )
 
-const adminService = "wiretap relay admin"
-const clientService = "wiretap relay client"
+const service = "wiretap"
 
 var ErrNotFound = errors.New("secret not found")
 
@@ -20,104 +19,45 @@ type Store interface {
 	Delete(account string) error
 }
 
+// System stores relay-admin tokens under the shared Wiretap service.
 type System struct{}
 
-// ClientSystem stores the long-lived token used by this desktop's relay
-// tunnel. It deliberately uses a separate keyring service from relay admin
-// profiles so revoking one kind of access cannot disturb the other.
+// ClientSystem uses the same service. Unique account keys keep client and
+// admin tokens independent without creating additional keyring collections.
 type ClientSystem struct{}
 
-func openSystem(serviceName, passPrefix, winCredPrefix string) (keyring.Keyring, error) {
-	return keyring.Open(keyring.Config{
-		ServiceName: serviceName,
-		AllowedBackends: []keyring.BackendType{
-			keyring.KeychainBackend,
-			keyring.SecretServiceBackend,
-			keyring.KWalletBackend,
-			keyring.PassBackend,
-			keyring.WinCredBackend,
-		},
-		KeychainAccessibleWhenUnlocked: true,
-		KeychainTrustApplication:       true,
-		KWalletAppID:                   "wiretap",
-		KWalletFolder:                  "wiretap",
-		PassPrefix:                     passPrefix,
-		WinCredPrefix:                  winCredPrefix,
-	})
-}
-
-func openAdminSystem() (keyring.Keyring, error) {
-	return openSystem(adminService, "wiretap/relay-admin", "wiretap-relay-admin/")
-}
-
-func openClientSystem() (keyring.Keyring, error) {
-	return openSystem(clientService, "wiretap/relay-client", "wiretap-relay-client/")
-}
-
-func (System) Set(account, secret string) error {
-	ring, err := openAdminSystem()
-	if err != nil {
-		return fmt.Errorf("open system keyring: %w", err)
+func set(account, secret string) error {
+	if err := keyring.Set(service, account, secret); err != nil {
+		return fmt.Errorf("set system keyring secret: %w", err)
 	}
-	return ring.Set(keyring.Item{Key: account, Data: []byte(secret), Label: "Wiretap relay admin token"})
+	return nil
 }
-func (System) Get(account string) (string, error) {
-	ring, err := openAdminSystem()
-	if err != nil {
-		return "", fmt.Errorf("open system keyring: %w", err)
-	}
-	item, err := ring.Get(account)
-	if errors.Is(err, keyring.ErrKeyNotFound) {
+
+func get(account string) (string, error) {
+	secret, err := keyring.Get(service, account)
+	if errors.Is(err, keyring.ErrNotFound) {
 		return "", ErrNotFound
 	}
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get system keyring secret: %w", err)
 	}
-	return string(item.Data), nil
+	return secret, nil
 }
-func (System) Delete(account string) error {
-	ring, err := openAdminSystem()
-	if err != nil {
-		return fmt.Errorf("open system keyring: %w", err)
-	}
-	err = ring.Remove(account)
-	if errors.Is(err, keyring.ErrKeyNotFound) {
+
+func remove(account string) error {
+	if err := keyring.Delete(service, account); errors.Is(err, keyring.ErrNotFound) {
 		return ErrNotFound
+	} else if err != nil {
+		return fmt.Errorf("delete system keyring secret: %w", err)
 	}
-	return err
+	return nil
 }
 
-func (ClientSystem) Set(account, secret string) error {
-	ring, err := openClientSystem()
-	if err != nil {
-		return fmt.Errorf("open system keyring: %w", err)
-	}
-	return ring.Set(keyring.Item{Key: account, Data: []byte(secret), Label: "Wiretap relay client token"})
-}
-
+func (System) Set(account, secret string) error       { return set(account, secret) }
+func (System) Get(account string) (string, error)     { return get(account) }
+func (System) Delete(account string) error            { return remove(account) }
+func (ClientSystem) Set(account, secret string) error { return set(account, secret) }
 func (ClientSystem) Get(account string) (string, error) {
-	ring, err := openClientSystem()
-	if err != nil {
-		return "", fmt.Errorf("open system keyring: %w", err)
-	}
-	item, err := ring.Get(account)
-	if errors.Is(err, keyring.ErrKeyNotFound) {
-		return "", ErrNotFound
-	}
-	if err != nil {
-		return "", err
-	}
-	return string(item.Data), nil
+	return get(account)
 }
-
-func (ClientSystem) Delete(account string) error {
-	ring, err := openClientSystem()
-	if err != nil {
-		return fmt.Errorf("open system keyring: %w", err)
-	}
-	err = ring.Remove(account)
-	if errors.Is(err, keyring.ErrKeyNotFound) {
-		return ErrNotFound
-	}
-	return err
-}
+func (ClientSystem) Delete(account string) error { return remove(account) }
