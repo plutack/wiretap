@@ -7,6 +7,7 @@
 //   onSave   — async (ScriptInput) → id
 //   onDelete — async (id) → void
 //   onTest   — async (ScriptTestRequest) → ScriptTestView
+//   onExport — async (ScriptInput) → void
 //   onClose  — () → void
 import { html } from "../vendor/preact/index.js";
 import { useEffect, useRef, useState } from "../vendor/preact/index.js";
@@ -23,7 +24,7 @@ const SAMPLE = {
   status: "200",
 };
 
-export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
+export function ScriptEditor({ script, onSave, onDelete, onTest, onExport, onClose }) {
   const [name, setName] = useState(script.name || "");
   const [trigger, setTrigger] = useState(script.trigger || "on_request");
   const [priority, setPriority] = useState(script.priority || 0);
@@ -83,7 +84,7 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
     setSampleHeaders(SAMPLE.headers);
     setSampleBody(SAMPLE.body);
     setSampleStatus(SAMPLE.status);
-  }, [script.id]);
+  }, [script.id, script.editor_key]);
 
   const currentBody = () =>
     cmRef.current ? cmRef.current.getValue() : taRef.current?.value || "";
@@ -146,6 +147,23 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
     }
   };
 
+  const handleExport = async () => {
+    setSaveState({ msg: "preparing export" });
+    try {
+      await onExport({
+        id: 0,
+        name,
+        trigger,
+        body: currentBody(),
+        priority: Number(priority) || 0,
+        enabled,
+      });
+      setSaveState({ msg: "transform exported" });
+    } catch (e) {
+      setSaveState({ error: String(e) });
+    }
+  };
+
   const handleTest = async () => {
     let headers;
     try {
@@ -180,7 +198,7 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
     <div class="inspector-head">
       <div class="inspector-identity">
         <div class="inspector-title">${script.id ? `transform/${script.id}` : "transform/new"}</div>
-        <div class="inspector-subtitle">goja · local sandbox · 5s timeout</div>
+        <div class="inspector-subtitle">${script.imported_from ? `Imported from ${script.imported_from} · unsaved` : "goja · local sandbox · 5s timeout"}</div>
       </div>
       <button class="refresh-button inspector-close" title="Close editor" aria-label="Close editor" onClick=${onClose}>×</button>
     </div>
@@ -254,6 +272,7 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onClose }) {
         >
           Save
         </button>
+        <button onClick=${handleExport} class="btn btn-ghost">Export file</button>
         <button
           onClick=${handleDelete}
           class="btn btn-danger ml-auto"

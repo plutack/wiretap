@@ -10,6 +10,29 @@ priority, enabled flag, and JavaScript body. Enabled scripts with the same
 trigger run from the lowest priority number to the highest. Each script sees
 the mutations made by earlier scripts.
 
+Transforms can be moved between Wiretap installations as portable JSON files.
+Use the import button beside **Transforms** to select a file. Wiretap validates
+the document and opens it as an unsaved draft, so you can inspect and test it
+before choosing **Save**. Open any transform and select **Export file** to
+download its current editor contents, including unsaved changes.
+
+The portable format deliberately excludes database IDs and timestamps:
+
+```json
+{
+  "format": "wiretap-transform",
+  "version": 1,
+  "name": "prepare order webhook",
+  "trigger": "on_compose",
+  "priority": 0,
+  "enabled": true,
+  "program": "request.method = \"POST\";"
+}
+```
+
+Imports are limited to 1 MiB. Unknown fields, unsupported versions, missing
+names, and invalid triggers are rejected rather than silently discarded.
+
 `on_compose` is different from the automatic pipeline triggers. It appears as
 a selectable source recipe in the Compose workspace and runs only when the user
 chooses **Transform request**.

@@ -20,6 +20,8 @@ import {
   ListScripts,
   ListSessions,
   ListWebhooks,
+	FormatTransformFile,
+	ParseTransformFile,
   RegisterRelay,
   RemoveRelayProject,
   ReplayWebhook,
@@ -46,6 +48,8 @@ export const api = {
   setScriptEnabled: (id, enabled) => SetScriptEnabled(id, enabled),
   deleteScript: (id) => DeleteScript(id),
   testScript: (req) => TestScript(req),
+	formatTransformFile: (input) => FormatTransformFile(input),
+	parseTransformFile: (contents) => ParseTransformFile(contents),
   exportTargets: () => ExportTargets(),
   exportCapture: (id, target, client) => ExportCapture(id, target, client),
   exportWebhook: (project, seq, target, client) =>
