@@ -29,8 +29,11 @@ new credentials. Removing a project also removes its queued relay-side webhook
 history.
 
 The desktop GUI exposes the same privileged identity-management surface under
-**Settings > Relay server**. The admin token is held in memory for that view
-only. From there an operator can inspect relay health, list or revoke clients,
+**Settings > Relay server**. An operator can keep a connection temporary or
+save it as a named relay profile. Saved admin tokens live in the operating
+system credential store; Wiretap writes only the profile label, relay URL, and
+last-used time to its local metadata. There is no plaintext fallback. From
+there an operator can inspect relay health, list or revoke clients,
 create credentials for another client without replacing the local desktop
 identity, assign new projects, move project ownership while preserving queued
 history, and delete individual projects. Deleting a project removes only that

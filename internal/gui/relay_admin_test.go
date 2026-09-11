@@ -2,14 +2,46 @@ package gui
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/plutack/wiretap/internal/api"
 	"github.com/plutack/wiretap/internal/app"
 	"github.com/plutack/wiretap/internal/config"
+	"github.com/plutack/wiretap/internal/secretstore"
 )
+
+type memorySecrets struct {
+	values map[string]string
+	fail   error
+}
+
+func (m *memorySecrets) Set(account, secret string) error {
+	if m.fail != nil {
+		return m.fail
+	}
+	m.values[account] = secret
+	return nil
+}
+func (m *memorySecrets) Get(account string) (string, error) {
+	value, ok := m.values[account]
+	if !ok {
+		return "", secretstore.ErrNotFound
+	}
+	return value, nil
+}
+func (m *memorySecrets) Delete(account string) error {
+	if _, ok := m.values[account]; !ok {
+		return secretstore.ErrNotFound
+	}
+	delete(m.values, account)
+	return nil
+}
 
 func TestBindings_RelayAdminOverview(t *testing.T) {
 	t.Parallel()
@@ -153,6 +185,57 @@ func TestRelayAdminClientValidation(t *testing.T) {
 	}
 	if _, _, err := relayAdminClient("ftp://relay.example.com", "token"); err == nil {
 		t.Fatal("unsupported URL accepted")
+	}
+}
+
+func TestRelayAdminProfilesStoreTokenOutsideMetadata(t *testing.T) {
+	t.Parallel()
+	b, a := newBindings(t)
+	secrets := &memorySecrets{values: map[string]string{}}
+	b.secrets = secrets
+	profile, err := b.RelayAdminSaveProfile(RelayAdminSaveProfileInput{
+		RelayURL: "https://relay.example.com", AdminToken: "top-secret", Name: "Production",
+	})
+	if err != nil {
+		t.Fatalf("RelayAdminSaveProfile: %v", err)
+	}
+	if profile.Name != "Production" || profile.ID == "" {
+		t.Fatalf("profile = %+v", profile)
+	}
+	profiles, err := b.RelayAdminProfiles()
+	if err != nil || len(profiles) != 1 {
+		t.Fatalf("profiles = %+v, %v", profiles, err)
+	}
+	session, err := b.RelayAdminLoadProfile(profile.ID)
+	if err != nil || session.AdminToken != "top-secret" || session.RelayURL != "https://relay.example.com" {
+		t.Fatalf("session = %+v, %v", session, err)
+	}
+	dir, _ := a.ConfigDir()
+	metadata, err := os.ReadFile(filepath.Join(dir, "relay-admin-profiles.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(metadata), "top-secret") {
+		t.Fatal("admin token leaked into profile metadata")
+	}
+	if err := b.RelayAdminDeleteProfile(profile.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := secrets.Get(relayAdminProfileAccount(profile.ID)); !errors.Is(err, secretstore.ErrNotFound) {
+		t.Fatalf("secret remains: %v", err)
+	}
+}
+
+func TestRelayAdminProfileKeyringFailureDoesNotWriteMetadata(t *testing.T) {
+	t.Parallel()
+	b, _ := newBindings(t)
+	b.secrets = &memorySecrets{values: map[string]string{}, fail: errors.New("locked")}
+	if _, err := b.RelayAdminSaveProfile(RelayAdminSaveProfileInput{RelayURL: "https://relay.example.com", AdminToken: "secret"}); err == nil {
+		t.Fatal("keyring failure accepted")
+	}
+	profiles, err := b.RelayAdminProfiles()
+	if err != nil || len(profiles) != 0 {
+		t.Fatalf("profiles = %+v, %v", profiles, err)
 	}
 }
 
