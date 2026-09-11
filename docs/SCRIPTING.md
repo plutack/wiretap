@@ -33,6 +33,11 @@ The portable format deliberately excludes database IDs and timestamps:
 Imports are limited to 1 MiB. Unknown fields, unsupported versions, missing
 names, and invalid triggers are rejected rather than silently discarded.
 
+Use **Duplicate** in the transform editor to branch from the current editor
+state without changing the original. The copy keeps the current program,
+trigger, priority, and sample request, but opens disabled and unsaved. Rename,
+test, and explicitly save it when ready.
+
 `on_compose` is different from the automatic pipeline triggers. It appears as
 a selectable source recipe in the Compose workspace and runs only when the user
 chooses **Transform request**.

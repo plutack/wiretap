@@ -9,7 +9,7 @@ wiretap combines three workflows in one local tool:
 - **Payload transforms** — use local JavaScript to inspect, modify, or reject requests, responses, replays, and webhooks.
 - **Code export** — turn any stored capture or webhook into a ready-to-run snippet (curl, fetch, python-requests, go, and ~15 more) via an embedded [httpsnippet](https://github.com/Kong/httpsnippet) engine — no Node.js required.
 - **Request composer** — author HTTP requests, import JSON payloads or request envelopes, apply replay transforms, and inspect bounded responses from the GUI.
-- **Portable transforms** — import, inspect, test, and export versioned transform files for backup or sharing.
+- **Portable transforms** — import, duplicate, inspect, test, and export versioned transform files for backup or sharing.
 
 Use the desktop GUI, terminal UI, or CLI against the same local data.
 
