@@ -429,6 +429,33 @@ func TestHandleReclaimProject_NewClientNotFound(t *testing.T) {
 	}
 }
 
+func TestHandleAdminProjectLifecycle(t *testing.T) {
+	t.Parallel()
+	_, _, c := freshServer(t)
+	ctx := context.Background()
+	registered, err := c.Register(ctx, api.RegisterRequest{DisplayName: "desktop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := c.AssignProject(ctx, "orders", registered.ClientID)
+	if err != nil {
+		t.Fatalf("AssignProject: %v", err)
+	}
+	if project.Path != "orders" || project.ClientID != registered.ClientID {
+		t.Fatalf("project = %+v", project)
+	}
+	if _, err := c.AssignProject(ctx, "orders", registered.ClientID); !api.IsConflict(err) {
+		t.Fatalf("duplicate AssignProject error = %v", err)
+	}
+	if err := c.DeleteProject(ctx, "orders"); err != nil {
+		t.Fatalf("DeleteProject: %v", err)
+	}
+	projects, err := c.ListProjects(ctx)
+	if err != nil || len(projects.Projects) != 0 {
+		t.Fatalf("projects after delete = %+v, %v", projects, err)
+	}
+}
+
 // ingress POST helper for tests that prefer raw HTTP. Returns seq from body.
 func postIngress(t *testing.T, hs *httptest.Server, project string, body []byte, headers map[string]string) (int64, *http.Response) {
 	t.Helper()

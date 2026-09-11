@@ -630,6 +630,58 @@ export class RegisterView {
     }
 }
 
+/**
+ * RelayAdminAddProjectInput assigns a new project path to an existing client.
+ */
+export class RelayAdminAddProjectInput {
+    /**
+     * Creates a new RelayAdminAddProjectInput instance.
+     * @param {Partial<RelayAdminAddProjectInput>} [$$source = {}] - The source object to create the RelayAdminAddProjectInput.
+     */
+    constructor($$source = {}) {
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
+        if (!("admin_token" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["admin_token"] = "";
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("client_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["client_id"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminAddProjectInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminAddProjectInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RelayAdminAddProjectInput(/** @type {Partial<RelayAdminAddProjectInput>} */($$parsedSource));
+    }
+}
+
 export class RelayAdminClientView {
     /**
      * Creates a new RelayAdminClientView instance.
@@ -840,6 +892,52 @@ export class RelayAdminDeleteClientInput {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new RelayAdminDeleteClientInput(/** @type {Partial<RelayAdminDeleteClientInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * RelayAdminDeleteProjectInput permanently removes a project binding and its
+ * queued relay-side webhook history.
+ */
+export class RelayAdminDeleteProjectInput {
+    /**
+     * Creates a new RelayAdminDeleteProjectInput instance.
+     * @param {Partial<RelayAdminDeleteProjectInput>} [$$source = {}] - The source object to create the RelayAdminDeleteProjectInput.
+     */
+    constructor($$source = {}) {
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
+        if (!("admin_token" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["admin_token"] = "";
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminDeleteProjectInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminDeleteProjectInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RelayAdminDeleteProjectInput(/** @type {Partial<RelayAdminDeleteProjectInput>} */($$parsedSource));
     }
 }
 

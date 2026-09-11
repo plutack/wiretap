@@ -125,6 +125,20 @@ func (s *RelayStore) UnbindProject(ctx context.Context, path, clientID string) e
 	return nil
 }
 
+// DeleteProject removes a project regardless of owner. It is reserved for
+// admin operations; the project foreign key cascades to queued webhooks.
+func (s *RelayStore) DeleteProject(ctx context.Context, path string) error {
+	res, err := s.db.ExecContext(ctx, "DELETE FROM projects WHERE path = ?", path)
+	if err != nil {
+		return fmt.Errorf("DeleteProject %q: %w", path, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("DeleteProject %q: %w", path, ErrNotFound)
+	}
+	return nil
+}
+
 // Project looks up a project by path. Returns ErrNotFound when absent.
 func (s *RelayStore) Project(ctx context.Context, path string) (*ProjectRow, error) {
 	row := s.db.QueryRowContext(ctx,

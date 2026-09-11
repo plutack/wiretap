@@ -32,8 +32,12 @@ The desktop GUI exposes the same privileged identity-management surface under
 **Settings > Relay server**. The admin token is held in memory for that view
 only. From there an operator can inspect relay health, list or revoke clients,
 create credentials for another client without replacing the local desktop
-identity, and move project ownership while preserving the project's queued
-history. Revoking a client deletes its project bindings and queued history.
+identity, assign new projects, move project ownership while preserving queued
+history, and delete individual projects. Deleting a project removes only that
+project binding and its queued relay history. The server snapshot refreshes
+after each operation; if the current desktop is affected, its saved project
+list and tunnel are synchronized automatically. Revoking a client deletes all
+of its project bindings and queued history.
 
 ## 1. Deploy on Coolify
 

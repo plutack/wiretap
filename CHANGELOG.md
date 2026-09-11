@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.2.10 — 2026-09-11
+
+### Settings workflow
+
+- Reorganized desktop settings into Relay connection, Capture and delivery,
+  Interface, and Relay server workspaces with a persistent navigation rail.
+- Added visible connection state, focused save actions, and unsaved-change
+  feedback instead of one long configuration form.
+
+### Relay project administration
+
+- Added admin controls and API routes to assign a new project to any existing
+  client and to delete a project independently of its client.
+- Relay admin mutations refresh the server snapshot automatically. Changes
+  affecting this desktop also synchronize its saved projects and reconnect its
+  tunnel without rotating its identity.
+- Project deletion explicitly warns that queued relay history is removed.
+
 ## v0.2.9 — 2026-09-11
 
 ### Relay server management

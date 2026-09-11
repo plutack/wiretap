@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/plutack/wiretap/internal/api"
+	"github.com/plutack/wiretap/internal/app"
+	"github.com/plutack/wiretap/internal/config"
 )
 
 func TestBindings_RelayAdminOverview(t *testing.T) {
@@ -100,6 +102,19 @@ func TestBindings_RelayAdminMutations(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(api.Project{Path: req.Path, ClientID: req.NewClientID})
 	})
+	mux.HandleFunc("PUT /admin/projects/audit", func(w http.ResponseWriter, r *http.Request) {
+		assertAdminToken(t, r)
+		var req api.AssignProjectRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ClientID != "client-b" {
+			t.Fatalf("assign request = %+v, err = %v", req, err)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(api.Project{Path: "audit", ClientID: req.ClientID})
+	})
+	mux.HandleFunc("DELETE /admin/projects/audit", func(w http.ResponseWriter, r *http.Request) {
+		assertAdminToken(t, r)
+		w.WriteHeader(http.StatusNoContent)
+	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
@@ -118,6 +133,17 @@ func TestBindings_RelayAdminMutations(t *testing.T) {
 	if project.Path != "orders" || project.ClientID != "client-b" {
 		t.Fatalf("project = %+v", project)
 	}
+	created, err := b.RelayAdminAddProject(RelayAdminAddProjectInput{
+		RelayURL: srv.URL, AdminToken: "admin-secret", Path: "/audit/", ClientID: "client-b",
+	})
+	if err != nil || created.Path != "audit" {
+		t.Fatalf("RelayAdminAddProject = %+v, %v", created, err)
+	}
+	if err := b.RelayAdminDeleteProject(RelayAdminDeleteProjectInput{
+		RelayURL: srv.URL, AdminToken: "admin-secret", Path: "/audit/",
+	}); err != nil {
+		t.Fatalf("RelayAdminDeleteProject: %v", err)
+	}
 }
 
 func TestRelayAdminClientValidation(t *testing.T) {
@@ -127,6 +153,47 @@ func TestRelayAdminClientValidation(t *testing.T) {
 	}
 	if _, _, err := relayAdminClient("ftp://relay.example.com", "token"); err == nil {
 		t.Fatal("unsupported URL accepted")
+	}
+}
+
+func TestRelayAdminAddProjectSynchronizesCurrentDesktop(t *testing.T) {
+	t.Parallel()
+	b, a, starts := newSettingsBindings(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("PUT /admin/projects/orders", func(w http.ResponseWriter, r *http.Request) {
+		assertAdminToken(t, r)
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(api.Project{Path: "orders", ClientID: "client-local"})
+	})
+	mux.HandleFunc("GET /admin/clients/client-local", func(w http.ResponseWriter, r *http.Request) {
+		assertAdminToken(t, r)
+		_ = json.NewEncoder(w).Encode(api.Client{ClientID: "client-local", Projects: []string{"orders", "audit"}})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	tunnelURL, err := app.TunnelURLFromBase(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.Relay.URL = tunnelURL
+	if err := a.SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SaveRelayCredentials(config.Credentials{ClientID: "client-local", ClientToken: "secret", Projects: []string{"audit"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.RelayAdminAddProject(RelayAdminAddProjectInput{
+		RelayURL: srv.URL, AdminToken: "admin-secret", Path: "orders", ClientID: "client-local",
+	}); err != nil {
+		t.Fatalf("RelayAdminAddProject: %v", err)
+	}
+	creds, err := a.RelayCredentials()
+	if err != nil || len(creds.Projects) != 2 || creds.Projects[0] != "audit" || creds.Projects[1] != "orders" {
+		t.Fatalf("credentials = %+v, %v", creds, err)
+	}
+	if starts.Load() != 1 {
+		t.Fatalf("tunnel starts = %d, want 1", starts.Load())
 	}
 }
 

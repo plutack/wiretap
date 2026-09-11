@@ -98,6 +98,12 @@ type ReclaimProjectRequest struct {
 	Force       bool   `json:"force,omitempty"`
 }
 
+// AssignProjectRequest is the body of PUT /admin/projects/:project. It
+// creates a new project binding without creating or rotating a client.
+type AssignProjectRequest struct {
+	ClientID string `json:"client_id"`
+}
+
 // ListClientsResponse wraps GET /admin/clients.
 type ListClientsResponse struct {
 	Clients []Client `json:"clients"`

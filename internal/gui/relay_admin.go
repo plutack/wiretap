@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -36,6 +38,22 @@ type RelayAdminDeleteClientInput struct {
 	RelayURL   string `json:"relay_url"`
 	AdminToken string `json:"admin_token"`
 	ClientID   string `json:"client_id"`
+}
+
+// RelayAdminAddProjectInput assigns a new project path to an existing client.
+type RelayAdminAddProjectInput struct {
+	RelayURL   string `json:"relay_url"`
+	AdminToken string `json:"admin_token"`
+	Path       string `json:"path"`
+	ClientID   string `json:"client_id"`
+}
+
+// RelayAdminDeleteProjectInput permanently removes a project binding and its
+// queued relay-side webhook history.
+type RelayAdminDeleteProjectInput struct {
+	RelayURL   string `json:"relay_url"`
+	AdminToken string `json:"admin_token"`
+	Path       string `json:"path"`
 }
 
 // RelayAdminReassignProjectInput moves a path to another registered client.
@@ -161,10 +179,55 @@ func (b *Bindings) RelayAdminDeleteClient(in RelayAdminDeleteClientInput) error 
 	return nil
 }
 
+// RelayAdminAddProject creates a project for an existing client without
+// registering another identity.
+func (b *Bindings) RelayAdminAddProject(in RelayAdminAddProjectInput) (RelayAdminProjectView, error) {
+	client, base, err := relayAdminClient(in.RelayURL, in.AdminToken)
+	if err != nil {
+		return RelayAdminProjectView{}, err
+	}
+	path := strings.Trim(strings.TrimSpace(in.Path), "/")
+	clientID := strings.TrimSpace(in.ClientID)
+	if path == "" || clientID == "" {
+		return RelayAdminProjectView{}, errors.New("add relay project: project path and client ID are required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), relayAdminTimeout)
+	defer cancel()
+	out, err := client.AssignProject(ctx, path, clientID)
+	if err != nil {
+		return RelayAdminProjectView{}, fmt.Errorf("add relay project: %w", err)
+	}
+	if err := b.syncLocalRelayProjects(ctx, base, client); err != nil {
+		return RelayAdminProjectView{}, fmt.Errorf("project added, but this desktop could not synchronize: %w", err)
+	}
+	return relayAdminProjectView(*out), nil
+}
+
+// RelayAdminDeleteProject deletes one project and its queued relay history.
+func (b *Bindings) RelayAdminDeleteProject(in RelayAdminDeleteProjectInput) error {
+	client, base, err := relayAdminClient(in.RelayURL, in.AdminToken)
+	if err != nil {
+		return err
+	}
+	path := strings.Trim(strings.TrimSpace(in.Path), "/")
+	if path == "" {
+		return errors.New("delete relay project: project path is required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), relayAdminTimeout)
+	defer cancel()
+	if err := client.DeleteProject(ctx, path); err != nil {
+		return fmt.Errorf("delete relay project: %w", err)
+	}
+	if err := b.syncLocalRelayProjects(ctx, base, client); err != nil {
+		return fmt.Errorf("project deleted, but this desktop could not synchronize: %w", err)
+	}
+	return nil
+}
+
 // RelayAdminReassignProject transfers project ownership. Existing ownership
 // requires Force, which the GUI sets only after an explicit confirmation.
 func (b *Bindings) RelayAdminReassignProject(in RelayAdminReassignProjectInput) (RelayAdminProjectView, error) {
-	client, _, err := relayAdminClient(in.RelayURL, in.AdminToken)
+	client, base, err := relayAdminClient(in.RelayURL, in.AdminToken)
 	if err != nil {
 		return RelayAdminProjectView{}, err
 	}
@@ -181,7 +244,40 @@ func (b *Bindings) RelayAdminReassignProject(in RelayAdminReassignProjectInput) 
 	if err != nil {
 		return RelayAdminProjectView{}, fmt.Errorf("reassign relay project: %w", err)
 	}
+	if err := b.syncLocalRelayProjects(ctx, base, client); err != nil {
+		return RelayAdminProjectView{}, fmt.Errorf("project moved, but this desktop could not synchronize: %w", err)
+	}
 	return relayAdminProjectView(*out), nil
+}
+
+func (b *Bindings) syncLocalRelayProjects(ctx context.Context, adminBase string, client *api.HTTPClient) error {
+	cfg, err := b.app.Config()
+	if err != nil || app.IngressBaseURL(cfg.Relay.URL) != adminBase {
+		return nil
+	}
+	creds, err := b.app.RelayCredentials()
+	if err != nil || creds.ClientID == "" {
+		return nil
+	}
+	current, err := client.GetClient(ctx, creds.ClientID)
+	if err != nil {
+		if api.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	want := append([]string(nil), current.Projects...)
+	have := append([]string(nil), creds.Projects...)
+	sort.Strings(want)
+	sort.Strings(have)
+	if slices.Equal(want, have) {
+		return nil
+	}
+	creds.Projects = want
+	if err := b.app.SaveRelayCredentials(*creds); err != nil {
+		return err
+	}
+	return b.app.RestartTunnel(context.Background())
 }
 
 func relayAdminProjectView(project api.Project) RelayAdminProjectView {
