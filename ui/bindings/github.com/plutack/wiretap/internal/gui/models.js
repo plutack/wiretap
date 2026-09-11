@@ -1471,6 +1471,66 @@ export class TargetView {
 }
 
 /**
+ * TransformFileView is an imported portable transform. ID is intentionally
+ * absent: the GUI opens this as an unsaved draft for review and testing.
+ */
+export class TransformFileView {
+    /**
+     * Creates a new TransformFileView instance.
+     * @param {Partial<TransformFileView>} [$$source = {}] - The source object to create the TransformFileView.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("trigger" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["trigger"] = "";
+        }
+        if (!("body" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["body"] = "";
+        }
+        if (!("priority" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["priority"] = 0;
+        }
+        if (!("enabled" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["enabled"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TransformFileView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TransformFileView}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new TransformFileView(/** @type {Partial<TransformFileView>} */($$parsedSource));
+    }
+}
+
+/**
  * WebhookView is the GUI + wailsjs DTO for a webhook row. Body is omitted in
  * list responses (BodyLen set); GetWebhook fills Body + Headers for the detail
  * view and the replay form.

@@ -85,6 +85,16 @@ export function ExportWebhook(project, seq, target, client) {
 }
 
 /**
+ * FormatTransformFile validates editor state and returns portable JSON. File
+ * creation remains in the frontend so this binding needs no filesystem access.
+ * @param {$models.ScriptInput} $in
+ * @returns {$CancellablePromise<string>}
+ */
+export function FormatTransformFile($in) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.FormatTransformFile", $in);
+}
+
+/**
  * GetCapture returns capture metadata, headers, and bounded body previews.
  * @param {number} id
  * @returns {$CancellablePromise<$models.CaptureView>}
@@ -210,6 +220,18 @@ export function ListWebhooks(project) {
 }
 
 /**
+ * ParseTransformFile validates a portable transform file and returns an
+ * unsaved editor draft. Parsing never writes to the database.
+ * @param {string} contents
+ * @returns {$CancellablePromise<$models.TransformFileView>}
+ */
+export function ParseTransformFile(contents) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ParseTransformFile", contents).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType14($result);
+    }));
+}
+
+/**
  * RegisterRelay performs `wiretap relay register --save` from the GUI: it
  * registers this PC with the relay's admin API, persists the returned
  * credentials, points the config's tunnel endpoint at the relay, and
@@ -219,7 +241,7 @@ export function ListWebhooks(project) {
  */
 export function RegisterRelay($in) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.RegisterRelay", $in).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType14($result);
+        return $$createType15($result);
     }));
 }
 
@@ -246,7 +268,7 @@ export function RemoveRelayProject(project) {
  */
 export function ReplayWebhook(project, seq, targetURL) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ReplayWebhook", project, seq, targetURL).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType15($result);
+        return $$createType16($result);
     }));
 }
 
@@ -281,7 +303,7 @@ export function SaveSettings($in) {
  */
 export function SendComposedRequest($in) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.SendComposedRequest", $in).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType16($result);
+        return $$createType17($result);
     }));
 }
 
@@ -307,7 +329,7 @@ export function SetScriptEnabled(id, enabled) {
  */
 export function Status() {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.Status").then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType17($result);
+        return $$createType18($result);
     }));
 }
 
@@ -321,7 +343,7 @@ export function Status() {
  */
 export function TestScript(req) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.TestScript", req).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType18($result);
+        return $$createType19($result);
     }));
 }
 
@@ -340,8 +362,9 @@ const $$createType10 = $Create.Array($$createType9);
 const $$createType11 = $Create.Array($$createType6);
 const $$createType12 = $models.SessionPageView.createFrom;
 const $$createType13 = $Create.Array($$createType7);
-const $$createType14 = $models.RegisterView.createFrom;
-const $$createType15 = $models.ReplayResult.createFrom;
-const $$createType16 = $models.ComposeResponseView.createFrom;
-const $$createType17 = $models.StatusView.createFrom;
-const $$createType18 = $models.ScriptTestView.createFrom;
+const $$createType14 = $models.TransformFileView.createFrom;
+const $$createType15 = $models.RegisterView.createFrom;
+const $$createType16 = $models.ReplayResult.createFrom;
+const $$createType17 = $models.ComposeResponseView.createFrom;
+const $$createType18 = $models.StatusView.createFrom;
+const $$createType19 = $models.ScriptTestView.createFrom;

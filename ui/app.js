@@ -18,6 +18,7 @@ import { RequestComposer } from "./components/request-composer.js";
 import { CommandPalette } from "./components/palette.js";
 import { copyText } from "./lib/clipboard.js";
 import { applyDisplayPrefs, loadDisplayPrefs } from "./lib/prefs.js";
+import { downloadText } from "./lib/download.js";
 
 applyDisplayPrefs(loadDisplayPrefs());
 
@@ -245,8 +246,26 @@ function App() {
     selectionRequest.current += 1;
     setSelection({
       kind: "script",
-      data: { id: 0, name: "", trigger: "on_request", body: "", priority: 0, enabled: true },
+      data: { id: 0, name: "", trigger: "on_request", body: "", priority: 0, enabled: true, editor_key: Date.now() },
     });
+  };
+
+  const importScript = async (file) => {
+    try {
+      const draft = await api.parseTransformFile(await file.text());
+      selectionRequest.current += 1;
+      setSelection({ kind: "script", data: { ...draft, id: 0, editor_key: Date.now(), imported_from: file.name } });
+      showToast(`Loaded ${file.name}. Review and save to import.`, 5000);
+    } catch (e) {
+      showToast(`Import failed: ${String(e)}`, 6000);
+    }
+  };
+
+  const exportScript = async (input) => {
+    const contents = await api.formatTransformFile(input);
+    const slug = String(input.name || "transform").trim().toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "transform";
+    downloadText(`${slug}.wiretap-transform.json`, contents);
   };
 
   const openComposer = (request = null) => {
@@ -273,6 +292,10 @@ function App() {
   };
   const saveScript = async (input) => {
     const id = await api.saveScript(input);
+    setSelection((current) => {
+      if (current?.kind !== "script" || current.data.id !== input.id) return current;
+      return { kind: "script", data: { ...input, id, editor_key: current.data.editor_key } };
+    });
     await loadScripts();
 		await loadComposeRecipes();
     showToast(input.id ? `Updated script ${id}` : `Created script ${id}`);
@@ -355,6 +378,7 @@ function App() {
         onSave=${saveScript}
         onDelete=${deleteScript}
         onTest=${api.testScript}
+        onExport=${exportScript}
         onClose=${closeDetail}
       />`;
     return null;
@@ -435,6 +459,7 @@ function App() {
         onScriptToggle=${toggleScript}
         onScriptSelect=${openScript}
         onNewScript=${newScript}
+        onImportScript=${importScript}
         methodFilter=${methodFilter}
         onMethodFilterChange=${setMethodFilter}
         statusFilter=${statusFilter}

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Portable transforms
+
+- Added versioned JSON import and export for every transform trigger.
+- Imported transforms open as unsaved drafts for review and test runs before
+  they can be persisted.
+- Added strict format, version, trigger, field, and 1 MiB size validation.
+
 ## v0.2.8 — 2026-09-10
 
 ### Composer layout

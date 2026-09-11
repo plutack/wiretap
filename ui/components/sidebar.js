@@ -1,4 +1,4 @@
-import { html, useState } from "../vendor/preact/index.js";
+import { html, useRef, useState } from "../vendor/preact/index.js";
 import { Dropdown } from "./dropdown.js";
 
 // fmtSessionLabel renders "Aug 20 · 14:05" from an RFC3339 timestamp.
@@ -82,6 +82,7 @@ export function Sidebar({
   onScriptToggle,
   onScriptSelect,
   onNewScript,
+  onImportScript,
   methodFilter,
   onMethodFilterChange,
   statusFilter,
@@ -92,6 +93,7 @@ export function Sidebar({
 	const [sourceLimit, setSourceLimit] = useState(6);
 	const [sessionLimit, setSessionLimit] = useState(8);
 	const [scriptLimit, setScriptLimit] = useState(6);
+	const transformFileRef = useRef(null);
 	const toggle = (section) => setCollapsed((current) => ({ ...current, [section]: !current[section] }));
 	const visibleProjects = includePinned(projects, sourceLimit, (item) => item === selectedProject);
 	const visibleSessions = includePinned(
@@ -109,6 +111,11 @@ export function Sidebar({
 			await onLoadMoreSessions();
 		}
 		setSessionLimit(nextLimit);
+	};
+	const importTransform = async (event) => {
+		const file = event.target.files?.[0];
+		if (file && onImportScript) await onImportScript(file);
+		event.target.value = "";
 	};
 
   return html`<aside class="navigator">
@@ -181,7 +188,11 @@ export function Sidebar({
         count=${enabledScripts + "/" + scripts.length}
 		collapsed=${collapsed.transforms}
 		onToggle=${() => toggle("transforms")}
-        action=${html`<button class="new-script-button" title="New transform" aria-label="New transform" onClick=${onNewScript}>＋</button>`}
+        action=${html`<span class="transform-heading-actions">
+			<input ref=${transformFileRef} class="hidden" type="file" accept="application/json,.json,.wiretap-transform" onChange=${importTransform} />
+			<button class="new-script-button" title="Import transform file" aria-label="Import transform file" onClick=${() => transformFileRef.current?.click()}>⇧</button>
+			<button class="new-script-button" title="New transform" aria-label="New transform" onClick=${onNewScript}>＋</button>
+		</span>`}
       >
         ${visibleScripts.map(
           (script) => html`<div key=${script.id} class="nav-item">

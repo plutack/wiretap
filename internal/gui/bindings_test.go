@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -481,6 +482,44 @@ func TestBindings_Scripts_SaveListGetDelete(t *testing.T) {
 	}
 	if _, err := b.GetScript(id); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("GetScript after delete err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestBindings_TransformFileRoundTripCreatesUnsavedDraft(t *testing.T) {
+	t.Parallel()
+	b, _ := newBindings(t)
+	encoded, err := b.FormatTransformFile(ScriptInput{
+		ID: 91, Name: "portable signer", Trigger: string(scripting.OnCompose),
+		Body: `request.url += "/hook";`, Priority: 3, Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("FormatTransformFile: %v", err)
+	}
+	if strings.Contains(encoded, `"id"`) || !strings.Contains(encoded, `"format": "wiretap-transform"`) {
+		t.Fatalf("encoded = %s", encoded)
+	}
+	draft, err := b.ParseTransformFile(encoded)
+	if err != nil {
+		t.Fatalf("ParseTransformFile: %v", err)
+	}
+	if draft.Name != "portable signer" || draft.Trigger != string(scripting.OnCompose) ||
+		draft.Body != `request.url += "/hook";` || draft.Priority != 3 || !draft.Enabled {
+		t.Fatalf("draft = %+v", draft)
+	}
+	list, err := b.ListScripts()
+	if err != nil {
+		t.Fatalf("ListScripts: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("import persisted %d scripts before review", len(list))
+	}
+}
+
+func TestBindings_ParseTransformFileRejectsInvalidDocument(t *testing.T) {
+	t.Parallel()
+	b, _ := newBindings(t)
+	if _, err := b.ParseTransformFile(`{"format":"wiretap-transform","version":1,"name":"bad","trigger":"unknown","program":""}`); err == nil {
+		t.Fatal("ParseTransformFile with invalid trigger: want error")
 	}
 }
 
