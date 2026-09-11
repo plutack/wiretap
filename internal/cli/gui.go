@@ -37,6 +37,7 @@ import (
 	"github.com/plutack/wiretap/internal/app"
 	"github.com/plutack/wiretap/internal/config"
 	"github.com/plutack/wiretap/internal/gui"
+	"github.com/plutack/wiretap/internal/secretstore"
 )
 
 // newGUICmd builds the `wiretap gui` subcommand that opens a Wails dashboard.
@@ -65,7 +66,7 @@ func runGUI(parent context.Context, version string) error {
 	themeCtx, stopThemeWatcher := context.WithCancel(parent)
 	defer stopThemeWatcher()
 
-	mgr := config.NewManager()
+	mgr := config.NewManager(config.WithClientSecretStore(secretstore.ClientSystem{}))
 	a := app.New(mgr, app.WithScriptEngine(newScriptEngine(), logScriptError))
 
 	// Open the local store before serving any view; the GUI is read-only w.r.t.

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/plutack/wiretap/internal/secretstore"
 	"gopkg.in/yaml.v3"
 )
 
@@ -32,8 +33,9 @@ type RelayConfig struct {
 	// to my dev server" mode. on_replay scripts run first, exactly like a
 	// manual replay. Empty disables auto-forwarding.
 	ForwardURL string `yaml:"forward_url"`
-	// CredsFile is the path to the client_id/client_token JSON written by
-	// `wiretap relay register`. Defaults to <config dir>/relay-credentials.json.
+	// CredsFile is the path to the relay client identity metadata written by
+	// `wiretap relay register`. The client token is normally resolved from the
+	// system keyring. Defaults to <config dir>/relay-credentials.json.
 	CredsFile string `yaml:"creds_file"`
 	// Note: the set of project paths is owned by the relay (which rejects
 	// ingress to unclaimed paths) and mirrored locally in relay-credentials.json
@@ -101,7 +103,8 @@ func Default() Config {
 // and it is only ever set via WithBaseDir — there is no package-level
 // variable.
 type Manager struct {
-	baseDir string
+	baseDir       string
+	clientSecrets secretstore.Store
 }
 
 // Option configures a Manager.
@@ -112,6 +115,13 @@ type Option func(*Manager)
 // config untouched.
 func WithBaseDir(dir string) Option {
 	return func(m *Manager) { m.baseDir = dir }
+}
+
+// WithClientSecretStore enables keyring-backed relay client tokens. A nil
+// store preserves the portable mode-0600 credentials file used by tests and
+// explicitly headless embeddings.
+func WithClientSecretStore(store secretstore.Store) Option {
+	return func(m *Manager) { m.clientSecrets = store }
 }
 
 // NewManager returns a Manager configured by the given options.

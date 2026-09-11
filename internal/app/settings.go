@@ -50,15 +50,19 @@ func (a *App) RelayCredentials() (*config.Credentials, error) {
 	return a.mgr.LoadCredentials()
 }
 
-// SaveRelayCredentials persists creds to relay-credentials.json (0600) and
-// makes them the active in-memory credentials so the next StartTunnel uses
-// them without a reload.
+// SaveRelayCredentials persists relay identity metadata and makes the
+// resolved credentials active. Production managers place the token in the
+// system keyring when available and otherwise keep the portable 0600 file.
 func (a *App) SaveRelayCredentials(creds config.Credentials) error {
 	if err := a.mgr.SaveCredentials(creds); err != nil {
 		return err
 	}
+	stored, err := a.mgr.LoadCredentials()
+	if err != nil {
+		return err
+	}
 	a.mu.Lock()
-	a.creds = &creds
+	a.creds = stored
 	a.mu.Unlock()
 	return nil
 }

@@ -138,7 +138,14 @@ export function Settings({ onToast, onSaved }) {
           ${(view.projects || []).length === 0 ? html`<p>No projects assigned yet.</p>` : null}</div>
           <div class="settings-inline-action"><${Input} class="font-mono" placeholder="new-project" value=${projectDraft} disabled=${projectBusy} onInput=${(e) => setProjectDraft(e.target.value)} onKeyDown=${(e) => e.key === "Enter" && addProject()} />
           <${Button} variant="primary" disabled=${projectBusy || !projectDraft.trim()} onClick=${addProject}>${projectBusy ? "Updating..." : "Add project"}</></div>
-          <p class="settings-path-note">Credentials: <code>${view.creds_path}</code></p>
+          <div class="credential-storage-note ${view.token_storage === "keyring" ? "secure" : "fallback"}">
+            <span>${view.token_storage === "keyring" ? "Keyring" : "Protected file"}</span>
+            <p>${view.token_storage === "keyring"
+              ? "The client token is in your system keyring; this file contains only the client ID and project metadata."
+              : "No supported keyring was available, so the client token remains in this mode-0600 file."}</p>
+            <code>${view.creds_path}</code>
+          </div>
+          ${view.token_warning ? html`<p class="settings-credential-warning">${view.token_warning}</p>` : null}
         </>`}
       ` : null}
       ${section === "capture" ? html`

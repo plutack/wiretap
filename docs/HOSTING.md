@@ -130,9 +130,13 @@ wiretap relay \
   register --name laptop --save
 ```
 
-`--save` writes `client_id`, `client_token`, and the project list to
-`~/.config/wiretap/relay-credentials.json` with mode `0600`. It intentionally
-does not save the more privileged relay admin token.
+`--save` first tries to place `client_token` in the operating system keyring.
+When successful, `~/.config/wiretap/relay-credentials.json` contains only the
+client ID, a keyring reference, and the project list. Existing plaintext tokens
+are migrated automatically on a later load. On headless systems without a
+usable keyring, Wiretap falls back to the same file with mode `0600` so tunnel
+startup remains unattended and portable. There is no storage-mode setting to
+manage. The more privileged relay admin token is never placed in this file.
 
 Claim projects separately using the saved client credentials. This does not
 create a new client or rotate its token:

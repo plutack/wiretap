@@ -1,21 +1,29 @@
 package config
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 )
 
-// Credentials is the on-disk representation of
-// ~/.config/wiretap/relay-credentials.json. Written by `wiretap relay
-// register --save` and read by the local app on startup to populate
-// relayclient.Config before dialing the relay.
+// Credentials is the persisted relay client identity plus its resolved secret.
+// JSON normally contains a keyring reference instead of ClientToken; the token
+// field remains readable for migration and headless compatibility.
 type Credentials struct {
-	ClientID    string   `json:"client_id"`
-	ClientToken string   `json:"client_token"`
-	Projects    []string `json:"projects"`
+	ClientID       string   `json:"client_id"`
+	ClientToken    string   `json:"client_token,omitempty"`
+	TokenKeyring   string   `json:"token_keyring,omitempty"`
+	Projects       []string `json:"projects"`
+	TokenStorage   string   `json:"-"`
+	StorageWarning string   `json:"-"`
 }
+
+const (
+	TokenStorageKeyring = "keyring"
+	TokenStorageFile    = "file"
+)
 
 // CredsPath returns the full path to relay-credentials.json inside the
 // wiretap config directory. Uses the same Manager base-dir resolution as
@@ -29,11 +37,28 @@ func (m *Manager) CredsPath() (string, error) {
 	return filepath.Join(d, "relay-credentials.json"), nil
 }
 
-// SaveCredentials writes c to relay-credentials.json with mode 0600. The
-// token is a secret; the restrictive mode prevents other users on the
-// machine from reading it. Returns an error if the directory cannot be
-// created or the file written.
+// SaveCredentials prefers the configured system keyring for the token and
+// writes only identity metadata to relay-credentials.json. When no usable
+// keyring exists it preserves the previous portable behavior with a 0600 file.
 func (m *Manager) SaveCredentials(c Credentials) error {
+	c.TokenStorage = ""
+	c.StorageWarning = ""
+	if c.ClientToken != "" && m.clientSecrets != nil {
+		account := credentialKeyringAccount(c.ClientID)
+		if err := m.clientSecrets.Set(account, c.ClientToken); err == nil {
+			c.ClientToken = ""
+			c.TokenKeyring = account
+		} else {
+			// A tunnel must remain usable on headless Linux hosts without a
+			// secret service. The existing private file is the explicit
+			// compatibility fallback; GetSettings reports this state.
+			c.TokenKeyring = ""
+		}
+	}
+	return m.writeCredentials(c)
+}
+
+func (m *Manager) writeCredentials(c Credentials) error {
 	p, err := m.CredsPath()
 	if err != nil {
 		return err
@@ -68,5 +93,40 @@ func (m *Manager) LoadCredentials() (*Credentials, error) {
 	if err := json.Unmarshal(b, &c); err != nil {
 		return nil, fmt.Errorf("config: parse %s: %w", p, err)
 	}
+	if c.TokenKeyring != "" {
+		if m.clientSecrets == nil {
+			return nil, fmt.Errorf("config: credentials reference a system keyring, but no client secret store is configured")
+		}
+		token, err := m.clientSecrets.Get(c.TokenKeyring)
+		if err != nil {
+			return nil, fmt.Errorf("config: load relay client token from keyring: %w", err)
+		}
+		c.ClientToken = token
+		c.TokenStorage = TokenStorageKeyring
+		return &c, nil
+	}
+	c.TokenStorage = TokenStorageFile
+	if c.ClientToken != "" && m.clientSecrets != nil {
+		account := credentialKeyringAccount(c.ClientID)
+		if err := m.clientSecrets.Set(account, c.ClientToken); err == nil {
+			disk := c
+			disk.ClientToken = ""
+			disk.TokenKeyring = account
+			disk.TokenStorage = ""
+			if err := m.writeCredentials(disk); err != nil {
+				c.StorageWarning = "Token reached the system keyring, but the protected credentials file could not be migrated."
+				return &c, nil
+			}
+			c.TokenKeyring = account
+			c.TokenStorage = TokenStorageKeyring
+		} else {
+			c.StorageWarning = "System keyring unavailable; token remains in the protected credentials file."
+		}
+	}
 	return &c, nil
+}
+
+func credentialKeyringAccount(clientID string) string {
+	sum := sha256.Sum256([]byte(clientID))
+	return fmt.Sprintf("client-%x", sum[:12])
 }
