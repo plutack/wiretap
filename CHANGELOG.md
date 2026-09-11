@@ -8,6 +8,8 @@
 - Imported transforms open as unsaved drafts for review and test runs before
   they can be persisted.
 - Added strict format, version, trigger, field, and 1 MiB size validation.
+- Added **Duplicate** to create a disabled, unsaved copy while preserving the
+  current program and sample request.
 
 ## v0.2.8 — 2026-09-10
 
