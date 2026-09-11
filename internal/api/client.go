@@ -270,6 +270,23 @@ func (c *HTTPClient) ListProjects(ctx context.Context) (*ListProjectsResponse, e
 	return &out, nil
 }
 
+// AssignProject calls PUT /admin/projects/:project to create a project for an
+// existing client. Requires admin auth.
+func (c *HTTPClient) AssignProject(ctx context.Context, project, clientID string) (*Project, error) {
+	var out Project
+	path := "/admin/projects/" + url.PathEscape(project)
+	if err := c.do(ctx, http.MethodPut, path, AssignProjectRequest{ClientID: clientID}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DeleteProject calls DELETE /admin/projects/:project. Relay-side queued
+// webhook history for the project is deleted by the database cascade.
+func (c *HTTPClient) DeleteProject(ctx context.Context, project string) error {
+	return c.do(ctx, http.MethodDelete, "/admin/projects/"+url.PathEscape(project), nil, nil)
+}
+
 // ReclaimProject calls POST /admin/projects to move a path between clients.
 // Requires admin auth. With req.Force=true the relay rebinds an existing
 // path; without it the call returns 409.
