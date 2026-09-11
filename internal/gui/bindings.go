@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/plutack/wiretap/internal/app"
+	"github.com/plutack/wiretap/internal/secretstore"
 	"github.com/plutack/wiretap/internal/store"
 )
 
@@ -42,6 +43,7 @@ type Bindings struct {
 	app                  *app.App
 	version              string
 	onTitlebarModeChange func(string)
+	secrets              secretstore.Store
 }
 
 // Option configures a Bindings.
@@ -57,11 +59,14 @@ func WithTitlebarModeChanged(fn func(string)) Option {
 	return func(b *Bindings) { b.onTitlebarModeChange = fn }
 }
 
+// WithSecretStore replaces the OS keyring for tests.
+func WithSecretStore(store secretstore.Store) Option { return func(b *Bindings) { b.secrets = store } }
+
 // New builds a binding layer over a (already-Open) *app.App. The caller owns the
 // App lifecycle (Open/StartTunnel/Close); the bindings are read-only w.r.t. it
 // except for ReplayWebhook, which mutates an external target URL, not the store.
 func New(a *app.App, opts ...Option) *Bindings {
-	b := &Bindings{app: a, version: "dev"}
+	b := &Bindings{app: a, version: "dev", secrets: secretstore.System{}}
 	for _, o := range opts {
 		o(b)
 	}

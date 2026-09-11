@@ -1090,6 +1090,20 @@ textarea:focus-visible {
 
 .relay-admin-error span { overflow-wrap: anywhere; color: #e8a2ad; }
 
+.relay-profile-panel { overflow: hidden; border: 1px solid var(--wt-line); border-radius: var(--wt-radius); background: rgba(13,16,19,.82); }
+.relay-profile-list { display: grid; max-height: 220px; overflow-y: auto; }
+.relay-profile-row { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; align-items: center; gap: 14px; min-height: 54px; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.05); }
+.relay-profile-row:last-child { border-bottom: 0; }
+.relay-profile-row > div:first-child { display: grid; min-width: 0; gap: 2px; }
+.relay-profile-row strong { color: var(--wt-text); font-size: .75rem; }
+.relay-profile-row code, .relay-profile-row > span { overflow: hidden; color: var(--wt-dim); font-family: "JetBrains Mono", monospace; font-size: .65rem; text-overflow: ellipsis; white-space: nowrap; }
+.relay-profile-row > div:last-child { display: flex; gap: 6px; }
+.relay-admin-save-options { display: grid; grid-template-columns: auto minmax(180px, 280px) minmax(240px, 1fr); align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--wt-line); border-top: 0; border-radius: 0 0 var(--wt-radius) var(--wt-radius); background: rgba(255,255,255,.012); }
+.relay-admin-connect + .relay-admin-save-options { margin-top: -12px; }
+.relay-admin-save-options label { display: flex; align-items: center; gap: 7px; color: var(--wt-muted); font-size: .72rem; white-space: nowrap; }
+.relay-admin-save-options input[type="checkbox"] { accent-color: var(--wt-accent); }
+.relay-admin-save-options p { color: var(--wt-dim); font-size: .67rem; line-height: 1.4; }
+
 .relay-admin-empty {
   min-height: 240px;
   padding: 72px 24px;
@@ -1303,6 +1317,8 @@ textarea:focus-visible {
   .relay-credentials { grid-template-columns: 1fr; }
   .settings-workspace { grid-template-columns: 188px minmax(0, 1fr); }
   .settings-content { padding-inline: 16px; }
+  .relay-admin-save-options { grid-template-columns: 1fr 1fr; }
+  .relay-admin-save-options p { grid-column: 1 / -1; }
 }
 
 @media (max-width: 680px) {
@@ -1313,6 +1329,8 @@ textarea:focus-visible {
   .settings-rail button span { display: none; }
   .settings-content { width: 100%; padding: 16px 12px 48px; }
   .settings-field-grid, .relay-project-create { grid-template-columns: 1fr; }
+  .relay-admin-save-options, .relay-profile-row { grid-template-columns: 1fr; }
+  .relay-admin-save-options p { grid-column: auto; }
   .relay-admin-summary dl { grid-template-columns: repeat(2, minmax(80px, 1fr)); }
   .relay-client-row,
   .relay-project-row { grid-template-columns: 1fr; align-items: stretch; }
