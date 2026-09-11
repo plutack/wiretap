@@ -8,6 +8,7 @@
 //   onDelete — async (id) → void
 //   onTest   — async (ScriptTestRequest) → ScriptTestView
 //   onExport — async (ScriptInput) → void
+//   onDuplicate — (ScriptInput + sample) → void
 //   onClose  — () → void
 import { html } from "../vendor/preact/index.js";
 import { useEffect, useRef, useState } from "../vendor/preact/index.js";
@@ -24,18 +25,19 @@ const SAMPLE = {
   status: "200",
 };
 
-export function ScriptEditor({ script, onSave, onDelete, onTest, onExport, onClose }) {
+export function ScriptEditor({ script, onSave, onDelete, onTest, onExport, onDuplicate, onClose }) {
+  const initialSample = script.sample || SAMPLE;
   const [name, setName] = useState(script.name || "");
   const [trigger, setTrigger] = useState(script.trigger || "on_request");
   const [priority, setPriority] = useState(script.priority || 0);
   const [enabled, setEnabled] = useState(script.enabled ?? true);
   const [saveState, setSaveState] = useState(null); // {msg, error}
   const [testResult, setTestResult] = useState(null); // ScriptTestView | {error}
-  const [sampleMethod, setSampleMethod] = useState(SAMPLE.method);
-  const [sampleURL, setSampleURL] = useState(SAMPLE.url);
-  const [sampleHeaders, setSampleHeaders] = useState(SAMPLE.headers);
-  const [sampleBody, setSampleBody] = useState(SAMPLE.body);
-  const [sampleStatus, setSampleStatus] = useState(SAMPLE.status);
+  const [sampleMethod, setSampleMethod] = useState(initialSample.method);
+  const [sampleURL, setSampleURL] = useState(initialSample.url);
+  const [sampleHeaders, setSampleHeaders] = useState(initialSample.headers);
+  const [sampleBody, setSampleBody] = useState(initialSample.body);
+  const [sampleStatus, setSampleStatus] = useState(initialSample.status);
 
   const taRef = useRef(null);
   const cmRef = useRef(null);
@@ -79,11 +81,12 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onExport, onClo
     setEnabled(script.enabled ?? true);
     setSaveState(null);
     setTestResult(null);
-    setSampleMethod(SAMPLE.method);
-    setSampleURL(SAMPLE.url);
-    setSampleHeaders(SAMPLE.headers);
-    setSampleBody(SAMPLE.body);
-    setSampleStatus(SAMPLE.status);
+    const nextSample = script.sample || SAMPLE;
+    setSampleMethod(nextSample.method);
+    setSampleURL(nextSample.url);
+    setSampleHeaders(nextSample.headers);
+    setSampleBody(nextSample.body);
+    setSampleStatus(nextSample.status);
   }, [script.id, script.editor_key]);
 
   const currentBody = () =>
@@ -164,6 +167,22 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onExport, onClo
     }
   };
 
+  const handleDuplicate = () => {
+    onDuplicate({
+      name,
+      trigger,
+      body: currentBody(),
+      priority: Number(priority) || 0,
+      sample: {
+        method: sampleMethod,
+        url: sampleURL,
+        headers: sampleHeaders,
+        body: sampleBody,
+        status: sampleStatus,
+      },
+    });
+  };
+
   const handleTest = async () => {
     let headers;
     try {
@@ -198,7 +217,7 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onExport, onClo
     <div class="inspector-head">
       <div class="inspector-identity">
         <div class="inspector-title">${script.id ? `transform/${script.id}` : "transform/new"}</div>
-        <div class="inspector-subtitle">${script.imported_from ? `Imported from ${script.imported_from} · unsaved` : "goja · local sandbox · 5s timeout"}</div>
+        <div class="inspector-subtitle">${script.draft_note || (script.imported_from ? `Imported from ${script.imported_from} · unsaved` : "goja · local sandbox · 5s timeout")}</div>
       </div>
       <button class="refresh-button inspector-close" title="Close editor" aria-label="Close editor" onClick=${onClose}>×</button>
     </div>
@@ -265,13 +284,14 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onExport, onClo
         </div>
       </div>
 
-      <div class="mb-3 flex items-center gap-2">
+      <div class="mb-3 flex flex-wrap items-center gap-2">
         <button
           onClick=${handleSave}
           class="btn btn-primary"
         >
           Save
         </button>
+        <button onClick=${handleDuplicate} class="btn btn-ghost" title="Create a disabled, unsaved copy">Duplicate</button>
         <button onClick=${handleExport} class="btn btn-ghost">Export file</button>
         <button
           onClick=${handleDelete}

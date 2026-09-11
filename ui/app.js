@@ -268,6 +268,23 @@ function App() {
     downloadText(`${slug}.wiretap-transform.json`, contents);
   };
 
+  const duplicateScript = (input) => {
+    const sourceName = String(input.name || "Unnamed transform").trim() || "Unnamed transform";
+    selectionRequest.current += 1;
+    setSelection({
+      kind: "script",
+      data: {
+        ...input,
+        id: 0,
+        name: `${sourceName} copy`,
+        enabled: false,
+        editor_key: Date.now(),
+        draft_note: `Copy of ${sourceName} · disabled · unsaved`,
+      },
+    });
+    showToast("Created a disabled draft. Review and save when ready.", 5000);
+  };
+
   const openComposer = (request = null) => {
     selectionRequest.current += 1;
     setSelection(null);
@@ -379,6 +396,7 @@ function App() {
         onDelete=${deleteScript}
         onTest=${api.testScript}
         onExport=${exportScript}
+        onDuplicate=${duplicateScript}
         onClose=${closeDetail}
       />`;
     return null;
