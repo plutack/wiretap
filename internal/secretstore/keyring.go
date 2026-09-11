@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/zalando/go-keyring"
+	"github.com/byteness/keyring"
 )
 
 const service = "wiretap"
@@ -27,25 +27,46 @@ type System struct{}
 type ClientSystem struct{}
 
 func set(account, secret string) error {
-	if err := keyring.Set(service, account, secret); err != nil {
+	ring, err := openSystemKeyring()
+	if err != nil {
+		return fmt.Errorf("open system keyring: %w", err)
+	}
+	if err := ring.Set(secretItem(account, secret)); err != nil {
 		return fmt.Errorf("set system keyring secret: %w", err)
 	}
 	return nil
 }
 
+func secretItem(account, secret string) keyring.Item {
+	return keyring.Item{
+		Key:         account,
+		Data:        []byte(secret),
+		Label:       "Wiretap credential",
+		Description: "Credential stored securely by Wiretap",
+	}
+}
+
 func get(account string) (string, error) {
-	secret, err := keyring.Get(service, account)
-	if errors.Is(err, keyring.ErrNotFound) {
+	ring, err := openSystemKeyring()
+	if err != nil {
+		return "", fmt.Errorf("open system keyring: %w", err)
+	}
+	item, err := ring.Get(account)
+	if errors.Is(err, keyring.ErrKeyNotFound) {
 		return "", ErrNotFound
 	}
 	if err != nil {
 		return "", fmt.Errorf("get system keyring secret: %w", err)
 	}
-	return secret, nil
+	return string(item.Data), nil
 }
 
 func remove(account string) error {
-	if err := keyring.Delete(service, account); errors.Is(err, keyring.ErrNotFound) {
+	ring, err := openSystemKeyring()
+	if err != nil {
+		return fmt.Errorf("open system keyring: %w", err)
+	}
+	if err := ring.Remove(account); errors.Is(err, keyring.ErrKeyNotFound) {
 		return ErrNotFound
 	} else if err != nil {
 		return fmt.Errorf("delete system keyring secret: %w", err)

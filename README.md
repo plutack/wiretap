@@ -212,6 +212,9 @@ identity and reconnect automatically. Wiretap also stores the desktop's
 long-lived client token in a separate system-keyring entry when one is
 available. On headless systems it automatically falls back to the private
 mode-`0600` credentials file, with no storage setting to configure.
+On Linux, Wiretap follows Secret Service's configured `default` alias and
+stores its entries in that collection; it does not create a separate keyring
+collection for the application.
 Enter the relay URL and admin token to inspect health, manage registered
 clients, create portable client credentials, and reassign project ownership.
 For temporary connections, the admin token remains in memory only and is
