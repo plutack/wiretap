@@ -1119,7 +1119,7 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
   gap: 12px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .relay-admin-panel {
@@ -1139,7 +1139,24 @@ textarea:focus-visible {
 }
 
 .relay-admin-panel-head h3 { color: var(--wt-text); font-size: .78rem; font-weight: 650; }
+.relay-admin-panel-head h3 span {
+  margin-left: 5px;
+  color: var(--wt-dim);
+  font-family: "JetBrains Mono", monospace;
+  font-size: .66rem;
+  font-weight: 500;
+}
 .relay-admin-panel-head p { margin-top: 2px; }
+
+.relay-client-list,
+.relay-project-list {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.relay-client-list { max-height: 320px; }
+.relay-project-list { max-height: 380px; }
 
 .relay-client-row {
   display: grid;
