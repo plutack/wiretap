@@ -188,7 +188,7 @@ export function RelayAdmin({ defaultURL, localClientID, onToast }) {
 
       <div class="relay-admin-grid">
         <section class="relay-admin-panel">
-          <div class="relay-admin-panel-head"><div><h3>Clients</h3><p>Registered identities and their last relay contact.</p></div></div>
+          <div class="relay-admin-panel-head"><div><h3>Clients <span>${overview.clients?.length || 0}</span></h3><p>Registered identities and their last relay contact.</p></div></div>
           <div class="relay-client-list">
             ${(overview.clients || []).map((client) => html`<article class="relay-client-row" key=${client.client_id}>
               <div class="relay-client-main">
@@ -221,7 +221,7 @@ export function RelayAdmin({ defaultURL, localClientID, onToast }) {
       </div>
 
       <section class="relay-admin-panel relay-project-panel">
-        <div class="relay-admin-panel-head"><div><h3>Project ownership</h3><p>Move an existing path between registered clients. Its queued history is preserved.</p></div></div>
+        <div class="relay-admin-panel-head"><div><h3>Project ownership <span>${overview.projects?.length || 0}</span></h3><p>Move an existing path between registered clients. Its queued history is preserved.</p></div></div>
         <div class="relay-project-list">
           ${(overview.projects || []).map((project) => html`<article class="relay-project-row" key=${project.path}>
             <div class="relay-project-name"><strong>${project.path}</strong><span>acknowledged through #${project.acked_seq || 0}</span></div>
