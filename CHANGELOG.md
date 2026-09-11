@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.2.13 — 2026-09-11
+
+### Desktop default keyring
+
+- Switch the credential-store adapter to ByteNess/keyring.
+- Resolve Linux Secret Service's standard `default` alias before opening the
+  backend, so Wiretap uses the desktop's configured default collection instead
+  of preferring or creating a collection named `login` or `wiretap`.
+- Keep relay-admin and client credentials separated by item key within the
+  shared operating-system collection.
+- Preserve the existing mode-`0600` plaintext-to-keyring migration for desktop
+  client credentials; legacy secrets are never copied from another collection.
+
 ## v0.2.12 — 2026-09-11
 
 ### Keyring reliability hotfix
