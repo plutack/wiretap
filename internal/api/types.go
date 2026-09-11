@@ -38,7 +38,7 @@ type ClientProjectsResponse struct {
 }
 
 // HealthResponse is the body of GET /health. tunnel_count is the number of
-// currently-connected tunnels; included once we wire that up.
+// currently connected desktop tunnel sessions.
 type HealthResponse struct {
 	Status      string `json:"status"`
 	Version     string `json:"version"`

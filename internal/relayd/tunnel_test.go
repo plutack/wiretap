@@ -339,6 +339,11 @@ func TestTunnelRegistry_AttachReplace(t *testing.T) {
 	if r.countTunnels() != 1 {
 		t.Errorf("count = %d, want 1", r.countTunnels())
 	}
+	r.attachSession("project-b", s2)
+	if r.countTunnels() != 1 {
+		t.Errorf("aliased session count = %d, want 1", r.countTunnels())
+	}
+	r.detachByProject("project-b", s2)
 	r.detachByProject("project-a", s2)
 	if r.countTunnels() != 0 {
 		t.Errorf("detach should remove s2; count = %d", r.countTunnels())

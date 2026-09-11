@@ -1,0 +1,229 @@
+package gui
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/plutack/wiretap/internal/api"
+	"github.com/plutack/wiretap/internal/app"
+)
+
+const relayAdminTimeout = 15 * time.Second
+
+// RelayAdminInput carries the ephemeral credentials for one relay admin
+// operation. The admin token crosses the Wails bridge for the request only;
+// wiretap never writes it to config or credentials storage.
+type RelayAdminInput struct {
+	RelayURL   string `json:"relay_url"`
+	AdminToken string `json:"admin_token"`
+}
+
+// RelayAdminCreateClientInput creates credentials for another relay client.
+// Unlike RegisterRelay, it does not replace this desktop's saved identity.
+type RelayAdminCreateClientInput struct {
+	RelayURL    string   `json:"relay_url"`
+	AdminToken  string   `json:"admin_token"`
+	DisplayName string   `json:"display_name"`
+	Projects    []string `json:"projects"`
+}
+
+// RelayAdminDeleteClientInput revokes a relay identity. Relay storage cascades
+// the deletion to that client's project bindings and queued webhook history.
+type RelayAdminDeleteClientInput struct {
+	RelayURL   string `json:"relay_url"`
+	AdminToken string `json:"admin_token"`
+	ClientID   string `json:"client_id"`
+}
+
+// RelayAdminReassignProjectInput moves a path to another registered client.
+type RelayAdminReassignProjectInput struct {
+	RelayURL    string `json:"relay_url"`
+	AdminToken  string `json:"admin_token"`
+	Path        string `json:"path"`
+	NewClientID string `json:"new_client_id"`
+	Force       bool   `json:"force"`
+}
+
+// RelayAdminOverviewView is the bounded server-management snapshot rendered
+// by Settings. It deliberately contains no client or admin secret.
+type RelayAdminOverviewView struct {
+	BaseURL     string                  `json:"base_url"`
+	Status      string                  `json:"status"`
+	Version     string                  `json:"version"`
+	TunnelCount int                     `json:"tunnel_count"`
+	Clients     []RelayAdminClientView  `json:"clients"`
+	Projects    []RelayAdminProjectView `json:"projects"`
+}
+
+type RelayAdminClientView struct {
+	ClientID    string   `json:"client_id"`
+	DisplayName string   `json:"display_name,omitempty"`
+	CreatedAt   int64    `json:"created_at"`
+	LastSeenAt  int64    `json:"last_seen_at,omitempty"`
+	Projects    []string `json:"projects,omitempty"`
+}
+
+type RelayAdminProjectView struct {
+	Path      string `json:"path"`
+	ClientID  string `json:"client_id"`
+	CreatedAt int64  `json:"created_at"`
+	AckedSeq  int64  `json:"acked_seq"`
+}
+
+// RelayAdminCredentialsView contains a newly-created client token. The relay
+// returns it once, so the GUI keeps it only in component memory for copying.
+type RelayAdminCredentialsView struct {
+	ClientID    string   `json:"client_id"`
+	ClientToken string   `json:"client_token"`
+	Projects    []string `json:"projects"`
+}
+
+// RelayAdminOverview authenticates to the configured relay and returns its
+// health, registered clients, and project ownership in one snapshot.
+func (b *Bindings) RelayAdminOverview(in RelayAdminInput) (RelayAdminOverviewView, error) {
+	client, base, err := relayAdminClient(in.RelayURL, in.AdminToken)
+	if err != nil {
+		return RelayAdminOverviewView{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), relayAdminTimeout)
+	defer cancel()
+	health, err := client.Health(ctx)
+	if err != nil {
+		return RelayAdminOverviewView{}, fmt.Errorf("relay health: %w", err)
+	}
+	clients, err := client.ListClients(ctx)
+	if err != nil {
+		return RelayAdminOverviewView{}, fmt.Errorf("list relay clients: %w", err)
+	}
+	projects, err := client.ListProjects(ctx)
+	if err != nil {
+		return RelayAdminOverviewView{}, fmt.Errorf("list relay projects: %w", err)
+	}
+	view := RelayAdminOverviewView{
+		BaseURL: base, Status: health.Status, Version: health.Version,
+		TunnelCount: health.TunnelCount,
+		Clients:     make([]RelayAdminClientView, 0, len(clients.Clients)),
+		Projects:    make([]RelayAdminProjectView, 0, len(projects.Projects)),
+	}
+	for _, client := range clients.Clients {
+		view.Clients = append(view.Clients, RelayAdminClientView{
+			ClientID: client.ClientID, DisplayName: client.DisplayName,
+			CreatedAt: client.CreatedAt, LastSeenAt: client.LastSeenAt, Projects: client.Projects,
+		})
+	}
+	for _, project := range projects.Projects {
+		view.Projects = append(view.Projects, relayAdminProjectView(project))
+	}
+	return view, nil
+}
+
+// RelayAdminCreateClient creates portable credentials without changing the
+// desktop currently registered in wiretap.
+func (b *Bindings) RelayAdminCreateClient(in RelayAdminCreateClientInput) (RelayAdminCredentialsView, error) {
+	client, _, err := relayAdminClient(in.RelayURL, in.AdminToken)
+	if err != nil {
+		return RelayAdminCredentialsView{}, err
+	}
+	projects := normalizeRelayProjects(in.Projects)
+	ctx, cancel := context.WithTimeout(context.Background(), relayAdminTimeout)
+	defer cancel()
+	out, err := client.Register(ctx, api.RegisterRequest{
+		AdminToken: strings.TrimSpace(in.AdminToken), Projects: projects,
+		DisplayName: strings.TrimSpace(in.DisplayName),
+	})
+	if err != nil {
+		return RelayAdminCredentialsView{}, fmt.Errorf("create relay client: %w", err)
+	}
+	return RelayAdminCredentialsView{
+		ClientID: out.ClientID, ClientToken: out.ClientToken, Projects: out.Projects,
+	}, nil
+}
+
+// RelayAdminDeleteClient revokes a client. The frontend owns the destructive
+// confirmation so this method remains usable from generated bindings/tests.
+func (b *Bindings) RelayAdminDeleteClient(in RelayAdminDeleteClientInput) error {
+	client, _, err := relayAdminClient(in.RelayURL, in.AdminToken)
+	if err != nil {
+		return err
+	}
+	clientID := strings.TrimSpace(in.ClientID)
+	if clientID == "" {
+		return errors.New("delete relay client: client ID is required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), relayAdminTimeout)
+	defer cancel()
+	if err := client.DeleteClient(ctx, clientID); err != nil {
+		return fmt.Errorf("delete relay client: %w", err)
+	}
+	return nil
+}
+
+// RelayAdminReassignProject transfers project ownership. Existing ownership
+// requires Force, which the GUI sets only after an explicit confirmation.
+func (b *Bindings) RelayAdminReassignProject(in RelayAdminReassignProjectInput) (RelayAdminProjectView, error) {
+	client, _, err := relayAdminClient(in.RelayURL, in.AdminToken)
+	if err != nil {
+		return RelayAdminProjectView{}, err
+	}
+	path := strings.Trim(strings.TrimSpace(in.Path), "/")
+	clientID := strings.TrimSpace(in.NewClientID)
+	if path == "" || clientID == "" {
+		return RelayAdminProjectView{}, errors.New("reassign relay project: project path and new client ID are required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), relayAdminTimeout)
+	defer cancel()
+	out, err := client.ReclaimProject(ctx, api.ReclaimProjectRequest{
+		Path: path, NewClientID: clientID, Force: in.Force,
+	})
+	if err != nil {
+		return RelayAdminProjectView{}, fmt.Errorf("reassign relay project: %w", err)
+	}
+	return relayAdminProjectView(*out), nil
+}
+
+func relayAdminProjectView(project api.Project) RelayAdminProjectView {
+	return RelayAdminProjectView{
+		Path: project.Path, ClientID: project.ClientID,
+		CreatedAt: project.CreatedAt, AckedSeq: project.AckedSeq,
+	}
+}
+
+func relayAdminClient(rawURL, adminToken string) (*api.HTTPClient, string, error) {
+	token := strings.TrimSpace(adminToken)
+	if token == "" {
+		return nil, "", errors.New("relay admin: admin token is required")
+	}
+	tunnelURL, err := app.TunnelURLFromBase(rawURL)
+	if err != nil {
+		return nil, "", fmt.Errorf("relay admin: %w", err)
+	}
+	base := app.IngressBaseURL(tunnelURL)
+	if base == "" {
+		return nil, "", fmt.Errorf("relay admin: cannot derive HTTP URL from %q", rawURL)
+	}
+	client, err := api.NewClient(base, api.WithAdminToken(token))
+	if err != nil {
+		return nil, "", fmt.Errorf("relay admin: %w", err)
+	}
+	return client, base, nil
+}
+
+func normalizeRelayProjects(projects []string) []string {
+	out := make([]string, 0, len(projects))
+	seen := make(map[string]struct{}, len(projects))
+	for _, project := range projects {
+		project = strings.Trim(strings.TrimSpace(project), "/")
+		if project == "" {
+			continue
+		}
+		if _, exists := seen[project]; exists {
+			continue
+		}
+		seen[project] = struct{}{}
+		out = append(out, project)
+	}
+	return out
+}
