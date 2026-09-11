@@ -955,6 +955,299 @@ textarea:focus-visible {
   align-self: center;
 }
 
+/* Relay administration -------------------------------------------------- */
+.relay-admin-shell {
+  box-sizing: border-box;
+  width: min(100%, 1180px);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 16px 20px 56px;
+}
+
+.settings-nav {
+  display: inline-flex;
+  gap: 3px;
+  margin-bottom: 16px;
+  padding: 3px;
+  border: 1px solid var(--wt-line);
+  border-radius: 9px;
+  background: #090c0f;
+}
+
+.settings-nav button {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--wt-muted);
+  cursor: pointer;
+  font-size: .75rem;
+  font-weight: 620;
+}
+
+.settings-nav button:hover { color: var(--wt-text); }
+.settings-nav button.active {
+  background: var(--wt-panel-raised);
+  color: var(--wt-text);
+  box-shadow: inset 0 0 0 1px var(--wt-line);
+}
+
+.relay-admin-console { display: grid; gap: 12px; }
+.relay-admin-console .btn:active { transform: translateY(1px); }
+
+.relay-admin-heading,
+.relay-admin-connect,
+.relay-admin-summary,
+.relay-admin-panel-head,
+.relay-client-row,
+.relay-project-row,
+.relay-credential-actions {
+  display: flex;
+  align-items: center;
+}
+
+.relay-admin-heading {
+  min-height: 52px;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.relay-admin-heading h2 {
+  color: var(--wt-text);
+  font-size: 1rem;
+  font-weight: 680;
+}
+
+.relay-admin-heading p,
+.relay-admin-panel-head p,
+.relay-admin-note,
+.relay-admin-empty p,
+.relay-credentials p {
+  color: var(--wt-dim);
+  font-size: .72rem;
+  line-height: 1.5;
+}
+
+.relay-admin-heading p { margin-top: 3px; }
+
+.relay-admin-connect {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.1fr) minmax(240px, .9fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--wt-line);
+  border-radius: var(--wt-radius);
+  background: var(--wt-panel-soft);
+}
+
+.relay-admin-connect .btn { min-height: 34px; white-space: nowrap; }
+
+.relay-admin-error {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid rgba(240, 127, 145, .3);
+  border-radius: 8px;
+  background: rgba(240, 127, 145, .075);
+  color: #ffc2cc;
+  font-size: .75rem;
+}
+
+.relay-admin-error span { overflow-wrap: anywhere; color: #e8a2ad; }
+
+.relay-admin-empty {
+  min-height: 240px;
+  padding: 72px 24px;
+  border: 1px dashed var(--wt-line-strong);
+  border-radius: var(--wt-radius);
+  color: var(--wt-muted);
+  text-align: center;
+}
+
+.relay-admin-empty p { max-width: 430px; margin: 6px auto 0; }
+
+.relay-admin-summary {
+  gap: 18px;
+  padding: 11px 12px;
+  border: 1px solid rgba(98, 217, 191, .18);
+  border-radius: var(--wt-radius);
+  background: rgba(98, 217, 191, .045);
+}
+
+.relay-health {
+  display: grid;
+  min-width: 205px;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 1px 8px;
+}
+
+.relay-health .live-dot { grid-row: 1 / 3; }
+.relay-health strong { color: var(--wt-text); font-size: .78rem; text-transform: capitalize; }
+.relay-health small {
+  overflow: hidden;
+  color: var(--wt-dim);
+  font-family: "JetBrains Mono", monospace;
+  font-size: .66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-admin-summary dl {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  grid-template-columns: repeat(4, minmax(70px, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--wt-line);
+  border-radius: 7px;
+  background: var(--wt-line);
+}
+
+.relay-admin-summary dl > div { padding: 6px 9px; background: #0c1113; }
+.relay-admin-summary dt { color: var(--wt-dim); font-size: .62rem; }
+.relay-admin-summary dd {
+  margin-top: 1px;
+  color: var(--wt-text);
+  font-family: "JetBrains Mono", monospace;
+  font-size: .75rem;
+}
+
+.relay-admin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.relay-admin-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--wt-line);
+  border-radius: var(--wt-radius);
+  background: rgba(13, 16, 19, .82);
+}
+
+.relay-admin-panel-head {
+  min-height: 58px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--wt-line);
+}
+
+.relay-admin-panel-head h3 { color: var(--wt-text); font-size: .78rem; font-weight: 650; }
+.relay-admin-panel-head p { margin-top: 2px; }
+
+.relay-client-row {
+  display: grid;
+  grid-template-columns: minmax(170px, .9fr) minmax(120px, 1fr) auto;
+  gap: 12px;
+  min-height: 58px;
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+}
+
+.relay-client-row:last-child,
+.relay-project-row:last-child { border-bottom: 0; }
+
+.relay-client-main { display: grid; min-width: 0; gap: 1px; }
+.relay-client-main strong,
+.relay-project-name strong {
+  overflow: hidden;
+  color: #dce2e5;
+  font-size: .76rem;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-client-main code,
+.relay-client-main span,
+.relay-client-projects,
+.relay-project-name span {
+  overflow: hidden;
+  color: var(--wt-dim);
+  font-family: "JetBrains Mono", monospace;
+  font-size: .65rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-client-projects { color: var(--wt-muted); }
+
+.relay-create-client { padding-bottom: 12px; }
+.relay-create-client > label,
+.relay-create-client > p,
+.relay-create-client > .btn { margin: 10px 12px 0; }
+.relay-create-client > label { display: block; }
+.relay-create-client > .btn { width: calc(100% - 24px); }
+
+.relay-credentials {
+  display: grid;
+  grid-template-columns: minmax(180px, .7fr) minmax(260px, 1.3fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(233, 187, 112, .3);
+  border-radius: var(--wt-radius);
+  background: rgba(233, 187, 112, .065);
+}
+
+.relay-credentials strong { color: #f3d6a5; font-size: .78rem; }
+.relay-credentials pre {
+  max-height: 142px;
+  overflow: auto;
+  padding: 9px 10px;
+  border: 1px solid rgba(233, 187, 112, .18);
+  border-radius: 7px;
+  background: #090b0c;
+  color: #e9d7ba;
+  font-family: "JetBrains Mono", monospace;
+  font-size: .66rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.relay-credential-actions { gap: 7px; }
+.relay-project-panel { grid-column: 1 / -1; }
+
+.relay-project-row {
+  display: grid;
+  grid-template-columns: minmax(180px, .55fr) minmax(260px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 52px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+}
+
+.relay-project-name { display: grid; min-width: 0; gap: 2px; }
+.relay-project-row .dropdown { min-width: 0; }
+.relay-list-empty { padding: 28px 12px; color: var(--wt-dim); font-size: .74rem; text-align: center; }
+
+@media (max-width: 900px) {
+  .relay-admin-connect,
+  .relay-admin-grid { grid-template-columns: 1fr; }
+  .relay-admin-summary { align-items: flex-start; flex-wrap: wrap; }
+  .relay-admin-summary dl { order: 3; width: 100%; flex-basis: 100%; }
+  .relay-health { flex: 1; }
+  .relay-credentials { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 680px) {
+  .relay-admin-shell { padding: 12px 12px 40px; }
+  .relay-admin-summary dl { grid-template-columns: repeat(2, minmax(80px, 1fr)); }
+  .relay-client-row,
+  .relay-project-row { grid-template-columns: 1fr; align-items: stretch; }
+  .relay-client-row .btn,
+  .relay-project-row .btn { justify-self: start; }
+}
+
 /* Event table ------------------------------------------------------------ */
 .signal-table {
   width: 100%;

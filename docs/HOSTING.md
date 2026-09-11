@@ -28,6 +28,13 @@ that desktop can add and remove its own project paths through the authenticated
 new credentials. Removing a project also removes its queued relay-side webhook
 history.
 
+The desktop GUI exposes the same privileged identity-management surface under
+**Settings > Relay server**. The admin token is held in memory for that view
+only. From there an operator can inspect relay health, list or revoke clients,
+create credentials for another client without replacing the local desktop
+identity, and move project ownership while preserving the project's queued
+history. Revoking a client deletes its project bindings and queued history.
+
 ## 1. Deploy on Coolify
 
 Coolify already runs Caddy as its proxy, so TLS certificates and WebSocket
