@@ -199,7 +199,8 @@ screen that edits the same `config.yaml` (relay endpoint, interception
 addresses, storage path, TUI theme, desktop window title bar) and performs
 relay registration — the
 equivalent of `wiretap relay register --save` — without the CLI. The admin
-token is used once for registration and never stored.
+token is used once for registration unless the operator separately saves a
+named relay-admin profile.
 
 Settings is organized by workflow: **Relay connection**, **Capture and
 delivery**, **Interface**, and a separate **Relay server** workspace for
@@ -207,12 +208,16 @@ operators. Relay administrators can create or revoke clients and add, move, or
 delete project bindings. Named relay profiles can securely retrieve their
 admin tokens from macOS Keychain, Windows Credential Manager, Secret Service,
 KWallet, or `pass`. Desktop project changes preserve the existing client
-identity and reconnect automatically.
+identity and reconnect automatically. Wiretap also stores the desktop's
+long-lived client token in a separate system-keyring entry when one is
+available. On headless systems it automatically falls back to the private
+mode-`0600` credentials file, with no storage setting to configure.
 Enter the relay URL and admin token to inspect health, manage registered
 clients, create portable client credentials, and reassign project ownership.
-The admin token remains in memory only and is cleared when you leave the
-workspace. Creating a client there does not replace this desktop's saved
-registration.
+For temporary connections, the admin token remains in memory only and is
+cleared when you leave the workspace. Saved profiles retrieve it from the
+system keyring when needed. Creating a client there does not replace this
+desktop's saved registration.
 
 Local state may contain request bodies, credentials, or personal data. Protect the wiretap configuration directory and any relay database accordingly.
 

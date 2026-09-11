@@ -3,8 +3,6 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -390,22 +388,11 @@ func printJSON(cmd *cobra.Command, v any) {
 	_ = enc.Encode(v)
 }
 
-// saveCredentials writes the RegisterResponse to the credentials file so
-// relayclient can load it on startup. The file is JSON with client_id,
-// client_token, and projects. Mode 0600 to keep the token secret.
+// saveCredentials persists the registration through the same manager used by
+// every other CLI path. Production prefers the system keyring for the token;
+// headless systems retain the mode-0600 compatibility file.
 func saveCredentials(resp *api.RegisterResponse) error {
-	m := config.NewManager()
-	dir, err := m.Dir()
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	path := filepath.Join(dir, "relay-credentials.json")
-	b, err := json.MarshalIndent(resp, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, b, 0o600)
+	return newConfigManager().SaveCredentials(config.Credentials{
+		ClientID: resp.ClientID, ClientToken: resp.ClientToken, Projects: resp.Projects,
+	})
 }

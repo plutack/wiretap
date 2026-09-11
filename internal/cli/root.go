@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/plutack/wiretap/internal/config"
+	"github.com/plutack/wiretap/internal/secretstore"
 )
 
 // Execute runs the root command for the wiretap binary. It is the only
@@ -96,5 +97,5 @@ func newConfigInitCmd() *cobra.Command {
 //
 //nolint:gochecknoglobals // intentional test seam; see comment in newConfigInitCmd
 var newConfigManager = func() *config.Manager {
-	return config.NewManager()
+	return config.NewManager(config.WithClientSecretStore(secretstore.ClientSystem{}))
 }

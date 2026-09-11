@@ -1,9 +1,40 @@
 package config
 
 import (
+	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 )
+
+type credentialSecretStore struct {
+	values map[string]string
+	setErr error
+}
+
+func (s *credentialSecretStore) Set(account, secret string) error {
+	if s.setErr != nil {
+		return s.setErr
+	}
+	if s.values == nil {
+		s.values = make(map[string]string)
+	}
+	s.values[account] = secret
+	return nil
+}
+
+func (s *credentialSecretStore) Get(account string) (string, error) {
+	secret, ok := s.values[account]
+	if !ok {
+		return "", errors.New("missing secret")
+	}
+	return secret, nil
+}
+
+func (s *credentialSecretStore) Delete(account string) error {
+	delete(s.values, account)
+	return nil
+}
 
 func TestCredentials_SaveAndLoad_RoundTrip(t *testing.T) {
 	m := NewManager(WithBaseDir(t.TempDir()))
@@ -63,6 +94,86 @@ func TestCredsPath_WithinConfigDir(t *testing.T) {
 	if creds != dir+"/relay-credentials.json" {
 		t.Errorf("CredsPath = %q, want %q", creds, dir+"/relay-credentials.json")
 	}
+}
+
+func TestCredentialsUseKeyringWithoutWritingToken(t *testing.T) {
+	store := &credentialSecretStore{}
+	m := NewManager(WithBaseDir(t.TempDir()), WithClientSecretStore(store))
+	if err := m.SaveCredentials(Credentials{
+		ClientID: "client-42", ClientToken: "secret-token", Projects: []string{"orders"},
+	}); err != nil {
+		t.Fatalf("SaveCredentials: %v", err)
+	}
+
+	raw, err := os.ReadFile(mustCredsPath(t, m))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if containsJSONSecret(raw, "secret-token") {
+		t.Fatalf("credentials file contains client token: %s", raw)
+	}
+
+	got, err := m.LoadCredentials()
+	if err != nil {
+		t.Fatalf("LoadCredentials: %v", err)
+	}
+	if got.ClientToken != "secret-token" || got.TokenStorage != TokenStorageKeyring || got.TokenKeyring == "" {
+		t.Fatalf("loaded credentials = %+v", got)
+	}
+}
+
+func TestCredentialsMigrateLegacyTokenToKeyring(t *testing.T) {
+	base := t.TempDir()
+	legacy := NewManager(WithBaseDir(base))
+	if err := legacy.SaveCredentials(Credentials{ClientID: "legacy", ClientToken: "old-token"}); err != nil {
+		t.Fatalf("write legacy credentials: %v", err)
+	}
+
+	store := &credentialSecretStore{}
+	m := NewManager(WithBaseDir(base), WithClientSecretStore(store))
+	got, err := m.LoadCredentials()
+	if err != nil {
+		t.Fatalf("LoadCredentials: %v", err)
+	}
+	if got.TokenStorage != TokenStorageKeyring || got.ClientToken != "old-token" {
+		t.Fatalf("migrated credentials = %+v", got)
+	}
+	raw, _ := os.ReadFile(mustCredsPath(t, m))
+	if containsJSONSecret(raw, "old-token") {
+		t.Fatalf("legacy token remained on disk: %s", raw)
+	}
+}
+
+func TestCredentialsFallBackToProtectedFile(t *testing.T) {
+	store := &credentialSecretStore{setErr: errors.New("keyring unavailable")}
+	m := NewManager(WithBaseDir(t.TempDir()), WithClientSecretStore(store))
+	if err := m.SaveCredentials(Credentials{ClientID: "headless", ClientToken: "file-token"}); err != nil {
+		t.Fatalf("SaveCredentials: %v", err)
+	}
+	got, err := m.LoadCredentials()
+	if err != nil {
+		t.Fatalf("LoadCredentials: %v", err)
+	}
+	if got.ClientToken != "file-token" || got.TokenStorage != TokenStorageFile || got.StorageWarning == "" {
+		t.Fatalf("fallback credentials = %+v", got)
+	}
+}
+
+func mustCredsPath(t *testing.T, m *Manager) string {
+	t.Helper()
+	p, err := m.CredsPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func containsJSONSecret(raw []byte, secret string) bool {
+	var value map[string]any
+	if json.Unmarshal(raw, &value) != nil {
+		return true
+	}
+	return value["client_token"] == secret
 }
 
 // filepathDir is a thin wrapper to keep imports tidy.
