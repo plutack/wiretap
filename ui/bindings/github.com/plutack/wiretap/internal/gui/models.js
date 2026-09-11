@@ -1941,6 +1941,20 @@ export class SettingsView {
              */
             this["creds_path"] = "";
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["token_storage"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["token_warning"] = undefined;
+        }
         if (!("tunnel_running" in $$source)) {
             /**
              * @member

@@ -13,10 +13,9 @@ import (
 	"github.com/plutack/wiretap/internal/config"
 )
 
-// Settings bindings: the GUI settings screen edits config.yaml and performs
-// relay registration without touching the CLI. The admin token is used for
-// the one registration call and never persisted — storing it (ideally in the
-// OS keychain) is a follow-up.
+// Settings bindings: the GUI edits config.yaml and performs relay registration
+// without touching the CLI. Registration uses the admin token for one call;
+// relay-server profiles are the separate, explicit path for remembering it.
 
 // SettingsView is the full settings payload: current config values, resolved
 // paths for display, and the relay registration state (credentials minus the
@@ -36,6 +35,8 @@ type SettingsView struct {
 	ClientID       string   `json:"client_id,omitempty"`
 	Projects       []string `json:"projects,omitempty"`
 	CredsPath      string   `json:"creds_path"`
+	TokenStorage   string   `json:"token_storage,omitempty"`
+	TokenWarning   string   `json:"token_warning,omitempty"`
 	TunnelRunning  bool     `json:"tunnel_running"`
 }
 
@@ -175,6 +176,8 @@ func (b *Bindings) GetSettings() (SettingsView, error) {
 		v.Registered = true
 		v.ClientID = creds.ClientID
 		v.Projects = creds.Projects
+		v.TokenStorage = creds.TokenStorage
+		v.TokenWarning = creds.StorageWarning
 	}
 	return v, nil
 }

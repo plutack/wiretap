@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.2.11 — 2026-09-11
 
 ### Saved relay administration
 
@@ -12,6 +12,11 @@
   Wiretap's local metadata. No plaintext or encrypted-file fallback is used.
 - Preserve ephemeral relay administration when a keyring is unavailable or
   the user disables **Remember this relay**.
+- Prefer a separate system-keyring entry for the desktop's long-lived relay
+  client token, automatically migrate existing credentials, and fall back to
+  the protected mode-`0600` file on headless systems without a usable keyring.
+- Show the active client-token storage location as status information in Relay
+  connection; there is no storage mode for users to configure.
 
 ## v0.2.10 — 2026-09-11
 
