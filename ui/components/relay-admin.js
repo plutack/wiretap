@@ -87,6 +87,7 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
   };
 
   const disconnect = () => {
+	setBusy("");
     setConnection((current) => ({ ...current, token: "" }));
     setOverview(null);
     setCredentials(null);

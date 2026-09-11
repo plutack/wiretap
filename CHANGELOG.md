@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.2.12 — 2026-09-11
+
+### Keyring reliability hotfix
+
+- Use Zalando's native keyring implementation exclusively under one `wiretap`
+  service, with unique account names for relay-admin and client tokens.
+- Fix repeated Secret Service collection creation on Linux and the resulting
+  `secret not found` failure when reconnecting a saved relay.
+- Verify every admin-token write can be read back before saving profile
+  metadata, preventing unusable saved-relay entries.
+- Clear the relay connection busy state on disconnect so Connect cannot remain
+  stuck on **Connecting...** after an unnamed profile is saved.
+
 ## v0.2.11 — 2026-09-11
 
 ### Saved relay administration

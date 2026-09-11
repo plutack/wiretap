@@ -19,11 +19,15 @@ import (
 type memorySecrets struct {
 	values map[string]string
 	fail   error
+	drop   bool
 }
 
 func (m *memorySecrets) Set(account, secret string) error {
 	if m.fail != nil {
 		return m.fail
+	}
+	if m.drop {
+		return nil
 	}
 	m.values[account] = secret
 	return nil
@@ -232,6 +236,21 @@ func TestRelayAdminProfileKeyringFailureDoesNotWriteMetadata(t *testing.T) {
 	b.secrets = &memorySecrets{values: map[string]string{}, fail: errors.New("locked")}
 	if _, err := b.RelayAdminSaveProfile(RelayAdminSaveProfileInput{RelayURL: "https://relay.example.com", AdminToken: "secret"}); err == nil {
 		t.Fatal("keyring failure accepted")
+	}
+	profiles, err := b.RelayAdminProfiles()
+	if err != nil || len(profiles) != 0 {
+		t.Fatalf("profiles = %+v, %v", profiles, err)
+	}
+}
+
+func TestRelayAdminProfileUnreadableWriteDoesNotWriteMetadata(t *testing.T) {
+	t.Parallel()
+	b, _ := newBindings(t)
+	b.secrets = &memorySecrets{values: map[string]string{}, drop: true}
+	if _, err := b.RelayAdminSaveProfile(RelayAdminSaveProfileInput{
+		RelayURL: "https://relay.example.com", AdminToken: "secret",
+	}); err == nil || !strings.Contains(err.Error(), "verify relay profile") {
+		t.Fatalf("unreadable keyring write error = %v", err)
 	}
 	profiles, err := b.RelayAdminProfiles()
 	if err != nil || len(profiles) != 0 {

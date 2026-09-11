@@ -192,6 +192,18 @@ func (b *Bindings) RelayAdminSaveProfile(in RelayAdminSaveProfileInput) (RelayAd
 	if err := b.secrets.Set(relayAdminProfileAccount(profile.ID), token); err != nil {
 		return RelayAdminProfileView{}, fmt.Errorf("save relay profile in system keyring: %w", err)
 	}
+	// Verify the same account can be read before committing profile metadata.
+	// Some Secret Service collection configurations accept a write but cannot
+	// rediscover it after reopening; without this check they leave a saved relay
+	// that can never reconnect.
+	verified, err := b.secrets.Get(relayAdminProfileAccount(profile.ID))
+	if err != nil || verified != token {
+		_ = b.secrets.Delete(relayAdminProfileAccount(profile.ID))
+		if err == nil {
+			err = errors.New("stored token did not match")
+		}
+		return RelayAdminProfileView{}, fmt.Errorf("verify relay profile in system keyring: %w", err)
+	}
 	profiles, err := b.app.LoadRelayAdminProfiles()
 	if err != nil {
 		_ = b.secrets.Delete(relayAdminProfileAccount(profile.ID))
