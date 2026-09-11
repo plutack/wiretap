@@ -201,7 +201,11 @@ relay registration — the
 equivalent of `wiretap relay register --save` — without the CLI. The admin
 token is used once for registration and never stored.
 
-Settings also includes a separate **Relay server** workspace for operators.
+Settings is organized by workflow: **Relay connection**, **Capture and
+delivery**, **Interface**, and a separate **Relay server** workspace for
+operators. Relay administrators can create or revoke clients and add, move, or
+delete project bindings. Desktop project changes preserve the existing client
+identity and reconnect automatically.
 Enter the relay URL and admin token to inspect health, manage registered
 clients, create portable client credentials, and reassign project ownership.
 The admin token remains in memory only and is cleared when you leave the

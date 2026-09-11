@@ -85,6 +85,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /admin/clients/{clientID}", s.requireAdmin(s.handleDeleteClient))
 	mux.HandleFunc("GET /admin/projects", s.requireAdmin(s.handleListProjects))
 	mux.HandleFunc("POST /admin/projects", s.requireAdmin(s.handleReclaimProject))
+	mux.HandleFunc("PUT /admin/projects/{project}", s.requireAdmin(s.handleAssignProject))
+	mux.HandleFunc("DELETE /admin/projects/{project}", s.requireAdmin(s.handleDeleteProject))
 	mux.HandleFunc("GET /admin/projects/{project}/webhooks", s.requireAdmin(s.handleListWebhooks))
 	// WebSocket tunnel. Auth via HTTP basic auth on the upgrade request.
 	mux.HandleFunc("GET /tunnel", s.HandleTunnel)
@@ -405,6 +407,63 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, api.ListProjectsResponse{Projects: projects})
+}
+
+func (s *Server) handleAssignProject(w http.ResponseWriter, r *http.Request) {
+	project := strings.Trim(strings.TrimSpace(r.PathValue("project")), "/")
+	if !projectPathRE.MatchString(project) {
+		writeErr(w, http.StatusBadRequest, "invalid_path", fmt.Sprintf("project %q does not match %s", project, projectPathRE.String()))
+		return
+	}
+	var req api.AssignProjectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return
+	}
+	req.ClientID = strings.TrimSpace(req.ClientID)
+	if req.ClientID == "" {
+		writeErr(w, http.StatusBadRequest, "invalid_request", "client_id is required")
+		return
+	}
+	if _, err := s.store.Client(r.Context(), req.ClientID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "client_id does not exist")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	if err := s.store.BindProject(r.Context(), project, req.ClientID, s.clock.Now()); err != nil {
+		if errors.Is(err, store.ErrConflict) {
+			writeErr(w, http.StatusConflict, "conflict", fmt.Sprintf("project %q is already claimed", project))
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	created, err := s.store.Project(r.Context(), project)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, api.Project{Path: created.Path, ClientID: created.ClientID, CreatedAt: created.CreatedAt.Unix(), AckedSeq: created.AckedSeq})
+}
+
+func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
+	project := r.PathValue("project")
+	if !projectPathRE.MatchString(project) {
+		writeErr(w, http.StatusBadRequest, "invalid_path", fmt.Sprintf("project %q does not match %s", project, projectPathRE.String()))
+		return
+	}
+	if err := s.store.DeleteProject(r.Context(), project); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "no such project")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleReclaimProject(w http.ResponseWriter, r *http.Request) {

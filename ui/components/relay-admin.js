@@ -16,16 +16,7 @@ function relativeTime(seconds) {
   return new Date(Number(seconds) * 1000).toLocaleDateString();
 }
 
-function SettingsNav({ active, onChange }) {
-  return html`<nav class="settings-nav" aria-label="Settings sections">
-    <button class=${active === "desktop" ? "active" : ""} onClick=${() => onChange("desktop")}>Desktop</button>
-    <button class=${active === "relay" ? "active" : ""} onClick=${() => onChange("relay")}>Relay server</button>
-  </nav>`;
-}
-
-export { SettingsNav };
-
-export function RelayAdmin({ defaultURL, localClientID, onToast }) {
+export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
   const [connection, setConnection] = useState({ url: defaultURL || "", token: "" });
   const [overview, setOverview] = useState(null);
   const [error, setError] = useState("");
@@ -33,6 +24,7 @@ export function RelayAdmin({ defaultURL, localClientID, onToast }) {
   const [createForm, setCreateForm] = useState({ name: "", projects: "" });
   const [credentials, setCredentials] = useState(null);
   const [projectTargets, setProjectTargets] = useState({});
+  const [newProject, setNewProject] = useState({ path: "", clientID: "" });
 
   useEffect(() => {
     if (!connection.url && defaultURL) setConnection((current) => ({ ...current, url: defaultURL }));
@@ -48,6 +40,7 @@ export function RelayAdmin({ defaultURL, localClientID, onToast }) {
       setOverview(result);
       setProjectTargets(Object.fromEntries((result.projects || []).map((project) => [project.path, project.client_id])));
       if (!quiet) onToast(`Connected to relay ${result.version || "server"}`);
+      setNewProject((current) => ({ ...current, clientID: current.clientID || result.clients?.[0]?.client_id || "" }));
       return true;
     } catch (e) {
       setOverview(null);
@@ -78,6 +71,7 @@ export function RelayAdmin({ defaultURL, localClientID, onToast }) {
       setCreateForm({ name: "", projects: "" });
       onToast(`Created client ${result.client_id}`);
       await inspect({ quiet: true });
+      onChanged && onChanged();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -106,6 +100,7 @@ export function RelayAdmin({ defaultURL, localClientID, onToast }) {
       await api.relayAdminDeleteClient({ ...session(), client_id: client.client_id });
       onToast(`Revoked client ${client.client_id}`);
       await inspect({ quiet: true });
+      onChanged && onChanged();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -124,6 +119,41 @@ export function RelayAdmin({ defaultURL, localClientID, onToast }) {
       await api.relayAdminReassignProject({ ...session(), path: project.path, new_client_id: target, force: true });
       onToast(`Moved project ${project.path}`);
       await inspect({ quiet: true });
+      onChanged && onChanged();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const addProject = async () => {
+    const path = newProject.path.trim().replace(/^\/+|\/+$/g, "");
+    if (!path || !newProject.clientID) return;
+    setBusy("add-project");
+    setError("");
+    try {
+      await api.relayAdminAddProject({ ...session(), path, client_id: newProject.clientID });
+      setNewProject((current) => ({ ...current, path: "" }));
+      onToast(`Added project ${path}`);
+      await inspect({ quiet: true });
+      onChanged && onChanged();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const deleteProject = async (project) => {
+    if (!window.confirm(`Delete ${project.path}? This permanently deletes its queued relay history. Local deliveries remain available.`)) return;
+    setBusy(`delete-project:${project.path}`);
+    setError("");
+    try {
+      await api.relayAdminDeleteProject({ ...session(), path: project.path });
+      onToast(`Deleted project ${project.path}`);
+      await inspect({ quiet: true });
+      onChanged && onChanged();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -221,14 +251,34 @@ export function RelayAdmin({ defaultURL, localClientID, onToast }) {
       </div>
 
       <section class="relay-admin-panel relay-project-panel">
-        <div class="relay-admin-panel-head"><div><h3>Project ownership <span>${overview.projects?.length || 0}</span></h3><p>Move an existing path between registered clients. Its queued history is preserved.</p></div></div>
+        <div class="relay-admin-panel-head"><div><h3>Project ownership <span>${overview.projects?.length || 0}</span></h3><p>Add paths, change owners, or remove paths. This view refreshes after every change.</p></div></div>
+        <div class="relay-project-create">
+          <${Field} label="Project path">
+            <${Input} class="font-mono" placeholder="orders" value=${newProject.path}
+              disabled=${Boolean(busy)} onInput=${(event) => setNewProject({ ...newProject, path: event.target.value })}
+              onKeyDown=${(event) => event.key === "Enter" && addProject()} />
+          </>
+          <${Field} label="Owner">
+            <${Dropdown} aria-label="New project owner" value=${newProject.clientID} options=${clientOptions}
+              disabled=${Boolean(busy)} onChange=${(event) => setNewProject({ ...newProject, clientID: event.target.value })} />
+          </>
+          <${Button} variant="primary" disabled=${Boolean(busy) || !newProject.path.trim() || !newProject.clientID} onClick=${addProject}>
+            ${busy === "add-project" ? "Adding..." : "Add project"}
+          </>
+        </div>
+        <p class="relay-project-sync-note">If this desktop gains or loses a project, its saved project list and tunnel update automatically.</p>
         <div class="relay-project-list">
           ${(overview.projects || []).map((project) => html`<article class="relay-project-row" key=${project.path}>
             <div class="relay-project-name"><strong>${project.path}</strong><span>acknowledged through #${project.acked_seq || 0}</span></div>
             <${Dropdown} aria-label=${`Owner for ${project.path}`} value=${projectTargets[project.path] || project.client_id}
               options=${clientOptions} onChange=${(event) => setProjectTargets({ ...projectTargets, [project.path]: event.target.value })} />
-            <${Button} class="btn-xs" disabled=${Boolean(busy) || !projectTargets[project.path] || projectTargets[project.path] === project.client_id}
-              onClick=${() => moveProject(project)}>${busy === `move:${project.path}` ? "Moving..." : "Move"}</>
+            <div class="relay-project-actions">
+              <${Button} class="btn-xs" disabled=${Boolean(busy) || !projectTargets[project.path] || projectTargets[project.path] === project.client_id}
+                onClick=${() => moveProject(project)}>${busy === `move:${project.path}` ? "Moving..." : "Move"}</>
+              <${Button} class="btn-xs" variant="danger" disabled=${Boolean(busy)} onClick=${() => deleteProject(project)}>
+                ${busy === `delete-project:${project.path}` ? "Deleting..." : "Delete"}
+              </>
+            </div>
           </article>`)}
           ${(overview.projects || []).length === 0 ? html`<div class="relay-list-empty">No project paths are claimed.</div>` : null}
         </div>
