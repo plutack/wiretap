@@ -14,6 +14,7 @@ import { useEffect, useState } from "../vendor/preact/index.js";
 import { api } from "../lib/api.js";
 import { Button, Input, Select, Field, Section } from "./ui.js";
 import { Dropdown } from "./dropdown.js";
+import { RelayAdmin, SettingsNav } from "./relay-admin.js";
 import { DENSITIES, FONT_SCALES, loadDisplayPrefs, saveDisplayPrefs } from "../lib/prefs.js";
 
 const SHELL_OPTIONS = [
@@ -44,6 +45,7 @@ function SettingsCard({ title, hint, children }) {
 }
 
 export function Settings({ onToast, onSaved }) {
+  const [section, setSection] = useState("desktop");
   const [view, setView] = useState(null); // last GetSettings payload
   const [form, setForm] = useState(null); // editable SettingsInput
   const [saving, setSaving] = useState(false);
@@ -86,6 +88,15 @@ export function Settings({ onToast, onSaved }) {
 
   if (!view || !form) {
     return html`<div class="p-6 text-sm text-neutral-500">Loading settings…</div>`;
+  }
+
+  if (section === "relay") {
+    return html`<div class="h-full overflow-y-auto">
+      <div class="relay-admin-shell">
+        <${SettingsNav} active=${section} onChange=${setSection} />
+        <${RelayAdmin} defaultURL=${view.relay_url} localClientID=${view.client_id} onToast=${onToast} />
+      </div>
+    </div>`;
   }
 
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
@@ -161,6 +172,7 @@ export function Settings({ onToast, onSaved }) {
 
   return html`<div class="h-full overflow-y-auto">
     <div class="mx-auto flex max-w-2xl flex-col gap-4 p-4 pb-16">
+      <${SettingsNav} active=${section} onChange=${setSection} />
       <${SettingsCard}
         title="Relay"
         hint="Tunnel endpoint for receiving public webhooks. Accepts the wss:// tunnel URL or the relay's https:// base URL."
@@ -183,8 +195,8 @@ export function Settings({ onToast, onSaved }) {
         </>
         <p class="text-xs text-neutral-500">
           When set, every incoming webhook is automatically POSTed to this URL
-          right after it is stored — transforms with the on_replay trigger run
-          first, same as a manual replay.
+          right after it is stored. Transforms with the on_replay trigger run
+          first, just like a manual replay.
         </p>
         <div class="settings-connection-status">
           <span class="settings-status-line">

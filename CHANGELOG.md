@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Relay server management
+
+- Added a privileged **Relay server** workspace under GUI Settings with
+  ephemeral admin-token authentication and live relay health.
+- Added client inventory, one-time credential creation, client revocation, and
+  project ownership reassignment without changing the current desktop identity.
+- Added explicit warnings for client deletion and local-identity revocation.
+  Project moves preserve queued webhook history.
+
 ### Portable transforms
 
 - Added versioned JSON import and export for every transform trigger.

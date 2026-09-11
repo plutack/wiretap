@@ -104,11 +104,17 @@ func (s *TunnelSession) send(m relayproto.Message) bool {
 	}
 }
 
-// countTunnels returns the number of active tunnels. Used by /health later.
+// countTunnels returns the number of unique connected desktop sessions. One
+// session can be indexed under several project paths, so counting map entries
+// would overstate the number shown by /health.
 func (r *TunnelRegistry) countTunnels() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return len(r.tunnels)
+	unique := make(map[*TunnelSession]struct{}, len(r.tunnels))
+	for _, session := range r.tunnels {
+		unique[session] = struct{}{}
+	}
+	return len(unique)
 }
 
 // HandleTunnel upgrades the HTTP request to a WebSocket and runs the

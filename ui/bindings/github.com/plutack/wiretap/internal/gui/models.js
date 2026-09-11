@@ -630,6 +630,442 @@ export class RegisterView {
     }
 }
 
+export class RelayAdminClientView {
+    /**
+     * Creates a new RelayAdminClientView instance.
+     * @param {Partial<RelayAdminClientView>} [$$source = {}] - The source object to create the RelayAdminClientView.
+     */
+    constructor($$source = {}) {
+        if (!("client_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["client_id"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["display_name"] = undefined;
+        }
+        if (!("created_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["created_at"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["last_seen_at"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["projects"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminClientView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminClientView}
+     */
+    static createFrom($$source = {}) {
+        const $$createField4_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("projects" in $$parsedSource) {
+            $$parsedSource["projects"] = $$createField4_0($$parsedSource["projects"]);
+        }
+        return new RelayAdminClientView(/** @type {Partial<RelayAdminClientView>} */($$parsedSource));
+    }
+}
+
+/**
+ * RelayAdminCreateClientInput creates credentials for another relay client.
+ * Unlike RegisterRelay, it does not replace this desktop's saved identity.
+ */
+export class RelayAdminCreateClientInput {
+    /**
+     * Creates a new RelayAdminCreateClientInput instance.
+     * @param {Partial<RelayAdminCreateClientInput>} [$$source = {}] - The source object to create the RelayAdminCreateClientInput.
+     */
+    constructor($$source = {}) {
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
+        if (!("admin_token" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["admin_token"] = "";
+        }
+        if (!("display_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["display_name"] = "";
+        }
+        if (!("projects" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["projects"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminCreateClientInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminCreateClientInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("projects" in $$parsedSource) {
+            $$parsedSource["projects"] = $$createField3_0($$parsedSource["projects"]);
+        }
+        return new RelayAdminCreateClientInput(/** @type {Partial<RelayAdminCreateClientInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * RelayAdminCredentialsView contains a newly-created client token. The relay
+ * returns it once, so the GUI keeps it only in component memory for copying.
+ */
+export class RelayAdminCredentialsView {
+    /**
+     * Creates a new RelayAdminCredentialsView instance.
+     * @param {Partial<RelayAdminCredentialsView>} [$$source = {}] - The source object to create the RelayAdminCredentialsView.
+     */
+    constructor($$source = {}) {
+        if (!("client_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["client_id"] = "";
+        }
+        if (!("client_token" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["client_token"] = "";
+        }
+        if (!("projects" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["projects"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminCredentialsView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminCredentialsView}
+     */
+    static createFrom($$source = {}) {
+        const $$createField2_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("projects" in $$parsedSource) {
+            $$parsedSource["projects"] = $$createField2_0($$parsedSource["projects"]);
+        }
+        return new RelayAdminCredentialsView(/** @type {Partial<RelayAdminCredentialsView>} */($$parsedSource));
+    }
+}
+
+/**
+ * RelayAdminDeleteClientInput revokes a relay identity. Relay storage cascades
+ * the deletion to that client's project bindings and queued webhook history.
+ */
+export class RelayAdminDeleteClientInput {
+    /**
+     * Creates a new RelayAdminDeleteClientInput instance.
+     * @param {Partial<RelayAdminDeleteClientInput>} [$$source = {}] - The source object to create the RelayAdminDeleteClientInput.
+     */
+    constructor($$source = {}) {
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
+        if (!("admin_token" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["admin_token"] = "";
+        }
+        if (!("client_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["client_id"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminDeleteClientInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminDeleteClientInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RelayAdminDeleteClientInput(/** @type {Partial<RelayAdminDeleteClientInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * RelayAdminInput carries the ephemeral credentials for one relay admin
+ * operation. The admin token crosses the Wails bridge for the request only;
+ * wiretap never writes it to config or credentials storage.
+ */
+export class RelayAdminInput {
+    /**
+     * Creates a new RelayAdminInput instance.
+     * @param {Partial<RelayAdminInput>} [$$source = {}] - The source object to create the RelayAdminInput.
+     */
+    constructor($$source = {}) {
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
+        if (!("admin_token" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["admin_token"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RelayAdminInput(/** @type {Partial<RelayAdminInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * RelayAdminOverviewView is the bounded server-management snapshot rendered
+ * by Settings. It deliberately contains no client or admin secret.
+ */
+export class RelayAdminOverviewView {
+    /**
+     * Creates a new RelayAdminOverviewView instance.
+     * @param {Partial<RelayAdminOverviewView>} [$$source = {}] - The source object to create the RelayAdminOverviewView.
+     */
+    constructor($$source = {}) {
+        if (!("base_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["base_url"] = "";
+        }
+        if (!("status" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["status"] = "";
+        }
+        if (!("version" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["version"] = "";
+        }
+        if (!("tunnel_count" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["tunnel_count"] = 0;
+        }
+        if (!("clients" in $$source)) {
+            /**
+             * @member
+             * @type {RelayAdminClientView[]}
+             */
+            this["clients"] = [];
+        }
+        if (!("projects" in $$source)) {
+            /**
+             * @member
+             * @type {RelayAdminProjectView[]}
+             */
+            this["projects"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminOverviewView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminOverviewView}
+     */
+    static createFrom($$source = {}) {
+        const $$createField4_0 = $$createType3;
+        const $$createField5_0 = $$createType5;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("clients" in $$parsedSource) {
+            $$parsedSource["clients"] = $$createField4_0($$parsedSource["clients"]);
+        }
+        if ("projects" in $$parsedSource) {
+            $$parsedSource["projects"] = $$createField5_0($$parsedSource["projects"]);
+        }
+        return new RelayAdminOverviewView(/** @type {Partial<RelayAdminOverviewView>} */($$parsedSource));
+    }
+}
+
+export class RelayAdminProjectView {
+    /**
+     * Creates a new RelayAdminProjectView instance.
+     * @param {Partial<RelayAdminProjectView>} [$$source = {}] - The source object to create the RelayAdminProjectView.
+     */
+    constructor($$source = {}) {
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("client_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["client_id"] = "";
+        }
+        if (!("created_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["created_at"] = 0;
+        }
+        if (!("acked_seq" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["acked_seq"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminProjectView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminProjectView}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RelayAdminProjectView(/** @type {Partial<RelayAdminProjectView>} */($$parsedSource));
+    }
+}
+
+/**
+ * RelayAdminReassignProjectInput moves a path to another registered client.
+ */
+export class RelayAdminReassignProjectInput {
+    /**
+     * Creates a new RelayAdminReassignProjectInput instance.
+     * @param {Partial<RelayAdminReassignProjectInput>} [$$source = {}] - The source object to create the RelayAdminReassignProjectInput.
+     */
+    constructor($$source = {}) {
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
+        if (!("admin_token" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["admin_token"] = "";
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("new_client_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["new_client_id"] = "";
+        }
+        if (!("force" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["force"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminReassignProjectInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminReassignProjectInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RelayAdminReassignProjectInput(/** @type {Partial<RelayAdminReassignProjectInput>} */($$parsedSource));
+    }
+}
+
 /**
  * ReplayResult is the return value of ReplayWebhook: the upstream HTTP status.
  */
@@ -790,7 +1226,7 @@ export class ScriptTestRequest {
      * @returns {ScriptTestRequest}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType2;
+        const $$createField3_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("headers" in $$parsedSource) {
             $$parsedSource["headers"] = $$createField3_0($$parsedSource["headers"]);
@@ -1032,7 +1468,7 @@ export class SessionPageView {
      * @returns {SessionPageView}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType4;
+        const $$createField0_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
             $$parsedSource["sessions"] = $$createField0_0($$parsedSource["sessions"]);
@@ -1461,7 +1897,7 @@ export class TargetView {
      * @returns {TargetView}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType6;
+        const $$createField3_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("clients" in $$parsedSource) {
             $$parsedSource["clients"] = $$createField3_0($$parsedSource["clients"]);
@@ -1627,8 +2063,12 @@ export class WebhookView {
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = $Create.Map($Create.Any, $$createType0);
-const $$createType2 = $Create.Map($Create.Any, $Create.Any);
-const $$createType3 = SessionView.createFrom;
-const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = ClientView.createFrom;
-const $$createType6 = $Create.Array($$createType5);
+const $$createType2 = RelayAdminClientView.createFrom;
+const $$createType3 = $Create.Array($$createType2);
+const $$createType4 = RelayAdminProjectView.createFrom;
+const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = $Create.Map($Create.Any, $Create.Any);
+const $$createType7 = SessionView.createFrom;
+const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = ClientView.createFrom;
+const $$createType10 = $Create.Array($$createType9);

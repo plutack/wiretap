@@ -201,6 +201,13 @@ relay registration — the
 equivalent of `wiretap relay register --save` — without the CLI. The admin
 token is used once for registration and never stored.
 
+Settings also includes a separate **Relay server** workspace for operators.
+Enter the relay URL and admin token to inspect health, manage registered
+clients, create portable client credentials, and reassign project ownership.
+The admin token remains in memory only and is cleared when you leave the
+workspace. Creating a client there does not replace this desktop's saved
+registration.
+
 Local state may contain request bodies, credentials, or personal data. Protect the wiretap configuration directory and any relay database accordingly.
 
 ## Stack

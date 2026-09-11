@@ -150,11 +150,13 @@ func (s *Server) writeClientProjects(w http.ResponseWriter, r *http.Request, cli
 	writeJSON(w, http.StatusOK, api.ClientProjectsResponse{Projects: projects})
 }
 
-// handleHealth returns a static liveness payload. We do not probe the store
-// here so a DB hiccup never blocks monitoring probes; a separate /readyz
-// route can be added later for that.
+// handleHealth returns liveness plus the number of connected desktop sessions.
+// We do not probe the store here so a DB hiccup never blocks monitoring probes;
+// a separate /readyz route can be added later for that.
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, api.HealthResponse{Status: "ok", Version: s.version})
+	writeJSON(w, http.StatusOK, api.HealthResponse{
+		Status: "ok", Version: s.version, TunnelCount: s.tunnels.countTunnels(),
+	})
 }
 
 // handleRegister creates a new client and binds the requested project

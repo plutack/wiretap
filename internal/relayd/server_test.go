@@ -85,12 +85,14 @@ func makeClientFor(t *testing.T, s *Server, clientID, token string, projects ...
 
 func TestHandleHealth_StatusOK(t *testing.T) {
 	t.Parallel()
-	_, _, c := freshServer(t)
+	srv, _, c := freshServer(t)
+	session := srv.tunnels.attach("project-a", "client-a")
+	srv.tunnels.attachSession("project-b", session)
 	resp, err := c.Health(context.Background())
 	if err != nil {
 		t.Fatalf("Health: %v", err)
 	}
-	if resp.Status != "ok" || resp.Version != "test-v" {
+	if resp.Status != "ok" || resp.Version != "test-v" || resp.TunnelCount != 1 {
 		t.Errorf("Health = %+v", resp)
 	}
 }
