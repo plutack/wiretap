@@ -137,6 +137,9 @@ are migrated automatically on a later load. On headless systems without a
 usable keyring, Wiretap falls back to the same file with mode `0600` so tunnel
 startup remains unattended and portable. There is no storage-mode setting to
 manage. The more privileged relay admin token is never placed in this file.
+On Linux, the keyring integration resolves the Secret Service `default` alias
+and uses that existing collection rather than creating a Wiretap-specific
+collection.
 
 Claim projects separately using the saved client credentials. This does not
 create a new client or rotate its token:
