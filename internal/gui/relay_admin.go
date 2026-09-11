@@ -2,8 +2,11 @@ package gui
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 	"sort"
 	"strings"
@@ -11,6 +14,8 @@ import (
 
 	"github.com/plutack/wiretap/internal/api"
 	"github.com/plutack/wiretap/internal/app"
+	"github.com/plutack/wiretap/internal/config"
+	"github.com/plutack/wiretap/internal/secretstore"
 )
 
 const relayAdminTimeout = 15 * time.Second
@@ -21,6 +26,19 @@ const relayAdminTimeout = 15 * time.Second
 type RelayAdminInput struct {
 	RelayURL   string `json:"relay_url"`
 	AdminToken string `json:"admin_token"`
+}
+
+type RelayAdminSaveProfileInput struct {
+	RelayURL   string `json:"relay_url"`
+	AdminToken string `json:"admin_token"`
+	Name       string `json:"name"`
+}
+
+type RelayAdminProfileView struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	RelayURL string `json:"relay_url"`
+	LastUsed int64  `json:"last_used"`
 }
 
 // RelayAdminCreateClientInput creates credentials for another relay client.
@@ -136,6 +154,122 @@ func (b *Bindings) RelayAdminOverview(in RelayAdminInput) (RelayAdminOverviewVie
 		view.Projects = append(view.Projects, relayAdminProjectView(project))
 	}
 	return view, nil
+}
+
+func (b *Bindings) RelayAdminProfiles() ([]RelayAdminProfileView, error) {
+	profiles, err := b.app.LoadRelayAdminProfiles()
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(profiles, func(i, j int) bool { return profiles[i].LastUsed > profiles[j].LastUsed })
+	out := make([]RelayAdminProfileView, 0, len(profiles))
+	for _, profile := range profiles {
+		out = append(out, relayAdminProfileView(profile))
+	}
+	return out, nil
+}
+
+// RelayAdminSaveProfile stores non-secret relay metadata on disk and the
+// privileged token in the operating system credential store.
+func (b *Bindings) RelayAdminSaveProfile(in RelayAdminSaveProfileInput) (RelayAdminProfileView, error) {
+	token := strings.TrimSpace(in.AdminToken)
+	if token == "" {
+		return RelayAdminProfileView{}, errors.New("save relay profile: admin token is required")
+	}
+	_, base, err := relayAdminClient(in.RelayURL, token)
+	if err != nil {
+		return RelayAdminProfileView{}, err
+	}
+	profile := config.RelayAdminProfile{ID: relayAdminProfileID(base), Name: strings.TrimSpace(in.Name), RelayURL: base, LastUsed: time.Now().Unix()}
+	if profile.Name == "" {
+		if parsed, parseErr := url.Parse(base); parseErr == nil {
+			profile.Name = parsed.Hostname()
+		}
+	}
+	if profile.Name == "" {
+		profile.Name = base
+	}
+	if err := b.secrets.Set(relayAdminProfileAccount(profile.ID), token); err != nil {
+		return RelayAdminProfileView{}, fmt.Errorf("save relay profile in system keyring: %w", err)
+	}
+	profiles, err := b.app.LoadRelayAdminProfiles()
+	if err != nil {
+		_ = b.secrets.Delete(relayAdminProfileAccount(profile.ID))
+		return RelayAdminProfileView{}, err
+	}
+	updated := false
+	for i := range profiles {
+		if profiles[i].ID == profile.ID {
+			profiles[i] = profile
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		profiles = append(profiles, profile)
+	}
+	if err := b.app.SaveRelayAdminProfiles(profiles); err != nil {
+		_ = b.secrets.Delete(relayAdminProfileAccount(profile.ID))
+		return RelayAdminProfileView{}, err
+	}
+	return relayAdminProfileView(profile), nil
+}
+
+// RelayAdminLoadProfile retrieves a saved token and marks the profile used.
+func (b *Bindings) RelayAdminLoadProfile(id string) (RelayAdminInput, error) {
+	id = strings.TrimSpace(id)
+	profiles, err := b.app.LoadRelayAdminProfiles()
+	if err != nil {
+		return RelayAdminInput{}, err
+	}
+	for i := range profiles {
+		if profiles[i].ID != id {
+			continue
+		}
+		token, err := b.secrets.Get(relayAdminProfileAccount(id))
+		if err != nil {
+			return RelayAdminInput{}, fmt.Errorf("load relay profile from system keyring: %w", err)
+		}
+		profiles[i].LastUsed = time.Now().Unix()
+		if err := b.app.SaveRelayAdminProfiles(profiles); err != nil {
+			return RelayAdminInput{}, err
+		}
+		return RelayAdminInput{RelayURL: profiles[i].RelayURL, AdminToken: token}, nil
+	}
+	return RelayAdminInput{}, errors.New("load relay profile: profile not found")
+}
+
+func (b *Bindings) RelayAdminDeleteProfile(id string) error {
+	id = strings.TrimSpace(id)
+	profiles, err := b.app.LoadRelayAdminProfiles()
+	if err != nil {
+		return err
+	}
+	found := false
+	kept := profiles[:0]
+	for _, profile := range profiles {
+		if profile.ID == id {
+			found = true
+			continue
+		}
+		kept = append(kept, profile)
+	}
+	if !found {
+		return errors.New("delete relay profile: profile not found")
+	}
+	if err := b.secrets.Delete(relayAdminProfileAccount(id)); err != nil && !errors.Is(err, secretstore.ErrNotFound) {
+		return fmt.Errorf("delete relay profile from system keyring: %w", err)
+	}
+	return b.app.SaveRelayAdminProfiles(kept)
+}
+
+func relayAdminProfileID(base string) string {
+	sum := sha256.Sum256([]byte(base))
+	return hex.EncodeToString(sum[:12])
+}
+func relayAdminProfileAccount(id string) string { return "relay/" + id }
+func relayAdminProfileView(profile config.RelayAdminProfile) RelayAdminProfileView {
+	return RelayAdminProfileView{ID: profile.ID, Name: profile.Name, RelayURL: profile.RelayURL, LastUsed: profile.LastUsed}
 }
 
 // RelayAdminCreateClient creates portable credentials without changing the

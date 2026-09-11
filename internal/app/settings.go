@@ -71,6 +71,18 @@ func (a *App) CredsPath() (string, error) { return a.mgr.CredsPath() }
 // settings screen.
 func (a *App) ConfigPath() (string, error) { return a.mgr.Path() }
 
+// ConfigDir returns the private application configuration directory. Relay
+// admin profile metadata lives here; its tokens remain in the OS keyring.
+func (a *App) ConfigDir() (string, error) { return a.mgr.Dir() }
+
+func (a *App) LoadRelayAdminProfiles() ([]config.RelayAdminProfile, error) {
+	return a.mgr.LoadRelayAdminProfiles()
+}
+
+func (a *App) SaveRelayAdminProfiles(profiles []config.RelayAdminProfile) error {
+	return a.mgr.SaveRelayAdminProfiles(profiles)
+}
+
 // DefaultStorePath returns the path the store falls back to when
 // store.path is empty (<configDir>/wiretap.db).
 func (a *App) DefaultStorePath() (string, error) {

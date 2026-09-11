@@ -204,7 +204,9 @@ token is used once for registration and never stored.
 Settings is organized by workflow: **Relay connection**, **Capture and
 delivery**, **Interface**, and a separate **Relay server** workspace for
 operators. Relay administrators can create or revoke clients and add, move, or
-delete project bindings. Desktop project changes preserve the existing client
+delete project bindings. Named relay profiles can securely retrieve their
+admin tokens from macOS Keychain, Windows Credential Manager, Secret Service,
+KWallet, or `pass`. Desktop project changes preserve the existing client
 identity and reconnect automatically.
 Enter the relay URL and admin token to inspect health, manage registered
 clients, create portable client credentials, and reassign project ownership.

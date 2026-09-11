@@ -25,21 +25,39 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
   const [credentials, setCredentials] = useState(null);
   const [projectTargets, setProjectTargets] = useState({});
   const [newProject, setNewProject] = useState({ path: "", clientID: "" });
+  const [profiles, setProfiles] = useState([]);
+  const [remember, setRemember] = useState(true);
+  const [profileName, setProfileName] = useState("");
 
   useEffect(() => {
     if (!connection.url && defaultURL) setConnection((current) => ({ ...current, url: defaultURL }));
   }, [defaultURL]);
 
+  const loadProfiles = async () => {
+    try { setProfiles(await api.relayAdminProfiles()); }
+    catch (e) { setError(`Load saved relays: ${String(e)}`); }
+  };
+  useEffect(() => { loadProfiles(); }, []);
+
   const session = () => ({ relay_url: connection.url, admin_token: connection.token });
 
-  const inspect = async ({ quiet = false } = {}) => {
+  const inspect = async ({ quiet = false, credentials: candidate = connection, persist = true } = {}) => {
     setBusy("inspect");
     setError("");
     try {
-      const result = await api.relayAdminOverview(session());
+      const result = await api.relayAdminOverview({ relay_url: candidate.url, admin_token: candidate.token });
+      setConnection(candidate);
       setOverview(result);
       setProjectTargets(Object.fromEntries((result.projects || []).map((project) => [project.path, project.client_id])));
       if (!quiet) onToast(`Connected to relay ${result.version || "server"}`);
+      if (persist && remember) {
+        try {
+          await api.relayAdminSaveProfile({ relay_url: candidate.url, admin_token: candidate.token, name: profileName });
+          await loadProfiles();
+        } catch (saveError) {
+          setError(`Connected, but the relay could not be saved: ${String(saveError)}`);
+        }
+      }
       setNewProject((current) => ({ ...current, clientID: current.clientID || result.clients?.[0]?.client_id || "" }));
       return true;
     } catch (e) {
@@ -49,6 +67,23 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
     } finally {
       setBusy("");
     }
+  };
+
+  const connectProfile = async (profile) => {
+    setBusy(`profile:${profile.id}`); setError("");
+    try {
+      const saved = await api.relayAdminLoadProfile(profile.id);
+      await inspect({ credentials: { url: saved.relay_url, token: saved.admin_token }, persist: false });
+      await loadProfiles();
+    } catch (e) { setError(String(e)); setBusy(""); }
+  };
+
+  const forgetProfile = async (profile) => {
+    if (!window.confirm(`Forget ${profile.name}? Its admin token will be deleted from the system keyring.`)) return;
+    setBusy(`forget:${profile.id}`); setError("");
+    try { await api.relayAdminDeleteProfile(profile.id); await loadProfiles(); onToast(`Forgot relay ${profile.name}`); }
+    catch (e) { setError(String(e)); }
+    finally { setBusy(""); }
   };
 
   const disconnect = () => {
@@ -175,12 +210,22 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
       ${overview ? html`<${Button} onClick=${disconnect}>Disconnect</>` : null}
     </header>
 
+    ${!overview && profiles.length ? html`<section class="relay-profile-panel" aria-label="Saved relays">
+      <div class="relay-admin-panel-head"><div><h3>Saved relays <span>${profiles.length}</span></h3><p>Admin tokens are retrieved from your system keyring only when you connect.</p></div></div>
+      <div class="relay-profile-list">${profiles.map((profile) => html`<article class="relay-profile-row" key=${profile.id}>
+        <div><strong>${profile.name}</strong><code>${profile.relay_url}</code></div>
+        <span>${relativeTime(profile.last_used)}</span>
+        <div><${Button} class="btn-xs" variant="primary" disabled=${Boolean(busy)} onClick=${() => connectProfile(profile)}>${busy === `profile:${profile.id}` ? "Connecting..." : "Connect"}</>
+        <${Button} class="btn-xs" variant="danger" disabled=${Boolean(busy)} onClick=${() => forgetProfile(profile)}>Forget</></div>
+      </article>`)}</div>
+    </section>` : null}
+
     <section class="relay-admin-connect" aria-label="Relay admin connection">
       <${Field} label="Relay URL">
         <${Input} class="font-mono" placeholder="https://relay.example.com" value=${connection.url}
           disabled=${Boolean(overview)} onInput=${(event) => setConnection({ ...connection, url: event.target.value })} />
       </>
-      <${Field} label="Admin token (not saved)">
+      <${Field} label="Admin token">
         <${Input} type="password" class="font-mono" placeholder="Enter the server admin token" value=${connection.token}
           disabled=${Boolean(overview)} onInput=${(event) => setConnection({ ...connection, token: event.target.value })}
           onKeyDown=${(event) => event.key === "Enter" && inspect()} />
@@ -189,12 +234,17 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
         ${busy === "inspect" ? "Connecting..." : "Connect"}
       </>` : null}
     </section>
+    ${!overview ? html`<div class="relay-admin-save-options">
+      <label><input type="checkbox" checked=${remember} onChange=${(event) => setRemember(event.target.checked)} /><span>Remember this relay</span></label>
+      ${remember ? html`<${Input} placeholder="Relay name (optional)" value=${profileName} onInput=${(event) => setProfileName(event.target.value)} />` : null}
+      <p>${remember ? "The admin token is stored in your system keyring. Only the relay name and URL are written to Wiretap settings." : "This connection is temporary and will be cleared when you disconnect."}</p>
+    </div>` : null}
 
     ${error ? html`<div class="relay-admin-error" role="alert"><strong>Request failed</strong><span>${error}</span></div>` : null}
 
     ${!overview ? html`<div class="relay-admin-empty">
       <strong>No server session</strong>
-      <p>The token remains in memory only. Closing this view clears the server snapshot.</p>
+      <p>Enter a relay URL and token, or reconnect to a relay saved in your system keyring.</p>
     </div>` : html`
       <section class="relay-admin-summary" aria-label="Relay health">
         <div class="relay-health"><span class="live-dot online"></span><strong>${overview.status || "online"}</strong><small>${overview.base_url}</small></div>

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Saved relay administration
+
+- Added named relay-admin profiles for one-click reconnection from GUI Settings.
+- Store admin tokens in the operating system credential store through secure
+  native backends, including macOS Keychain, Windows Credential Manager,
+  Secret Service, KWallet, and `pass`.
+- Keep only the profile label, canonical relay URL, and last-used timestamp in
+  Wiretap's local metadata. No plaintext or encrypted-file fallback is used.
+- Preserve ephemeral relay administration when a keyring is unavailable or
+  the user disables **Remember this relay**.
+
 ## v0.2.10 — 2026-09-11
 
 ### Settings workflow

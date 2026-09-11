@@ -1056,6 +1056,55 @@ export class RelayAdminOverviewView {
     }
 }
 
+export class RelayAdminProfileView {
+    /**
+     * Creates a new RelayAdminProfileView instance.
+     * @param {Partial<RelayAdminProfileView>} [$$source = {}] - The source object to create the RelayAdminProfileView.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
+        if (!("last_used" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["last_used"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminProfileView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminProfileView}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RelayAdminProfileView(/** @type {Partial<RelayAdminProfileView>} */($$parsedSource));
+    }
+}
+
 export class RelayAdminProjectView {
     /**
      * Creates a new RelayAdminProjectView instance.
@@ -1161,6 +1210,48 @@ export class RelayAdminReassignProjectInput {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new RelayAdminReassignProjectInput(/** @type {Partial<RelayAdminReassignProjectInput>} */($$parsedSource));
+    }
+}
+
+export class RelayAdminSaveProfileInput {
+    /**
+     * Creates a new RelayAdminSaveProfileInput instance.
+     * @param {Partial<RelayAdminSaveProfileInput>} [$$source = {}] - The source object to create the RelayAdminSaveProfileInput.
+     */
+    constructor($$source = {}) {
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
+        if (!("admin_token" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["admin_token"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminSaveProfileInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminSaveProfileInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RelayAdminSaveProfileInput(/** @type {Partial<RelayAdminSaveProfileInput>} */($$parsedSource));
     }
 }
 
