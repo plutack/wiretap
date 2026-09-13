@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Application themes
+
+- Added System, Wiretap Dark, Wiretap Light, Nord, Catppuccin Mocha, and
+  Catppuccin Latte themes to Interface settings.
+- Reworked the workbench colours around semantic design tokens so dialogs,
+  editors, inspectors, and status states switch palettes consistently.
+- Added Microlighter syntax highlighting for supported request and response
+  bodies without generating a span for every token.
+- Kept the existing 100 KiB syntax-highlighting cap and 256 KiB incremental
+  body preview path; large payloads continue to render as bounded plain text.
+
 ## v0.2.13 — 2026-09-11
 
 ### Desktop default keyring

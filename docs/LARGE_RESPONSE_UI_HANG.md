@@ -10,8 +10,10 @@ Implemented on 2026-08-23:
   together with the complete length and a truncation flag;
 - the viewer offers progressive, doubling “Show more” requests and retrieves
   the complete body only for explicit Save or Copy All actions;
-- JSON formatting and token-span highlighting are limited to complete bodies
-  no larger than 100 KiB; larger previews render as one plain-text node;
+- JSON formatting and syntax highlighting are limited to complete bodies no
+  larger than 100 KiB; larger previews render as one plain-text node;
+- supported webviews now use Microlighter's CSS highlight ranges for eligible
+  bodies, while older webviews retain the span-based JSON fallback;
 - capture selection is latest-request-wins, and close/tab changes invalidate
   pending selections.
 
