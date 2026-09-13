@@ -4,7 +4,7 @@ import { api } from "../lib/api.js";
 import { Button, Input, Select, Field } from "./ui.js";
 import { Dropdown } from "./dropdown.js";
 import { RelayAdmin } from "./relay-admin.js";
-import { DENSITIES, FONT_SCALES, loadDisplayPrefs, saveDisplayPrefs } from "../lib/prefs.js";
+import { DENSITIES, FONT_SCALES, THEMES, loadDisplayPrefs, saveDisplayPrefs } from "../lib/prefs.js";
 
 const SHELL_OPTIONS = [
   { value: "", label: "auto-detect ($SHELL)" },
@@ -41,6 +41,24 @@ function SettingsCard({ title, hint, children }) {
 }
 function PageHeader({ title, hint }) {
   return html`<header class="settings-page-head"><h2>${title}</h2><p>${hint}</p></header>`;
+}
+
+function ThemePicker({ value, onChange }) {
+  return html`<div class="theme-picker" role="radiogroup" aria-label="Application colour theme">
+    ${THEMES.map((theme) => html`<button
+      type="button"
+      role="radio"
+      aria-checked=${value === theme.value}
+      class="theme-choice ${value === theme.value ? "selected" : ""}"
+      onClick=${() => onChange(theme.value)}
+    >
+      <span class="theme-swatch" aria-hidden="true">
+        ${theme.colors.map((color) => html`<i style=${{ background: color }}></i>`)}
+      </span>
+      <span class="theme-choice-copy"><strong>${theme.label}</strong><small>${theme.description}</small></span>
+      <span class="theme-choice-check" aria-hidden="true">${value === theme.value ? "✓" : ""}</span>
+    </button>`)}
+  </div>`;
 }
 
 export function Settings({ onToast, onSaved }) {
@@ -87,6 +105,10 @@ export function Settings({ onToast, onSaved }) {
   };
   const updateDisplay = (key) => (event) => {
     const next = { ...displayPrefs, [key]: event.target.value };
+    setDisplayPrefs(next); saveDisplayPrefs(next);
+  };
+  const updateTheme = (theme) => {
+    const next = { ...displayPrefs, theme };
     setDisplayPrefs(next); saveDisplayPrefs(next);
   };
   const register = async () => {
@@ -165,6 +187,9 @@ export function Settings({ onToast, onSaved }) {
       ` : null}
       ${section === "interface" ? html`
         <${PageHeader} title="Interface" hint="Tune the desktop and terminal views without changing capture behavior." />
+        <${SettingsCard} title="Application theme" hint="Palette presets recolour the complete workbench, payload syntax, and transform editor.">
+          <${ThemePicker} value=${displayPrefs.theme} onChange=${updateTheme} />
+        </>
         <${SettingsCard} title="Desktop readability" hint="These preferences apply immediately and are stored on this desktop.">
           <div class="settings-field-grid"><${Field} label="Text size"><${Dropdown} value=${displayPrefs.fontScale} onChange=${updateDisplay("fontScale")} options=${FONT_SCALES} aria-label="Text size" /></>
           <${Field} label="Row density"><${Dropdown} value=${displayPrefs.density} onChange=${updateDisplay("density")} options=${DENSITIES} aria-label="Row density" /></></div>

@@ -6,11 +6,13 @@
   "devDependencies": {
     "@commitlint/cli": "^21.2.0",
     "@commitlint/config-conventional": "^21.2.0",
+    "@tailwindcss/cli": "^4.2.2",
     "esbuild": "^0.28.2",
     "httpsnippet-lite": "^3.0.5"
   },
   "scripts": {
     "commitlint": "commitlint --edit",
+    "css": "tailwindcss -i ./ui/input.css -o ./ui/output.css --minify",
     "snippet-bundle": "esbuild internal/export/js/entry.js --bundle --format=iife --target=es2017 --minify --outfile=internal/export/js/httpsnippet.bundle.js"
   }
 }
