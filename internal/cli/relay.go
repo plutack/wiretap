@@ -288,7 +288,7 @@ func newRelayProjectsListCmd() *cobra.Command {
 }
 
 func newRelayProjectsReclaimCmd() *cobra.Command {
-	var newClientID string
+	var clientID string
 	var force bool
 
 	cmd := &cobra.Command{
@@ -302,7 +302,7 @@ func newRelayProjectsReclaimCmd() *cobra.Command {
 			}
 			resp, err := c.ReclaimProject(cmd.Context(), api.ReclaimProjectRequest{
 				Path:        args[0],
-				NewClientID: newClientID,
+				NewClientID: clientID,
 				Force:       force,
 			})
 			if err != nil {
@@ -312,9 +312,9 @@ func newRelayProjectsReclaimCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&newClientID, "new-client", "", "client ID to rebind the path to (required)")
+	cmd.Flags().StringVar(&clientID, "client-id", "", "client ID to rebind the path to (required)")
 	cmd.Flags().BoolVar(&force, "force", false, "reclaim even if the path is already owned by another client")
-	_ = cmd.MarkFlagRequired("new-client")
+	_ = cmd.MarkFlagRequired("client-id")
 	return cmd
 }
 
