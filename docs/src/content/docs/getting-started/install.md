@@ -3,7 +3,7 @@ title: Install Wiretap
 description: Download Wiretap for Linux or Windows, verify it, or build it from source.
 ---
 
-Prebuilt release artifacts are the recommended installation path. The current release is **v0.2.14**.
+Prebuilt release artifacts are the recommended installation path. The current release is **v0.2.15**.
 
 :::caution[Release trust]
 Wiretap publishes SHA-256 checksums, but the release artifacts are not yet cryptographically signed. A checksum detects a damaged download only when you obtain the checksum from a trusted channel.
@@ -11,7 +11,7 @@ Wiretap publishes SHA-256 checksums, but the release artifacts are not yet crypt
 
 ## Linux
 
-Choose the artifact for your machine from [the v0.2.14 release](https://github.com/plutack/wiretap/releases/tag/v0.2.14):
+Choose the artifact for your machine from [the v0.2.15 release](https://github.com/plutack/wiretap/releases/tag/v0.2.15):
 
 | Format | Architectures | Best for |
 | --- | --- | --- |
@@ -22,7 +22,7 @@ Choose the artifact for your machine from [the v0.2.14 release](https://github.c
 For a tarball, extract the archive and install the binary on `PATH`:
 
 ```sh
-tar -xzf wiretap_0.2.14_linux_amd64.tar.gz
+tar -xzf wiretap_0.2.15_linux_amd64.tar.gz
 sudo install -m 0755 wiretap /usr/local/bin/wiretap
 wiretap version
 ```
@@ -30,8 +30,8 @@ wiretap version
 For an AppImage:
 
 ```sh
-chmod +x wiretap_0.2.14_x86_64.AppImage
-./wiretap_0.2.14_x86_64.AppImage gui
+chmod +x wiretap_0.2.15_x86_64.AppImage
+./wiretap_0.2.15_x86_64.AppImage gui
 ```
 
 The desktop build requires GTK 3 and WebKitGTK at runtime. Package names vary by distribution; install the WebKitGTK 4.1 runtime supplied by your distribution if the GUI does not start.
@@ -39,13 +39,13 @@ The desktop build requires GTK 3 and WebKitGTK at runtime. Package names vary by
 On Arch Linux:
 
 ```sh
-sudo pacman -U wiretap-0.2.14-x86_64.pkg.tar.zst
+sudo pacman -U wiretap-0.2.15-x86_64.pkg.tar.zst
 wiretap gui
 ```
 
 ## Windows
 
-Download the x86-64 installer from [the v0.2.14 release](https://github.com/plutack/wiretap/releases/tag/v0.2.14), or use the `.zip` when you want a portable binary. Windows on ARM is not currently published.
+Download the x86-64 installer from [the v0.2.15 release](https://github.com/plutack/wiretap/releases/tag/v0.2.15), or use the `.zip` when you want a portable binary. Windows on ARM is not currently published.
 
 ## Verify a download
 
@@ -58,7 +58,7 @@ sha256sum --check SHA256SUMS --ignore-missing
 PowerShell users can compare a file with the matching line in `SHA256SUMS`:
 
 ```powershell
-Get-FileHash .\wiretap_0.2.14_windows_x86_64-installer.exe -Algorithm SHA256
+Get-FileHash .\wiretap_0.2.15_windows_x86_64-installer.exe -Algorithm SHA256
 ```
 
 ## Build from source

@@ -1,25 +1,25 @@
 ---
 title: Releases and downloads
-description: Download Wiretap v0.2.14, verify artifacts, and review recent changes.
+description: Download Wiretap v0.2.15, verify artifacts, and review recent changes.
 ---
 
-## Current release: v0.2.14
+## Current release: v0.2.15
 
-Released September 13, 2026. This release adds System, Wiretap, Nord, and Catppuccin application themes and broadens bounded syntax highlighting while retaining the large-payload safeguards.
+Released September 13, 2026. This release adds the Starlight documentation site and renames the relay project-reclaim flag to `--client-id`.
 
-[Open the v0.2.14 release](https://github.com/plutack/wiretap/releases/tag/v0.2.14) · [View every release](https://github.com/plutack/wiretap/releases) · [Download checksums](https://github.com/plutack/wiretap/releases/latest/download/SHA256SUMS)
+[Open the v0.2.15 release](https://github.com/plutack/wiretap/releases/tag/v0.2.15) · [View every release](https://github.com/plutack/wiretap/releases) · [Download checksums](https://github.com/plutack/wiretap/releases/latest/download/SHA256SUMS)
 
 ### Assets
 
 | Platform | Artifact |
 | --- | --- |
-| Linux x86-64 | [`wiretap_0.2.14_linux_amd64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.2.14/wiretap_0.2.14_linux_amd64.tar.gz) |
-| Linux ARM64 | [`wiretap_0.2.14_linux_arm64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.2.14/wiretap_0.2.14_linux_arm64.tar.gz) |
-| AppImage x86-64 | [`wiretap_0.2.14_x86_64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.2.14/wiretap_0.2.14_x86_64.AppImage) |
-| AppImage ARM64 | [`wiretap_0.2.14_aarch64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.2.14/wiretap_0.2.14_aarch64.AppImage) |
-| Arch Linux x86-64 | [`wiretap-0.2.14-x86_64.pkg.tar.zst`](https://github.com/plutack/wiretap/releases/download/v0.2.14/wiretap-0.2.14-x86_64.pkg.tar.zst) |
-| Windows x86-64 | [`wiretap_0.2.14_windows_x86_64-installer.exe`](https://github.com/plutack/wiretap/releases/download/v0.2.14/wiretap_0.2.14_windows_x86_64-installer.exe) |
-| Windows portable x86-64 | [`wiretap_0.2.14_windows_x86_64.zip`](https://github.com/plutack/wiretap/releases/download/v0.2.14/wiretap_0.2.14_windows_x86_64.zip) |
+| Linux x86-64 | [`wiretap_0.2.15_linux_amd64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.2.15/wiretap_0.2.15_linux_amd64.tar.gz) |
+| Linux ARM64 | [`wiretap_0.2.15_linux_arm64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.2.15/wiretap_0.2.15_linux_arm64.tar.gz) |
+| AppImage x86-64 | [`wiretap_0.2.15_x86_64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.2.15/wiretap_0.2.15_x86_64.AppImage) |
+| AppImage ARM64 | [`wiretap_0.2.15_aarch64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.2.15/wiretap_0.2.15_aarch64.AppImage) |
+| Arch Linux x86-64 | [`wiretap-0.2.15-x86_64.pkg.tar.zst`](https://github.com/plutack/wiretap/releases/download/v0.2.15/wiretap-0.2.15-x86_64.pkg.tar.zst) |
+| Windows x86-64 | [`wiretap_0.2.15_windows_x86_64-installer.exe`](https://github.com/plutack/wiretap/releases/download/v0.2.15/wiretap_0.2.15_windows_x86_64-installer.exe) |
+| Windows portable x86-64 | [`wiretap_0.2.15_windows_x86_64.zip`](https://github.com/plutack/wiretap/releases/download/v0.2.15/wiretap_0.2.15_windows_x86_64.zip) |
 
 See [Install Wiretap](/getting-started/install/) for runtime dependencies and verification steps.
 
@@ -28,6 +28,10 @@ Release assets currently include SHA-256 checksums but are not cryptographically
 :::
 
 ## Recent releases
+
+### v0.2.14
+
+Adds System, Wiretap, Nord, and Catppuccin themes and broadens bounded syntax highlighting while retaining large-payload safeguards.
 
 ### v0.2.13
 
