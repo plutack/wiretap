@@ -15,7 +15,7 @@ Use the desktop GUI, terminal UI, or CLI against the same local data.
 
 ## Install
 
-Prebuilt release binaries are the recommended installation method. Until the release installer is published, follow the [installation guide](docs/INSTALLATION.md) for available manual and source-build options.
+Prebuilt release binaries are the recommended installation method. Follow the [installation guide](docs/src/content/docs/getting-started/install.md) for Linux, Windows, verification, and source-build options.
 
 After installation:
 
@@ -34,7 +34,7 @@ wiretap intercept start
 
 wiretap starts a local recording proxy and opens a child shell with the required proxy and CA environment. Run `curl`, `git`, Node, or another HTTP-aware command inside that shell. Exit the child shell to stop the interception session.
 
-See the [interception guide](docs/INTERCEPTION.md) for what the generated shell script does, how TLS/CA trust is handled without touching your system trust store, and the PATH shims for git/curl/node.
+See the [interception guide](docs/src/content/docs/guides/intercept-traffic.md) for child-shell behavior, scoped TLS trust, and cleanup.
 
 Useful alternatives:
 
@@ -109,7 +109,7 @@ not freeze the desktop UI.
 
 wiretap uses a self-hosted public relay. The desktop establishes an outbound WebSocket connection, so it does not need a public IP or an inbound firewall rule.
 
-1. Deploy `wiretap-relay` by following the [hosting guide](docs/HOSTING.md).
+1. Deploy `wiretap-relay` by following the [hosting guide](docs/src/content/docs/guides/host-relay.md).
 2. Register the desktop with the relay:
 
    ```sh
@@ -186,7 +186,7 @@ Create scripts from the GUI's **Transforms** section and attach one of these tri
 | `on_webhook` | Before a relay webhook is stored locally |
 | `on_compose` | When explicitly selected as a source recipe in Compose |
 
-Scripts execute locally and do not require Node.js. See the [scripting guide](docs/SCRIPTING.md) for the API, helpers, examples, and execution behavior — including an [end-to-end walkthrough](docs/SCRIPTING.md#end-to-end-walkthrough) from capturing a request to rewriting and rejecting it.
+Scripts execute locally and do not require Node.js. See the [transform guide](docs/src/content/docs/guides/transforms.md) for the workflow and the [Transform API](docs/src/content/docs/reference/transform-api.md) for globals, helpers, ordering, and sandbox behavior.
 
 ## Configuration
 
@@ -225,8 +225,7 @@ desktop's saved registration.
 The Interface workspace also provides system, Wiretap light/dark, Nord, and
 Catppuccin palette presets. Themes apply immediately to the complete workbench,
 CodeMirror editor, and bounded payload syntax display. See the
-[desktop theming guide](docs/THEMING.md) for the token model, compatibility
-fallback, and instructions for adding a preset.
+[desktop customization guide](docs/src/content/docs/guides/desktop-themes.md) for themes, density, title bars, and bounded syntax highlighting.
 
 Local state may contain request bodies, credentials, or personal data. Protect the wiretap configuration directory and any relay database accordingly.
 
