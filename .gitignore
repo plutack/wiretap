@@ -32,6 +32,8 @@ build-errors.log
 # Node deps (commitlint + future lint tooling). package.json and
 # package-lock.json are committed; node_modules is per-developer.
 node_modules/
+/docs/.astro/
+/docs/dist/
 
 # Commitlint cache.
 .commitlint-cache/
