@@ -5,8 +5,7 @@
 #   make watch             # same thing via make
 #
 # Requires the GUI toolchain (webkit2gtk-4.1, CGO) — same deps as `make gui`.
-# Tailwind binary: this calls `tailwindcss-extra` (the name on this system).
-# If your Tailwind binary is just `tailwindcss`, edit pre_cmd below.
+# Tailwind is pinned as a development dependency and exposed via `npm run css`.
 #
 # For CLI/TUI-only dev without the GUI deps, use `.air.cli.toml`:
 #   air -c .air.cli.toml
@@ -43,7 +42,7 @@ tmp_dir = "tmp"
   post_cmd = []
   # Recompile Tailwind before each Go build so ui/output.css is fresh when the
   # embed runs. If this fails, the build still proceeds with the last CSS.
-  pre_cmd = ["tailwindcss-extra -i ui/input.css -o ui/output.css --minify"]
+  pre_cmd = ["npm run css"]
   rerun = false
   rerun_delay = 500
   # SIGINT for graceful shutdown (lets app.App.Close run via OnShutdown).

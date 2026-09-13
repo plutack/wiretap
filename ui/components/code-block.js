@@ -4,6 +4,7 @@ import { html } from "../vendor/preact/index.js";
 import { useEffect, useMemo, useRef, useState } from "../vendor/preact/index.js";
 import { prettyBody, highlightJSON } from "../lib/format.js";
 import { copyText } from "../lib/clipboard.js";
+import { requestSyntaxHighlight, supportsSyntaxHighlights } from "../lib/syntax.js";
 import { Dropdown } from "./dropdown.js";
 
 const HIGHLIGHT_LIMIT = 100 * 1024;
@@ -18,6 +19,17 @@ function autoMode(type) {
   if (/json|javascript|xml|html|css|yaml|toml|graphql/.test(type)) return "pretty";
   if (type.startsWith("text/") || !type) return "text";
   return "hex";
+}
+
+function syntaxLanguage(type) {
+  if (/json/.test(type)) return "json";
+  if (/javascript|ecmascript/.test(type)) return "javascript";
+  if (/html|xml/.test(type)) return "html";
+  if (/css/.test(type)) return "css";
+  if (/ya?ml/.test(type)) return "yaml";
+  if (/toml/.test(type)) return "toml";
+  if (/graphql/.test(type)) return "graphql";
+  return "";
 }
 
 function decodeBase64(encoded) {
@@ -76,6 +88,8 @@ export function BodyViewer({
   const canHighlight = bytes.length <= HIGHLIGHT_LIMIT && !previewTruncated;
   const effectiveMode = selectedMode === "pretty" && !canHighlight ? "text" : selectedMode;
   const totalLength = bodyLength ?? bytes.length;
+  const language = effectiveMode === "pretty" ? syntaxLanguage(type) : "";
+  const useMicrolighter = Boolean(language) && supportsSyntaxHighlights();
 
   const formatted = useMemo(() => {
     if (effectiveMode === "hex") return { text: hexDump(bytes), html: "" };
@@ -83,11 +97,15 @@ export function BodyViewer({
       const pretty = prettyBody(text, contentType);
       return {
         text: pretty.isJSON ? pretty.text : text,
-        html: pretty.isJSON ? highlightJSON(pretty.text) : "",
+        html: pretty.isJSON && !useMicrolighter ? highlightJSON(pretty.text) : "",
       };
     }
     return { text, html: "" };
-  }, [bytes, contentType, effectiveMode, text]);
+  }, [bytes, contentType, effectiveMode, text, useMicrolighter]);
+
+  useEffect(() => {
+    if (useMicrolighter) requestSyntaxHighlight();
+  }, [formatted.text, language, useMicrolighter]);
 
   const imageURL = useMemo(() => {
     if (effectiveMode !== "image" || previewTruncated || !bytes.length || !/^image\//.test(type)) return "";
@@ -188,6 +206,8 @@ export function BodyViewer({
       ? html`<p class="body-empty">The image exceeds the automatic preview limit. Save it to inspect the complete file.</p>`
       : effectiveMode === "image" && imageURL
         ? html`<div class="body-image-wrap"><img class="body-image" src=${imageURL} alt="Captured ${type} body" /></div>`
+      : useMicrolighter
+        ? html`<pre class="${maxHeightClass} body-code"><code class="language-${language}" data-language=${language}>${formatted.text}</code></pre>`
       : formatted.html
         ? html`<pre class="${maxHeightClass} body-code" dangerouslySetInnerHTML=${{ __html: formatted.html }}></pre>`
         : html`<pre class="${maxHeightClass} body-code">${formatted.text}</pre>`}

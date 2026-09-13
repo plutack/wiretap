@@ -4,6 +4,23 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>wiretap</title>
+    <script>
+      // Apply the stored palette before CSS paints so light themes never flash
+      // the default dark workbench while the Preact application starts.
+      (() => {
+        const allowed = new Set(["system", "wiretap-dark", "wiretap-light", "nord", "catppuccin-mocha", "catppuccin-latte"]);
+        let theme = "system";
+        try {
+          const saved = JSON.parse(localStorage.getItem("wiretap.display") || "{}");
+          if (allowed.has(saved.theme)) theme = saved.theme;
+        } catch {}
+        const light = theme === "wiretap-light" || theme === "catppuccin-latte"
+          || (theme === "system" && !matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.appearance = light ? "light" : "dark";
+        document.documentElement.style.colorScheme = light ? "light" : "dark";
+      })();
+    </script>
     <link rel="stylesheet" href="./output.css" />
     <link rel="stylesheet" href="./layout.css" />
 
@@ -25,7 +42,7 @@
       }
     </script>
   </head>
-  <body class="h-full bg-neutral-950 text-neutral-200 font-sans [color-scheme:dark]">
+  <body class="h-full bg-neutral-950 text-neutral-200 font-sans">
     <div id="app" class="h-full"></div>
     <script type="module" src="./app.js"></script>
   </body>

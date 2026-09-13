@@ -222,6 +222,12 @@ cleared when you leave the workspace. Saved profiles retrieve it from the
 system keyring when needed. Creating a client there does not replace this
 desktop's saved registration.
 
+The Interface workspace also provides system, Wiretap light/dark, Nord, and
+Catppuccin palette presets. Themes apply immediately to the complete workbench,
+CodeMirror editor, and bounded payload syntax display. See the
+[desktop theming guide](docs/THEMING.md) for the token model, compatibility
+fallback, and instructions for adding a preset.
+
 Local state may contain request bodies, credentials, or personal data. Protect the wiretap configuration directory and any relay database accordingly.
 
 ## Stack
