@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.2.15 — 2026-09-13
+
+### Documentation website
+
+- Added an Astro Starlight documentation site with installation, guided local
+  capture and first-webhook walkthroughs, concepts, task-based guides,
+  configuration and CLI reference, troubleshooting, and release downloads.
+- Reorganized durable user guidance into the site and removed superseded
+  engineering investigations and duplicate top-level documentation files.
+- Added platform-specific installation guidance and v0.2.15 release notes.
+
+### Relay CLI
+
+- Renamed `wiretap relay projects reclaim --new-client` to the clearer
+  `--client-id` flag.
+
 ## v0.2.14 — 2026-09-13
 
 ### Application themes

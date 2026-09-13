@@ -23,5 +23,4 @@ if (!source.path || source.path[0] !== "/" || !source.payload) {
   request.url = request.url.replace(/\/+$/, "") + source.path;
   request.headers["Content-Type"] = "application/json";
   request.body = json.stringify(source.payload);
-  console.log("prepared " + source.path);
 }
