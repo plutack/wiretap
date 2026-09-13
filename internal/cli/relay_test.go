@@ -192,7 +192,7 @@ func TestRelayCmd_ProjectsReclaim(t *testing.T) {
 	})
 	withTestRelayClient(t, h)
 	out, _, err := runCmd(t, "dev", "relay", "projects", "reclaim", "alpha",
-		"--new-client", "c2", "--force", "--admin-token", "x")
+		"--client-id", "c2", "--force", "--admin-token", "x")
 	if err != nil {
 		t.Fatalf("reclaim: %v", err)
 	}
