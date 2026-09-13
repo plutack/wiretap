@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.2.14 — 2026-09-13
 
 ### Application themes
 
