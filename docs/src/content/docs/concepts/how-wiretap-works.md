@@ -19,29 +19,31 @@ local MITM proxy ── transforms ──► destination server
                  local SQLite
 ```
 
-`wiretap intercept start` opens a child shell whose supported HTTP clients use Wiretap's loopback proxy and local certificate authority. Captures are written to the same SQLite database read by the GUI and TUI.
+`wiretap intercept start` opens a child shell whose supported HTTP clients use Wiretap's loopback proxy and local certificate authority.
 
 ## Inbound webhooks
 
 ```text
-webhook sender ──HTTPS──► public relay ──outbound WSS tunnel──► desktop
-                              │                                  │
-                         queued SQLite                       transforms
-                                                                 │
-                                                            local SQLite
-                                                                 │
-                                                           replay locally
+webhook sender ──HTTPS──► public relay ──outbound WSS──► desktop A
+                              │       └──outbound WSS──► desktop B
+                              ▼                              │
+                         queued SQLite                  transforms
+                                                            │
+                                                            ▼
+                                                       local SQLite
+                                                            │
+                                                            ▼
+                                                      replay locally
 ```
 
-The relay owns the public endpoint. It queues a delivery until the project owner's desktop acknowledges it. The desktop initiates the tunnel, so it does not expose a port to the internet.
+Webhook traffic reaches the public HTTPS endpoint of your hosted `wiretap-relay` deployment. The relay stores each webhook once and forwards it to every client subscribed to the project. Each subscriber advances an independent acknowledgement cursor and catches up after reconnecting. Because every desktop initiates its own WSS tunnel, no inbound desktop port is exposed to the internet.
 
-## Where data lives
+## Where does your data live
 
-- Intercepted traffic, received webhooks, cursors, and transforms live in the desktop's local SQLite database.
-- Queued webhook bodies, project ownership, and client registrations live in the relay's SQLite database.
-- Relay client and relay-admin tokens prefer the operating-system credential store. Headless desktop clients can fall back to a mode-`0600` credentials file.
+- Intercepted traffic, received webhooks, and transforms live in the desktop's local SQLite database.
+- Queued webhook bodies, projects, subscriptions, delivery cursors, and client registrations live in the relay's SQLite database.
+- Relay client tokens prefer the operating-system credential store and fall back to a credentials file that only your user account can read (mode `0600`). Relay-admin tokens are never written to disk as plaintext; a saved admin profile requires the operating-system keyring.
 
-Treat both databases as sensitive: they may contain headers, credentials, personal data, and complete payloads.
 
 ## Transform points
 
