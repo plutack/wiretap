@@ -39,8 +39,8 @@ Examples:
 
 ```sh
 wiretap export capture 42 --as shell/curl
-wiretap export webhook project-a 7 --as javascript/fetch
-wiretap export webhook project-a 7 --as python/requests
+wiretap export webhook new-project 7 --as javascript/fetch
+wiretap export webhook new-project 7 --as python/requests
 ```
 
 Omitting the client selects that target's default. Exported snippets reproduce the request side of the exchange and omit hop-by-hop and `Content-Length` headers.
@@ -51,18 +51,20 @@ Omitting the client selects that target's default. Exported snippets reproduce t
 wiretap relay \
   --url https://relay.example.com \
   --admin-token TOKEN \
-  register --name laptop --projects project-a,project-b --save
+  register --name client-name --projects new-project,another-project --save
 ```
 
+:::tip
 `--projects` is optional. Use `projects add` later instead of re-registering.
+:::
 
-## Owner project commands
+## This client's project commands
 
-These use this desktop's saved client credentials:
+These use this client's saved credentials. `add` creates a new project with this client as its first subscriber; `remove` unsubscribes only this client and preserves the project and relay history:
 
 ```sh
 wiretap relay --url https://relay.example.com projects add <path>
-wiretap relay --url https://relay.example.com projects remove <path> --force
+wiretap relay --url https://relay.example.com projects remove <path>
 ```
 
 ## Administrator commands
@@ -75,13 +77,22 @@ wiretap relay clients get <client-id>
 wiretap relay clients delete <client-id>
 
 wiretap relay projects list
+wiretap relay projects create <path> --client-id <client-id>
+wiretap relay projects delete <path> --force
+wiretap relay projects subscribe <path> --client-id <client-id> [--include-history]
+wiretap relay projects unsubscribe <path> --client-id <client-id>
 wiretap relay projects reclaim <path> --client-id <client-id> --force
 
-wiretap relay webhooks list <project>
-wiretap relay webhooks replay <project> <webhook-id>
+wiretap relay webhooks list <project> [--after-seq <seq>] [--limit <n>]
+wiretap relay webhooks replay <project> <seq> [--client-id <client-id>]
+wiretap relay webhooks delete <project> <seq> [<seq>...]
+wiretap relay webhooks delete <project> --through <seq>
+wiretap relay webhooks delete <project> --all
 ```
 
-The desktop GUI exposes additional admin operations, including creating a client or project, moving project ownership, and deleting a single project.
+New subscribers receive only future traffic unless `--include-history` is set. `projects reclaim` replaces every subscriber with the selected client; prefer `subscribe` and `unsubscribe` for ordinary changes.
+
+The desktop GUI exposes client and project creation, client revocation, subscriber management, retained-history inspection, selected or complete history deletion, and project deletion.
 
 ## Relay server binary
 
@@ -89,4 +100,4 @@ The desktop GUI exposes additional admin operations, including creating a client
 wiretap-relay -addr :8443 -db relay.db -admin-token TOKEN
 ```
 
-The matching environment variables are `WIRETAP_RELAY_ADDR`, `WIRETAP_RELAY_DB`, and `WIRETAP_ADMIN_TOKEN`.
+The required environment variables are `WIRETAP_RELAY_ADDR`, `WIRETAP_RELAY_DB`, and `WIRETAP_ADMIN_TOKEN`.
