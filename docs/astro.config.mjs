@@ -56,7 +56,6 @@ export default defineConfig({
             { label: 'Configuration', slug: 'reference/configuration' },
             { label: 'CLI', slug: 'reference/cli' },
             { label: 'Transform API', slug: 'reference/transform-api' },
-            { label: 'Limits and security', slug: 'reference/limits-and-security' },
           ],
         },
         { label: 'Troubleshooting', slug: 'troubleshooting' },
