@@ -13,7 +13,7 @@ Registration creates one desktop identity. Run it once and save the returned cli
 wiretap relay \
   --url https://relay.example.com \
   --admin-token YOUR_ADMIN_TOKEN \
-  register --name laptop --save
+  register --name client-name --save
 ```
 
 The admin token is needed for registration, but not for ordinary project changes. Do not place it in a URL, shell history, or committed config file.
@@ -23,10 +23,10 @@ The admin token is needed for registration, but not for ordinary project changes
 Use the saved desktop credentials to add a project:
 
 ```sh
-wiretap relay --url https://relay.example.com projects add project-a
+wiretap relay --url https://relay.example.com projects add new-project
 ```
 
-`project-a` becomes the first segment of the public webhook URL. A project currently has one owning desktop identity.
+`new-project` becomes the first segment of the public webhook URL. This desktop is the project's first subscriber; a relay administrator can add more subscribers later.
 
 ## 3. Configure the outbound tunnel
 
@@ -47,14 +47,14 @@ Start the desktop or terminal UI:
 wiretap gui
 ```
 
-The status area should show a connected relay and `project-a`. The desktop dials outward, so it needs no public IP or inbound firewall rule.
+The status area should show a connected relay and `new-project`. The desktop dials outward, so it needs no public IP or inbound firewall rule.
 
 ## 5. Send a webhook
 
 From any machine that can reach the relay:
 
 ```sh
-curl -X POST https://relay.example.com/project-a/orders/created \
+curl -X POST https://relay.example.com/new-project/orders/created \
   -H 'Content-Type: application/json' \
   -H 'X-Test-Event: order.created' \
   -d '{"order_id":"test-123"}'
@@ -70,4 +70,4 @@ In the webhook detail, choose **Replay**, enter your local endpoint such as `htt
 Close the desktop, send another webhook, then reconnect. The relay keeps the delivery in SQLite until the desktop acknowledges it.
 :::
 
-For adding, removing, or moving project ownership later, see [Manage the relay](/guides/manage-relay/).
+For adding or removing subscribers and managing retained history later, see [Manage the relay](/guides/manage-relay/).

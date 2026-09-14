@@ -9,7 +9,13 @@ Create the platform-specific configuration file with:
 wiretap config init
 ```
 
-On Linux, the default is `~/.config/wiretap/config.yaml`. Empty values use platform defaults. Paths may be absolute or relative to the process working directory; prefer absolute paths outside the Wiretap config directory.
+The config file lives in your platform's user-config directory, with `wiretap` appended:
+
+- **Linux:** `~/.config/wiretap/config.yaml`, or `$XDG_CONFIG_HOME/wiretap/config.yaml` when that variable is set
+- **macOS:** `~/Library/Application Support/wiretap/config.yaml`
+- **Windows:** `%AppData%\wiretap\config.yaml`
+
+Empty values use platform defaults. Paths may be absolute or relative to the process working directory; prefer absolute paths outside the Wiretap config directory.
 
 ## Complete example
 
@@ -50,7 +56,11 @@ intercept:
 
 ### `relay.url`
 
-The WebSocket endpoint used by the desktop tunnel. This is normally `wss://relay.example.com/tunnel`, not the HTTPS base URL accepted by `wiretap relay --url`.
+The WebSocket endpoint used by the desktop tunnel. This is normally `wss://relay.example.com/tunnel`.
+
+:::note
+This is the WSS tunnel URL, not the HTTPS base URL accepted by `wiretap relay --url`.
+:::
 
 ### `relay.forward_url`
 
@@ -70,7 +80,7 @@ SQLite database containing captures, delivered webhooks, relay cursors, and tran
 
 ### `tui.theme`
 
-The terminal UI's built-in palette. The supported value is `dark`.
+The terminal UI's palette: `dark` or `light`. This defaults to `dark`, and unknown values also fall back to `dark`.
 
 ### `gui.native_titlebar`
 
@@ -82,11 +92,17 @@ Application theme, text size, and row density are desktop-local preferences mana
 
 ### `intercept.proxy_addr`
 
-Local HTTP/HTTPS proxy address. Keep it on loopback unless you deliberately intend to expose the proxy.
+The address the interception proxy listens on. The intercepted shell sends its `HTTP_PROXY`/`HTTPS_PROXY` traffic here, and the proxy records each request and response it forwards.
+
+:::caution[Keep it on loopback]
+The proxy is unauthenticated. Bound to a routable address, anyone who can reach the port can proxy traffic through your machine and request Wiretap CA-signed certificates for arbitrary hosts whenever that CA is trusted. Leave it on `127.0.0.1` unless you deliberately intend that exposure.
+:::
 
 ### `intercept.local_api_addr`
 
-Unauthenticated local API address for `/local/health`, `/local/captures`, and `/local/webhooks`. Keep it on loopback because responses may contain captured data.
+The address of the read-only control API that runs while `wiretap intercept start` is active. It serves `GET /local/health`, `GET /local/webhooks` (optional `?project=` and `?limit=`), and `GET /local/captures` (optional `?limit=`), newest first.
+
+Keep it on loopback. The API requires no credentials and returns captured request URLs, source IPs, and byte counts — metadata that is sensitive even though response bodies are not included.
 
 ### `intercept.shell`
 

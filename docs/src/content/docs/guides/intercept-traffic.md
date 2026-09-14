@@ -78,7 +78,7 @@ While interception is running, the loopback API exposes health and recent record
 ```sh
 curl http://127.0.0.1:9876/local/health
 curl 'http://127.0.0.1:9876/local/captures?limit=50'
-curl 'http://127.0.0.1:9876/local/webhooks?project=project-a&limit=50'
+curl 'http://127.0.0.1:9876/local/webhooks?project=new-project&limit=50'
 ```
 
 Keep `intercept.local_api_addr` on loopback. These endpoints are unauthenticated and can return captured data.
