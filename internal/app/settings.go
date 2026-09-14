@@ -40,13 +40,17 @@ func (a *App) ReloadConfig() (*config.Config, error) {
 }
 
 // RelayCredentials returns the stored relay registration (client id/token +
-// claimed projects). Returns the injected credentials when the App was built
+// last known subscriptions). Returns injected credentials when App was built
 // with WithCredentials; otherwise loads relay-credentials.json. A missing
 // file surfaces as an error the caller treats as "not registered".
 func (a *App) RelayCredentials() (*config.Credentials, error) {
+	a.mu.Lock()
 	if a.creds != nil {
-		return a.creds, nil
+		copy := cloneCredentials(*a.creds)
+		a.mu.Unlock()
+		return &copy, nil
 	}
+	a.mu.Unlock()
 	return a.mgr.LoadCredentials()
 }
 
@@ -62,9 +66,15 @@ func (a *App) SaveRelayCredentials(creds config.Credentials) error {
 		return err
 	}
 	a.mu.Lock()
-	a.creds = stored
+	copy := cloneCredentials(*stored)
+	a.creds = &copy
 	a.mu.Unlock()
 	return nil
+}
+
+func cloneCredentials(creds config.Credentials) config.Credentials {
+	creds.Projects = append([]string(nil), creds.Projects...)
+	return creds
 }
 
 // CredsPath exposes the resolved relay-credentials.json path for display in

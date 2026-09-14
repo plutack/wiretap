@@ -77,9 +77,9 @@ func MigratePC(ctx context.Context, db *sql.DB) error {
 }
 
 // migrate lists all *.sql files under subdir in the embedded FS and runs
-// them in lexicographic order. Each file is split on ';' into statements;
-// empty statements are skipped. A failure halts and returns a wrapped error
-// naming the offending file.
+// unapplied files in lexicographic order. Migrations predating the ledger are
+// deliberately idempotent, so an existing database can run them once more and
+// record them before moving on to one-shot table rebuilds.
 func migrate(ctx context.Context, db *sql.DB, subdir string) error {
 	entries, err := fs.ReadDir(migrationFS, subdir)
 	if err != nil {
@@ -92,18 +92,53 @@ func migrate(ctx context.Context, db *sql.DB, subdir string) error {
 		}
 	}
 	sort.Strings(files)
+	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+		scope TEXT NOT NULL,
+		name TEXT NOT NULL,
+		applied_at INTEGER NOT NULL DEFAULT (unixepoch()),
+		PRIMARY KEY (scope, name)
+	)`); err != nil {
+		return fmt.Errorf("store: create migration ledger: %w", err)
+	}
 
 	for _, name := range files {
+		var applied int
+		if err := db.QueryRowContext(ctx,
+			"SELECT 1 FROM schema_migrations WHERE scope = ? AND name = ?",
+			subdir, name,
+		).Scan(&applied); err == nil {
+			continue
+		} else if err != sql.ErrNoRows {
+			return fmt.Errorf("store: check migration %s/%s: %w", subdir, name, err)
+		}
 		path := subdir + "/" + name
 		b, err := migrationFS.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("store: read %s: %w", path, err)
 		}
-		if err := execScript(ctx, db, path, string(b)); err != nil {
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("store: begin migration %s: %w", path, err)
+		}
+		if err := execScript(ctx, tx, path, string(b)); err != nil {
+			_ = tx.Rollback()
 			return err
+		}
+		if _, err := tx.ExecContext(ctx,
+			"INSERT INTO schema_migrations (scope, name) VALUES (?, ?)", subdir, name,
+		); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("store: record migration %s: %w", path, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("store: commit migration %s: %w", path, err)
 		}
 	}
 	return nil
+}
+
+type migrationExecer interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 
 // execScript runs the raw SQL in a file. Comment lines (starting with --)
@@ -113,7 +148,7 @@ func migrate(ctx context.Context, db *sql.DB, subdir string) error {
 // comments may themselves contain semicolons, which would naively split a
 // comment's tail into a phantom statement (SQLite then reports a syntax
 // error on the leftover text). Empty statements are skipped.
-func execScript(ctx context.Context, db *sql.DB, name, script string) error {
+func execScript(ctx context.Context, db migrationExecer, name, script string) error {
 	// Remove full-line and trailing -- comments. We only strip from the first
 	// -- on each line to keep the parser simple; no inline /* */ blocks in our
 	// migrations. This is good enough and easy to audit.
@@ -131,11 +166,9 @@ func execScript(ctx context.Context, db *sql.DB, name, script string) error {
 			continue
 		}
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
-			// Migrations are replayed at every startup (there is no version
-			// table); CREATE statements are idempotent via IF NOT EXISTS, but
-			// SQLite has no "ADD COLUMN IF NOT EXISTS". Treat the duplicate-
-			// column error as "already applied" so ALTER TABLE ADD COLUMN
-			// migrations stay re-runnable.
+			// Older migrations were designed to be replayed and may add columns.
+			// Existing installations execute each of those once while seeding the
+			// ledger, so tolerate a column that is already present.
 			if strings.Contains(err.Error(), "duplicate column name") {
 				continue
 			}

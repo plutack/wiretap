@@ -28,6 +28,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -77,7 +79,7 @@ type App struct {
 	tunnelCtx         context.Context
 	tunnelCancel      context.CancelFunc
 	tunnelDone        chan struct{}
-	connectedProjects []string // projects the relay says this client owns (set via OnConnect); nil when no tunnel attached
+	connectedProjects []string // authoritative subscriptions from OnConnect; nil when no tunnel is attached
 }
 
 // TunnelConfig is the resolved relay connection parameters passed to the
@@ -239,13 +241,9 @@ func (a *App) StartTunnel(ctx context.Context) error {
 	if cfg.Relay.URL == "" {
 		return nil // tunnel disabled
 	}
-	creds := a.creds
-	if creds == nil {
-		loaded, err := a.mgr.LoadCredentials()
-		if err != nil {
-			return nil // no credentials → tunnel disabled, not fatal
-		}
-		creds = loaded
+	creds, err := a.RelayCredentials()
+	if err != nil {
+		return nil // no credentials → tunnel disabled, not fatal
 	}
 	if creds.ClientID == "" || creds.ClientToken == "" {
 		return nil
@@ -287,7 +285,7 @@ func (a *App) TunnelRunning() bool {
 }
 
 // ConnectedProjects returns a snapshot of the project paths the relay says this
-// client owns, set by the tunnel's OnConnect callback. Returns nil when no
+// client subscribes to, set by the tunnel's OnConnect callback. Returns nil when no
 // tunnel is attached (or before the first OK arrives). The GUI/TUI show this in
 // their status bars so the user can see what the relay is actually routing to
 // them — without having to trust the local credentials file.
@@ -308,7 +306,7 @@ func (a *App) ConnectedProjects() []string {
 func (a *App) SetConnectedProjects(p []string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.connectedProjects = p
+	a.connectedProjects = append([]string(nil), p...)
 }
 
 // StopTunnel cancels the background tunnel and waits for it to exit. Safe to
@@ -589,13 +587,13 @@ func (e *ReplayRejectedError) Error() string {
 // defaultTunnelFactory wires relayclient.Client. It is the production default
 // for the tunnelFactory seam. Because it is a method on *App, the relayclient
 // callbacks can write back into App state: OnConnect gives us the list of
-// projects the relay says this client owns (so the GUI/TUI can show it without
+// projects the relay says this client subscribes to (so the GUI/TUI can show it without
 // re-reading the credentials file), and OnDisconnect clears it.
 func (a *App) defaultTunnelFactory(cfg TunnelConfig, st *store.PCStore) TunnelRunner {
 	opts := []relayclient.Option{
 		relayclient.WithClock(testutil.SystemClock{}),
 		relayclient.WithCallbacks(relayclient.Callbacks{
-			OnConnect:    func(projects []string) { a.SetConnectedProjects(projects) },
+			OnConnect:    a.syncConnectedProjects,
 			OnDisconnect: func(_ error) { a.SetConnectedProjects(nil) },
 			// Auto-forward: deliver every stored webhook to the configured
 			// local URL (relay.forward_url). Fires after persistence + ACK,
@@ -616,6 +614,27 @@ func (a *App) defaultTunnelFactory(cfg TunnelConfig, st *store.PCStore) TunnelRu
 		st,
 		opts...,
 	)
+}
+
+// syncConnectedProjects makes the relay's authoritative subscriptions visible
+// immediately and persists them so a project granted by an administrator is
+// included in future reconnect cursors and the Settings screen.
+func (a *App) syncConnectedProjects(projects []string) {
+	a.SetConnectedProjects(projects)
+	creds, err := a.RelayCredentials()
+	if err != nil || creds == nil {
+		return
+	}
+	want := append([]string(nil), projects...)
+	have := append([]string(nil), creds.Projects...)
+	sort.Strings(want)
+	sort.Strings(have)
+	if slices.Equal(want, have) {
+		return
+	}
+	updated := *creds
+	updated.Projects = want
+	_ = a.SaveRelayCredentials(updated)
 }
 
 // forwardTimeout bounds one auto-forward delivery attempt.

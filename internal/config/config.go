@@ -38,7 +38,7 @@ type RelayConfig struct {
 	// system keyring. Defaults to <config dir>/relay-credentials.json.
 	CredsFile string `yaml:"creds_file"`
 	// Note: the set of project paths is owned by the relay (which rejects
-	// ingress to unclaimed paths) and mirrored locally in relay-credentials.json
+	// ingress to inactive paths) and mirrored locally in relay-credentials.json
 	// (written by `wiretap relay register --save`). It is deliberately not a
 	// config field — keeping it here would create a third copy that drifts.
 }

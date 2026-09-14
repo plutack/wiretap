@@ -50,8 +50,7 @@ type RelayAdminCreateClientInput struct {
 	Projects    []string `json:"projects"`
 }
 
-// RelayAdminDeleteClientInput revokes a relay identity. Relay storage cascades
-// the deletion to that client's project bindings and queued webhook history.
+// RelayAdminDeleteClientInput revokes an identity and its subscriptions.
 type RelayAdminDeleteClientInput struct {
 	RelayURL   string `json:"relay_url"`
 	AdminToken string `json:"admin_token"`
@@ -83,6 +82,31 @@ type RelayAdminReassignProjectInput struct {
 	Force       bool   `json:"force"`
 }
 
+type RelayAdminSubscriptionInput struct {
+	RelayURL       string `json:"relay_url"`
+	AdminToken     string `json:"admin_token"`
+	Path           string `json:"path"`
+	ClientID       string `json:"client_id"`
+	IncludeHistory bool   `json:"include_history"`
+}
+
+type RelayAdminListWebhooksInput struct {
+	RelayURL   string `json:"relay_url"`
+	AdminToken string `json:"admin_token"`
+	Path       string `json:"path"`
+	AfterSeq   int64  `json:"after_seq"`
+	Limit      int64  `json:"limit"`
+}
+
+type RelayAdminDeleteWebhooksInput struct {
+	RelayURL   string  `json:"relay_url"`
+	AdminToken string  `json:"admin_token"`
+	Path       string  `json:"path"`
+	Seqs       []int64 `json:"seqs"`
+	ThroughSeq int64   `json:"through_seq"`
+	All        bool    `json:"all"`
+}
+
 // RelayAdminOverviewView is the bounded server-management snapshot rendered
 // by Settings. It deliberately contains no client or admin secret.
 type RelayAdminOverviewView struct {
@@ -103,10 +127,35 @@ type RelayAdminClientView struct {
 }
 
 type RelayAdminProjectView struct {
-	Path      string `json:"path"`
+	Path          string                       `json:"path"`
+	CreatedAt     int64                        `json:"created_at"`
+	NextSeq       int64                        `json:"next_seq"`
+	WebhookCount  int64                        `json:"webhook_count"`
+	Subscriptions []RelayAdminSubscriptionView `json:"subscriptions"`
+	ClientID      string                       `json:"client_id,omitempty"`
+	AckedSeq      int64                        `json:"acked_seq,omitempty"`
+}
+
+type RelayAdminSubscriptionView struct {
 	ClientID  string `json:"client_id"`
 	CreatedAt int64  `json:"created_at"`
+	StartSeq  int64  `json:"start_seq"`
 	AckedSeq  int64  `json:"acked_seq"`
+	Pending   int64  `json:"pending"`
+}
+
+type RelayAdminWebhookView struct {
+	Seq        int64  `json:"seq"`
+	ReceivedAt int64  `json:"received_at"`
+	SourceIP   string `json:"source_ip,omitempty"`
+	Method     string `json:"method"`
+	Path       string `json:"path,omitempty"`
+	BodyBytes  int    `json:"body_bytes"`
+}
+
+type RelayAdminWebhookPageView struct {
+	Webhooks     []RelayAdminWebhookView `json:"webhooks"`
+	NextAfterSeq int64                   `json:"next_after_seq,omitempty"`
 }
 
 // RelayAdminCredentialsView contains a newly-created client token. The relay
@@ -117,8 +166,7 @@ type RelayAdminCredentialsView struct {
 	Projects    []string `json:"projects"`
 }
 
-// RelayAdminOverview authenticates to the configured relay and returns its
-// health, registered clients, and project ownership in one snapshot.
+// RelayAdminOverview returns relay health, clients, projects, and subscriptions.
 func (b *Bindings) RelayAdminOverview(in RelayAdminInput) (RelayAdminOverviewView, error) {
 	client, base, err := relayAdminClient(in.RelayURL, in.AdminToken)
 	if err != nil {
@@ -349,6 +397,98 @@ func (b *Bindings) RelayAdminAddProject(in RelayAdminAddProjectInput) (RelayAdmi
 	return relayAdminProjectView(*out), nil
 }
 
+func (b *Bindings) RelayAdminAddSubscriber(in RelayAdminSubscriptionInput) (RelayAdminProjectView, error) {
+	client, base, err := relayAdminClient(in.RelayURL, in.AdminToken)
+	if err != nil {
+		return RelayAdminProjectView{}, err
+	}
+	path := strings.Trim(strings.TrimSpace(in.Path), "/")
+	clientID := strings.TrimSpace(in.ClientID)
+	if path == "" || clientID == "" {
+		return RelayAdminProjectView{}, errors.New("add relay subscriber: project path and client ID are required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), relayAdminTimeout)
+	defer cancel()
+	out, err := client.AddProjectSubscriber(ctx, path, clientID, in.IncludeHistory)
+	if err != nil {
+		return RelayAdminProjectView{}, fmt.Errorf("add relay subscriber: %w", err)
+	}
+	if err := b.syncLocalRelayProjects(ctx, base, client); err != nil {
+		return RelayAdminProjectView{}, fmt.Errorf("subscriber added, but this desktop could not synchronize: %w", err)
+	}
+	return relayAdminProjectView(*out), nil
+}
+
+func (b *Bindings) RelayAdminRemoveSubscriber(in RelayAdminSubscriptionInput) error {
+	client, base, err := relayAdminClient(in.RelayURL, in.AdminToken)
+	if err != nil {
+		return err
+	}
+	path := strings.Trim(strings.TrimSpace(in.Path), "/")
+	clientID := strings.TrimSpace(in.ClientID)
+	if path == "" || clientID == "" {
+		return errors.New("remove relay subscriber: project path and client ID are required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), relayAdminTimeout)
+	defer cancel()
+	if err := client.RemoveProjectSubscriber(ctx, path, clientID); err != nil {
+		return fmt.Errorf("remove relay subscriber: %w", err)
+	}
+	if err := b.syncLocalRelayProjects(ctx, base, client); err != nil {
+		return fmt.Errorf("subscriber removed, but this desktop could not synchronize: %w", err)
+	}
+	return nil
+}
+
+func (b *Bindings) RelayAdminListWebhooks(in RelayAdminListWebhooksInput) (RelayAdminWebhookPageView, error) {
+	client, _, err := relayAdminClient(in.RelayURL, in.AdminToken)
+	if err != nil {
+		return RelayAdminWebhookPageView{}, err
+	}
+	path := strings.Trim(strings.TrimSpace(in.Path), "/")
+	if path == "" {
+		return RelayAdminWebhookPageView{}, errors.New("list relay webhooks: project path is required")
+	}
+	limit := in.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), relayAdminTimeout)
+	defer cancel()
+	out, err := client.ListWebhookSummaries(ctx, path, in.AfterSeq, limit)
+	if err != nil {
+		return RelayAdminWebhookPageView{}, fmt.Errorf("list relay webhooks: %w", err)
+	}
+	view := RelayAdminWebhookPageView{NextAfterSeq: out.NextAfterSeq, Webhooks: make([]RelayAdminWebhookView, 0, len(out.Webhooks))}
+	for _, webhook := range out.Webhooks {
+		view.Webhooks = append(view.Webhooks, RelayAdminWebhookView{
+			Seq: webhook.Seq, ReceivedAt: webhook.ReceivedAt, SourceIP: webhook.SourceIP,
+			Method: webhook.Method, Path: webhook.Path, BodyBytes: webhook.BodyBytes,
+		})
+	}
+	return view, nil
+}
+
+func (b *Bindings) RelayAdminDeleteWebhooks(in RelayAdminDeleteWebhooksInput) (int64, error) {
+	client, _, err := relayAdminClient(in.RelayURL, in.AdminToken)
+	if err != nil {
+		return 0, err
+	}
+	path := strings.Trim(strings.TrimSpace(in.Path), "/")
+	if path == "" {
+		return 0, errors.New("delete relay webhooks: project path is required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), relayAdminTimeout)
+	defer cancel()
+	out, err := client.DeleteWebhooks(ctx, path, api.DeleteWebhooksRequest{
+		Seqs: in.Seqs, ThroughSeq: in.ThroughSeq, All: in.All,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("delete relay webhooks: %w", err)
+	}
+	return out.Deleted, nil
+}
+
 // RelayAdminDeleteProject deletes one project and its queued relay history.
 func (b *Bindings) RelayAdminDeleteProject(in RelayAdminDeleteProjectInput) error {
 	client, base, err := relayAdminClient(in.RelayURL, in.AdminToken)
@@ -370,8 +510,7 @@ func (b *Bindings) RelayAdminDeleteProject(in RelayAdminDeleteProjectInput) erro
 	return nil
 }
 
-// RelayAdminReassignProject transfers project ownership. Existing ownership
-// requires Force, which the GUI sets only after an explicit confirmation.
+// RelayAdminReassignProject preserves the legacy replace-all-subscribers API.
 func (b *Bindings) RelayAdminReassignProject(in RelayAdminReassignProjectInput) (RelayAdminProjectView, error) {
 	client, base, err := relayAdminClient(in.RelayURL, in.AdminToken)
 	if err != nil {
@@ -427,10 +566,24 @@ func (b *Bindings) syncLocalRelayProjects(ctx context.Context, adminBase string,
 }
 
 func relayAdminProjectView(project api.Project) RelayAdminProjectView {
-	return RelayAdminProjectView{
-		Path: project.Path, ClientID: project.ClientID,
-		CreatedAt: project.CreatedAt, AckedSeq: project.AckedSeq,
+	view := RelayAdminProjectView{
+		Path: project.Path, CreatedAt: project.CreatedAt, NextSeq: project.NextSeq,
+		WebhookCount: project.WebhookCount, ClientID: project.ClientID, AckedSeq: project.AckedSeq,
+		Subscriptions: make([]RelayAdminSubscriptionView, 0, len(project.Subscriptions)),
 	}
+	for _, sub := range project.Subscriptions {
+		view.Subscriptions = append(view.Subscriptions, RelayAdminSubscriptionView{
+			ClientID: sub.ClientID, CreatedAt: sub.CreatedAt, StartSeq: sub.StartSeq,
+			AckedSeq: sub.AckedSeq, Pending: sub.Pending,
+		})
+	}
+	// Older relays return only the legacy single-owner fields.
+	if len(view.Subscriptions) == 0 && project.ClientID != "" {
+		view.Subscriptions = append(view.Subscriptions, RelayAdminSubscriptionView{
+			ClientID: project.ClientID, AckedSeq: project.AckedSeq,
+		})
+	}
+	return view
 }
 
 func relayAdminClient(rawURL, adminToken string) (*api.HTTPClient, string, error) {

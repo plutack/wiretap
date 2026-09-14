@@ -65,7 +65,7 @@ type RegisterInput struct {
 }
 
 // RegisterView reports a successful registration: the assigned client id,
-// the claimed projects, and the tunnel URL written to the config.
+// initial project subscriptions, and the tunnel URL written to the config.
 type RegisterView struct {
 	ClientID  string   `json:"client_id"`
 	Projects  []string `json:"projects"`
@@ -79,7 +79,7 @@ func (b *Bindings) AddRelayProject(project string) (SettingsView, error) {
 	if project == "" {
 		return SettingsView{}, errors.New("add project: project path is required")
 	}
-	client, creds, err := b.ownerRelayClient()
+	client, creds, err := b.registeredRelayClient()
 	if err != nil {
 		return SettingsView{}, err
 	}
@@ -97,14 +97,14 @@ func (b *Bindings) AddRelayProject(project string) (SettingsView, error) {
 	return b.GetSettings()
 }
 
-// RemoveRelayProject releases a path owned by the currently registered
-// desktop. The GUI confirms the relay-side history deletion before calling.
+// RemoveRelayProject unsubscribes the currently registered desktop. The
+// project and relay-side history remain independent admin-managed resources.
 func (b *Bindings) RemoveRelayProject(project string) (SettingsView, error) {
 	project = strings.Trim(strings.TrimSpace(project), "/")
 	if project == "" {
 		return SettingsView{}, errors.New("remove project: project path is required")
 	}
-	client, creds, err := b.ownerRelayClient()
+	client, creds, err := b.registeredRelayClient()
 	if err != nil {
 		return SettingsView{}, err
 	}
@@ -122,7 +122,7 @@ func (b *Bindings) RemoveRelayProject(project string) (SettingsView, error) {
 	return b.GetSettings()
 }
 
-func (b *Bindings) ownerRelayClient() (*api.HTTPClient, *config.Credentials, error) {
+func (b *Bindings) registeredRelayClient() (*api.HTTPClient, *config.Credentials, error) {
 	cfg, err := b.app.Config()
 	if err != nil {
 		return nil, nil, fmt.Errorf("load config: %w", err)

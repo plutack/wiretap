@@ -86,8 +86,7 @@ func makeClientFor(t *testing.T, s *Server, clientID, token string, projects ...
 func TestHandleHealth_StatusOK(t *testing.T) {
 	t.Parallel()
 	srv, _, c := freshServer(t)
-	session := srv.tunnels.attach("project-a", "client-a")
-	srv.tunnels.attachSession("project-b", session)
+	srv.tunnels.attach("client-a", []string{"project-a", "project-b"})
 	resp, err := c.Health(context.Background())
 	if err != nil {
 		t.Fatalf("Health: %v", err)
@@ -170,6 +169,9 @@ func TestHandleClientProjects_RejectsBadCredentialsAndOtherOwner(t *testing.T) {
 		t.Fatalf("bad credentials err = %v, want unauthorized", err)
 	}
 	other, _ := api.NewClient(hs.URL, api.WithClientAuth("c2", "t2"))
+	if _, err := other.AddClientProject(context.Background(), "project-a"); !api.IsConflict(err) {
+		t.Fatalf("unapproved subscribe err = %v, want conflict", err)
+	}
 	if _, err := other.RemoveClientProject(context.Background(), "project-a"); !api.IsNotFound(err) {
 		t.Fatalf("other owner remove err = %v, want not found", err)
 	}
@@ -338,9 +340,10 @@ func TestHandleDeleteClient_Success(t *testing.T) {
 	if err := c.DeleteClient(context.Background(), "c1"); err != nil {
 		t.Fatalf("DeleteClient: %v", err)
 	}
-	// Confirm the project binding cascaded away.
-	if _, err := s.store.Project(context.Background(), "project-a"); err == nil {
-		t.Error("deleting client should cascade to projects")
+	// The independent project remains, but its client subscription is revoked.
+	project, err := s.store.Project(context.Background(), "project-a")
+	if err != nil || len(project.Subscriptions) != 0 {
+		t.Errorf("project after deleting client = %+v, %v", project, err)
 	}
 }
 
@@ -367,9 +370,8 @@ func TestHandleListProjects(t *testing.T) {
 	if resp.Projects[0].Path != "alpha" || resp.Projects[1].Path != "beta" {
 		t.Errorf("projects out of order: %+v", resp.Projects)
 	}
-	// Owner recorded.
-	if resp.Projects[0].ClientID != "c1" {
-		t.Errorf("alpha owner = %q, want c1", resp.Projects[0].ClientID)
+	if len(resp.Projects[0].Subscriptions) != 1 || resp.Projects[0].Subscriptions[0].ClientID != "c1" {
+		t.Errorf("alpha subscriptions = %+v", resp.Projects[0].Subscriptions)
 	}
 }
 
@@ -444,8 +446,8 @@ func TestHandleAdminProjectLifecycle(t *testing.T) {
 	if project.Path != "orders" || project.ClientID != registered.ClientID {
 		t.Fatalf("project = %+v", project)
 	}
-	if _, err := c.AssignProject(ctx, "orders", registered.ClientID); !api.IsConflict(err) {
-		t.Fatalf("duplicate AssignProject error = %v", err)
+	if _, err := c.AssignProject(ctx, "orders", registered.ClientID); err != nil {
+		t.Fatalf("idempotent AssignProject error = %v", err)
 	}
 	if err := c.DeleteProject(ctx, "orders"); err != nil {
 		t.Fatalf("DeleteProject: %v", err)
@@ -453,6 +455,97 @@ func TestHandleAdminProjectLifecycle(t *testing.T) {
 	projects, err := c.ListProjects(ctx)
 	if err != nil || len(projects.Projects) != 0 {
 		t.Fatalf("projects after delete = %+v, %v", projects, err)
+	}
+}
+
+func TestHandleAdminProjectSubscribers(t *testing.T) {
+	t.Parallel()
+	_, _, c := freshServer(t)
+	ctx := context.Background()
+	c1, err := c.Register(ctx, api.RegisterRequest{DisplayName: "one", Projects: []string{"orders"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c2, err := c.Register(ctx, api.RegisterRequest{DisplayName: "two"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := c.AddProjectSubscriber(ctx, "orders", c2.ClientID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(project.Subscriptions) != 2 || project.Subscriptions[0].ClientID != c1.ClientID || project.Subscriptions[1].ClientID != c2.ClientID {
+		t.Fatalf("subscriptions = %+v", project.Subscriptions)
+	}
+	if err := c.RemoveProjectSubscriber(ctx, "orders", c1.ClientID); err != nil {
+		t.Fatal(err)
+	}
+	projects, err := c.ListProjects(ctx)
+	if err != nil || len(projects.Projects) != 1 || len(projects.Projects[0].Subscriptions) != 1 {
+		t.Fatalf("projects after unsubscribe = %+v, %v", projects, err)
+	}
+}
+
+func TestHandleAdminBatchDeleteWebhooks(t *testing.T) {
+	t.Parallel()
+	_, hs, c := freshServer(t)
+	ctx := context.Background()
+	registered, err := c.Register(ctx, api.RegisterRequest{Projects: []string{"orders"}})
+	if err != nil || registered.ClientID == "" {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4; i++ {
+		postIngress(t, hs, "orders", []byte(fmt.Sprintf(`{"i":%d}`, i)), nil)
+	}
+	deleted, err := c.DeleteWebhooks(ctx, "orders", api.DeleteWebhooksRequest{Seqs: []int64{1, 3, 3}})
+	if err != nil || deleted.Deleted != 2 {
+		t.Fatalf("delete selected = %+v, %v", deleted, err)
+	}
+	deleted, err = c.DeleteWebhooks(ctx, "orders", api.DeleteWebhooksRequest{ThroughSeq: 2})
+	if err != nil || deleted.Deleted != 1 {
+		t.Fatalf("delete through = %+v, %v", deleted, err)
+	}
+	if err := c.DeleteWebhook(ctx, "orders", 4); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := c.ListWebhooks(ctx, "orders", 0, 10)
+	if err != nil || len(rows.Webhooks) != 0 {
+		t.Fatalf("remaining webhooks = %+v, %v", rows, err)
+	}
+}
+
+func TestHandleAdminReplayReportsOfflineAndUnknownTargets(t *testing.T) {
+	t.Parallel()
+	_, hs, admin := freshServer(t)
+	ctx := context.Background()
+	registered, err := admin.Register(ctx, api.RegisterRequest{Projects: []string{"orders"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	postIngress(t, hs, "orders", []byte(`{"saved":true}`), nil)
+
+	if err := admin.ReplayWebhook(ctx, "orders", 1); !api.IsConflict(err) {
+		t.Fatalf("untargeted offline replay error = %v, want conflict", err)
+	}
+	if err := admin.ReplayWebhookToClient(ctx, "orders", 1, registered.ClientID); !api.IsConflict(err) {
+		t.Fatalf("targeted offline replay error = %v, want conflict", err)
+	}
+	if err := admin.ReplayWebhookToClient(ctx, "orders", 1, "missing-client"); !api.IsNotFound(err) {
+		t.Fatalf("unknown target replay error = %v, want not found", err)
+	}
+	if _, err := admin.ListWebhooks(ctx, "missing-project", 0, 10); !api.IsNotFound(err) {
+		t.Fatalf("missing project list error = %v, want not found", err)
+	}
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, hs.URL+"/admin/projects/orders/webhooks/1junk/replay", nil)
+	req.Header.Set("X-Admin-Token", "admin-secret")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("malformed replay sequence status = %d, want 400", resp.StatusCode)
 	}
 }
 
