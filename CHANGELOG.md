@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.3.0 — 2026-09-14
+
+### Shared project delivery
+
+- Replaced the single-owner relay model with independent client subscriptions,
+  allowing one webhook project to deliver to multiple desktops.
+- Added a separate delivery cursor and pending count for every subscriber so
+  one offline or slow client cannot advance another client's delivery state.
+- Made tunnel membership authoritative at the relay and synchronized project
+  changes into connected desktops automatically.
+- Added an automatic, transactional database migration that preserves existing
+  projects, owners as first subscribers, queued webhooks, and cursors.
+
+### Relay administration and retention
+
+- Added CLI and GUI controls to subscribe or unsubscribe clients, with an
+  explicit option to include retained history for a new subscriber.
+- Changed desktop project removal into an unsubscribe operation. It no longer
+  deletes the project or its retained relay history.
+- Kept project deletion as an explicit administrator action, and changed client
+  revocation to remove only that client's subscriptions.
+- Added paginated relay webhook inspection, targeted or all-subscriber replay,
+  and deletion by selected sequence, inclusive sequence range, or whole project.
+- Added GUI selection and batch deletion for retained relay webhooks.
+
+### Desktop interface
+
+- Reworked relay project rows around project actions, subscriber state, and the
+  add-subscriber workflow.
+- Fixed custom dropdown menus being clipped by cards and scrolling panes by
+  positioning menus at the document root with viewport-aware placement.
+
+### Upgrade notes
+
+- Upgrade `wiretap-relay` before using v0.3.0 subscription and retention
+  controls. Back up the relay volume before the first start on the new version.
+- `wiretap relay projects remove` no longer accepts `--force`; it now removes
+  only the current client's subscription.
+- New subscribers receive future traffic by default. Administrators must pass
+  `--include-history` when retained deliveries should also be sent.
+
 ## v0.2.15 — 2026-09-13
 
 ### Documentation website
