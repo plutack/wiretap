@@ -38,7 +38,7 @@ Check `intercept.local_api_addr` if you changed it.
 1. Check `https://relay.example.com/health`.
 2. Confirm the desktop config uses `wss://relay.example.com/tunnel`.
 3. Confirm the GUI or TUI reports the tunnel as connected.
-4. Confirm the first URL segment exactly matches a project owned by this desktop.
+4. Confirm the first URL segment exactly matches a project this desktop subscribes to.
 5. Verify the reverse proxy permits WebSocket upgrades on `/tunnel`.
 6. Check that the relay volume is writable and persistent.
 

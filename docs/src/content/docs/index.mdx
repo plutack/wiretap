@@ -1,7 +1,6 @@
 ---
 title: Wiretap documentation
 description: Inspect local HTTP traffic and receive public webhooks without exposing your development machine.
-template: splash
 hero:
   tagline: See the requests your tools send, keep public webhook deliveries while your desktop is offline, and replay or reshape payloads locally.
   actions:
@@ -9,7 +8,7 @@ hero:
       link: /getting-started/quick-start/
       icon: right-arrow
       variant: primary
-    - text: Download v0.2.15
+    - text: Download v0.3.0
       link: /releases/
       icon: download
       variant: minimal
@@ -26,7 +25,7 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
     [Start capturing →](/getting-started/quick-start/)
   </Card>
   <Card title="Receive public webhooks" icon="seti:network">
-    Run the relay on a public server. It queues deliveries while your desktop is offline and sends them through an outbound tunnel after reconnecting.
+    Run the relay on a public server. Deliveries are queued while your desktop is offline and sent through an outbound tunnel once connection is reestablished.
 
     [Receive a webhook →](/getting-started/first-webhook/)
   </Card>
@@ -44,6 +43,6 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 ## One local history, three interfaces
 
-The desktop GUI, terminal UI, and CLI use the same local SQLite store. Choose the interface that fits the moment without splitting capture history between tools.
+The desktop GUI, terminal UI, and CLI use the same local SQLite store. Choose the interface that fits the moment without splitting capture history.
 
-Wiretap is self-hosted. Outbound interception stays on your machine, while public webhook ingress runs through your own `wiretap-relay` deployment.
+Wiretap is meant to be self-hosted. Outbound interception stays on your machine, while public webhook ingress runs through your own `wiretap-relay` hosted deployment.
