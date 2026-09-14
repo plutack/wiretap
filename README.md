@@ -60,7 +60,7 @@ GUI (“Export as code” in the detail pane) or the CLI:
 ```sh
 wiretap export targets                      # list languages/clients
 wiretap export capture 42 --as shell/curl
-wiretap export webhook project-a 7 --as python/requests
+wiretap export webhook new-project 7 --as python/requests
 ```
 
 `--as` takes `target[/client]`; omitting the client uses the target's default.
@@ -117,7 +117,7 @@ wiretap uses a self-hosted public relay. The desktop establishes an outbound Web
      --url https://relay.example.com \
      --admin-token YOUR_ADMIN_TOKEN \
      register --name laptop --save
-   wiretap relay --url https://relay.example.com projects add project-a
+   wiretap relay --url https://relay.example.com projects add new-project
    ```
 
 3. Set the desktop tunnel endpoint in your configuration:
@@ -130,27 +130,28 @@ wiretap uses a self-hosted public relay. The desktop establishes an outbound Web
 4. Start `wiretap gui` or `wiretap tui`, then send a webhook:
 
    ```sh
-   curl -X POST https://relay.example.com/project-a/orders/created \
+   curl -X POST https://relay.example.com/new-project/orders/created \
      -H 'Content-Type: application/json' \
      -d '{"order_id":"test-123"}'
    ```
 
 The first URL segment identifies the registered project. Any remaining path is preserved for inspection and replay.
 
-Registration creates a desktop identity and credentials. To add another
+Registration creates a desktop identity and credentials. To create another
 project later without replacing that identity, use:
 
 ```sh
-wiretap relay projects add project-b
+wiretap relay projects add another-project
 ```
 
 `relay register` also accepts no `--projects`; initial project flags are kept
-as a setup convenience. Removing a project requires
-`wiretap relay projects remove project-b --force` because removal also deletes
-that project's queued relay-side webhook history.
+as a setup convenience. `wiretap relay projects remove another-project` removes only
+this desktop's subscription. The project and retained relay history remain.
 
-Each project currently has one owning desktop client. Project sharing and
-multiple independent subscribers are not supported yet.
+Each project can deliver to multiple subscribed clients. Every subscriber has
+an independent acknowledgement cursor and offline catch-up stream. A relay
+administrator controls who can join an existing project and can choose whether
+a new subscriber receives retained history or only future traffic.
 
 ### TUI dashboard
 
@@ -204,8 +205,8 @@ named relay-admin profile.
 
 Settings is organized by workflow: **Relay connection**, **Capture and
 delivery**, **Interface**, and a separate **Relay server** workspace for
-operators. Relay administrators can create or revoke clients and add, move, or
-delete project bindings. Named relay profiles can securely retrieve their
+operators. Relay administrators can create or revoke clients, create or delete
+projects, manage subscribers, and inspect or delete retained webhooks. Named relay profiles can securely retrieve their
 admin tokens from macOS Keychain, Windows Credential Manager, or Secret
 Service. Desktop project changes preserve the existing client
 identity and reconnect automatically. Wiretap also stores the desktop's
@@ -216,7 +217,8 @@ On Linux, Wiretap follows Secret Service's configured `default` alias and
 stores its entries in that collection; it does not create a separate keyring
 collection for the application.
 Enter the relay URL and admin token to inspect health, manage registered
-clients, create portable client credentials, and reassign project ownership.
+clients, create portable client credentials, manage shared project subscriptions,
+and control relay-side webhook retention.
 For temporary connections, the admin token remains in memory only and is
 cleared when you leave the workspace. Saved profiles retrieve it from the
 system keyring when needed. Creating a client there does not replace this
