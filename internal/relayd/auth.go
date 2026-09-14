@@ -53,17 +53,6 @@ func (s *Server) requireClient(h http.HandlerFunc) http.HandlerFunc {
 // cross-package coupling.
 type clientIDKey struct{}
 
-// clientAndProject resolves the client_id that owns path, used by ingress
-// to look up routing. Returns the empty string and a 404-shaped *api.Error
-// when no client owns the path. Callers translate that into a writeErr call.
-func (s *Server) clientAndProject(r *http.Request, path string) (string, error) {
-	clientID, err := s.store.ClientByProject(r.Context(), path)
-	if err != nil {
-		return "", err
-	}
-	return clientID, nil
-}
-
 // authClientByBasic extracts client_id / client_token from HTTP basic auth
 // and returns the matching ClientRow or an *api.Error-shaped error. Used by
 // the tunnel handler.

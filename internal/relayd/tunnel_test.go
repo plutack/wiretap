@@ -263,6 +263,64 @@ func TestTunnel_LiveIngressPushed(t *testing.T) {
 	}
 }
 
+func TestTunnel_FansOutWithIndependentAcknowledgements(t *testing.T) {
+	t.Parallel()
+	s, hs, _ := freshServer(t)
+	makeClientFor(t, s, "c1", "token-1", "project-a")
+	makeClientFor(t, s, "c2", "token-2")
+	if err := s.store.SubscribeProject(context.Background(), "project-a", "c2", false, s.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	connections := []struct {
+		id    string
+		token string
+		conn  *websocket.Conn
+	}{
+		{id: "c1", token: "token-1"},
+		{id: "c2", token: "token-2"},
+	}
+	for i := range connections {
+		connections[i].conn = dialTunnel(t, hs, connections[i].id, connections[i].token)
+		writeTunnel(t, ctx, connections[i].conn, relayproto.Hello{
+			Base: relayproto.Base{Type: relayproto.TypeHello}, ClientID: connections[i].id,
+			ClientToken: connections[i].token, LastSeqs: map[string]int64{"project-a": 0},
+		})
+		if _, ok := readTunnel(t, ctx, connections[i].conn).(relayproto.OK); !ok {
+			t.Fatalf("%s did not receive OK", connections[i].id)
+		}
+	}
+
+	postIngress(t, hs, "project-a", []byte(`{"shared":true}`), nil)
+	for _, pc := range connections {
+		push, ok := readTunnel(t, ctx, pc.conn).(relayproto.Push)
+		if !ok || push.Seq != 1 {
+			t.Fatalf("%s push = %#v", pc.id, push)
+		}
+	}
+	writeTunnel(t, ctx, connections[0].conn, relayproto.Ack{
+		Base: relayproto.Base{Type: relayproto.TypeAck}, Project: "project-a", UpToSeq: 1,
+	})
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if seq, _ := s.store.AckedSeqForClient(ctx, "project-a", "c1"); seq == 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if seq, _ := s.store.AckedSeqForClient(ctx, "project-a", "c1"); seq != 1 {
+		t.Fatalf("c1 ack = %d, want 1", seq)
+	}
+	if seq, _ := s.store.AckedSeqForClient(ctx, "project-a", "c2"); seq != 0 {
+		t.Fatalf("c2 ack = %d, want 0", seq)
+	}
+	if pending, _ := s.store.PendingCount(ctx, "project-a"); pending != 1 {
+		t.Fatalf("pending after one subscriber ack = %d, want 1", pending)
+	}
+}
+
 // TestTunnel_Replay asks the relay to re-deliver an already-acked webhook.
 func TestTunnel_Replay(t *testing.T) {
 	t.Parallel()
@@ -326,29 +384,80 @@ func TestTunnel_Replay(t *testing.T) {
 	}
 }
 
-// TestTunnelRegistry_AttachReplace confirms a new attach for the same
-// project closes the prior session (only one live tunnel per project).
-func TestTunnelRegistry_AttachReplace(t *testing.T) {
+func TestAdminReplay_TargetsOneSubscriber(t *testing.T) {
+	t.Parallel()
+	s, hs, admin := freshServer(t)
+	makeClientFor(t, s, "c1", "token-1", "project-a")
+	if err := s.store.CreateClient(context.Background(), "c2", "token-2", "two", s.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.SubscribeProject(context.Background(), "project-a", "c2", true, s.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	postIngress(t, hs, "project-a", []byte(`{"event":"saved"}`), nil)
+
+	type connected struct {
+		id    string
+		token string
+		conn  *websocket.Conn
+	}
+	clients := []connected{
+		{id: "c1", token: "token-1", conn: dialTunnel(t, hs, "c1", "token-1")},
+		{id: "c2", token: "token-2", conn: dialTunnel(t, hs, "c2", "token-2")},
+	}
+	for _, client := range clients {
+		writeTunnel(t, context.Background(), client.conn, relayproto.Hello{
+			Base: relayproto.Base{Type: relayproto.TypeHello}, ClientID: client.id,
+			ClientToken: client.token, LastSeqs: map[string]int64{"project-a": 1},
+		})
+		if _, ok := readTunnel(t, context.Background(), client.conn).(relayproto.OK); !ok {
+			t.Fatalf("%s did not receive OK", client.id)
+		}
+	}
+
+	if err := admin.ReplayWebhookToClient(context.Background(), "project-a", 1, "c1"); err != nil {
+		t.Fatalf("targeted replay: %v", err)
+	}
+	message := readTunnel(t, context.Background(), clients[0].conn)
+	push, ok := message.(relayproto.Push)
+	if !ok || push.Seq != 1 || push.Project != "project-a" {
+		t.Fatalf("target replay = %#v", message)
+	}
+
+	readCtx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, _, err := clients[1].conn.Read(readCtx); err == nil {
+		t.Fatal("non-target subscriber unexpectedly received replay")
+	}
+}
+
+// TestTunnelRegistry_FanoutAndClientReconnect confirms a project retains one
+// session per subscribed client while reconnecting replaces only that client.
+func TestTunnelRegistry_FanoutAndClientReconnect(t *testing.T) {
 	t.Parallel()
 	r := NewTunnelRegistry()
-	s1 := r.attach("project-a", "c1")
-	s2 := r.attach("project-a", "c2")
-	if r.lookup("project-a") != s2 {
-		t.Error("new attach should replace the prior session")
+	s1 := r.attach("c1", []string{"project-a"})
+	s2 := r.attach("c2", []string{"project-a"})
+	if len(r.sessions("project-a")) != 2 {
+		t.Fatalf("project sessions = %d, want 2", len(r.sessions("project-a")))
 	}
-	if r.countTunnels() != 1 {
-		t.Errorf("count = %d, want 1", r.countTunnels())
+	if r.countTunnels() != 2 {
+		t.Errorf("count = %d, want 2", r.countTunnels())
 	}
-	r.attachSession("project-b", s2)
-	if r.countTunnels() != 1 {
-		t.Errorf("aliased session count = %d, want 1", r.countTunnels())
+	replacement := r.attach("c1", []string{"project-a", "project-b"})
+	if r.countTunnels() != 2 || len(r.sessions("project-a")) != 2 {
+		t.Errorf("client reconnect disturbed another subscriber")
 	}
-	r.detachByProject("project-b", s2)
-	r.detachByProject("project-a", s2)
+	select {
+	case <-s1.done:
+	default:
+		t.Error("replaced c1 session remains open")
+	}
+	r.detach(replacement)
+	r.detach(s2)
 	if r.countTunnels() != 0 {
-		t.Errorf("detach should remove s2; count = %d", r.countTunnels())
+		t.Errorf("detach count = %d, want 0", r.countTunnels())
 	}
-	_ = s1
 }
 
 // TestRowToPush confirms the WebhookRow -> Push conversion preserves body

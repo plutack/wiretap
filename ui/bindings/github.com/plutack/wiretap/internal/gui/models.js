@@ -850,8 +850,7 @@ export class RelayAdminCredentialsView {
 }
 
 /**
- * RelayAdminDeleteClientInput revokes a relay identity. Relay storage cascades
- * the deletion to that client's project bindings and queued webhook history.
+ * RelayAdminDeleteClientInput revokes an identity and its subscriptions.
  */
 export class RelayAdminDeleteClientInput {
     /**
@@ -941,6 +940,73 @@ export class RelayAdminDeleteProjectInput {
     }
 }
 
+export class RelayAdminDeleteWebhooksInput {
+    /**
+     * Creates a new RelayAdminDeleteWebhooksInput instance.
+     * @param {Partial<RelayAdminDeleteWebhooksInput>} [$$source = {}] - The source object to create the RelayAdminDeleteWebhooksInput.
+     */
+    constructor($$source = {}) {
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
+        if (!("admin_token" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["admin_token"] = "";
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("seqs" in $$source)) {
+            /**
+             * @member
+             * @type {number[]}
+             */
+            this["seqs"] = [];
+        }
+        if (!("through_seq" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["through_seq"] = 0;
+        }
+        if (!("all" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["all"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminDeleteWebhooksInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminDeleteWebhooksInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType2;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("seqs" in $$parsedSource) {
+            $$parsedSource["seqs"] = $$createField3_0($$parsedSource["seqs"]);
+        }
+        return new RelayAdminDeleteWebhooksInput(/** @type {Partial<RelayAdminDeleteWebhooksInput>} */($$parsedSource));
+    }
+}
+
 /**
  * RelayAdminInput carries the ephemeral credentials for one relay admin
  * operation. The admin token crosses the Wails bridge for the request only;
@@ -978,6 +1044,62 @@ export class RelayAdminInput {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new RelayAdminInput(/** @type {Partial<RelayAdminInput>} */($$parsedSource));
+    }
+}
+
+export class RelayAdminListWebhooksInput {
+    /**
+     * Creates a new RelayAdminListWebhooksInput instance.
+     * @param {Partial<RelayAdminListWebhooksInput>} [$$source = {}] - The source object to create the RelayAdminListWebhooksInput.
+     */
+    constructor($$source = {}) {
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
+        if (!("admin_token" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["admin_token"] = "";
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("after_seq" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["after_seq"] = 0;
+        }
+        if (!("limit" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["limit"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminListWebhooksInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminListWebhooksInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RelayAdminListWebhooksInput(/** @type {Partial<RelayAdminListWebhooksInput>} */($$parsedSource));
     }
 }
 
@@ -1043,8 +1165,8 @@ export class RelayAdminOverviewView {
      * @returns {RelayAdminOverviewView}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType3;
-        const $$createField5_0 = $$createType5;
+        const $$createField4_0 = $$createType4;
+        const $$createField5_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("clients" in $$parsedSource) {
             $$parsedSource["clients"] = $$createField4_0($$parsedSource["clients"]);
@@ -1118,13 +1240,6 @@ export class RelayAdminProjectView {
              */
             this["path"] = "";
         }
-        if (!("client_id" in $$source)) {
-            /**
-             * @member
-             * @type {string}
-             */
-            this["client_id"] = "";
-        }
         if (!("created_at" in $$source)) {
             /**
              * @member
@@ -1132,12 +1247,40 @@ export class RelayAdminProjectView {
              */
             this["created_at"] = 0;
         }
-        if (!("acked_seq" in $$source)) {
+        if (!("next_seq" in $$source)) {
             /**
              * @member
              * @type {number}
              */
-            this["acked_seq"] = 0;
+            this["next_seq"] = 0;
+        }
+        if (!("webhook_count" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["webhook_count"] = 0;
+        }
+        if (!("subscriptions" in $$source)) {
+            /**
+             * @member
+             * @type {RelayAdminSubscriptionView[]}
+             */
+            this["subscriptions"] = [];
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["client_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["acked_seq"] = undefined;
         }
 
         Object.assign(this, $$source);
@@ -1149,7 +1292,11 @@ export class RelayAdminProjectView {
      * @returns {RelayAdminProjectView}
      */
     static createFrom($$source = {}) {
+        const $$createField4_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("subscriptions" in $$parsedSource) {
+            $$parsedSource["subscriptions"] = $$createField4_0($$parsedSource["subscriptions"]);
+        }
         return new RelayAdminProjectView(/** @type {Partial<RelayAdminProjectView>} */($$parsedSource));
     }
 }
@@ -1252,6 +1399,220 @@ export class RelayAdminSaveProfileInput {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new RelayAdminSaveProfileInput(/** @type {Partial<RelayAdminSaveProfileInput>} */($$parsedSource));
+    }
+}
+
+export class RelayAdminSubscriptionInput {
+    /**
+     * Creates a new RelayAdminSubscriptionInput instance.
+     * @param {Partial<RelayAdminSubscriptionInput>} [$$source = {}] - The source object to create the RelayAdminSubscriptionInput.
+     */
+    constructor($$source = {}) {
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
+        if (!("admin_token" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["admin_token"] = "";
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("client_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["client_id"] = "";
+        }
+        if (!("include_history" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["include_history"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminSubscriptionInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminSubscriptionInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RelayAdminSubscriptionInput(/** @type {Partial<RelayAdminSubscriptionInput>} */($$parsedSource));
+    }
+}
+
+export class RelayAdminSubscriptionView {
+    /**
+     * Creates a new RelayAdminSubscriptionView instance.
+     * @param {Partial<RelayAdminSubscriptionView>} [$$source = {}] - The source object to create the RelayAdminSubscriptionView.
+     */
+    constructor($$source = {}) {
+        if (!("client_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["client_id"] = "";
+        }
+        if (!("created_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["created_at"] = 0;
+        }
+        if (!("start_seq" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["start_seq"] = 0;
+        }
+        if (!("acked_seq" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["acked_seq"] = 0;
+        }
+        if (!("pending" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["pending"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminSubscriptionView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminSubscriptionView}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RelayAdminSubscriptionView(/** @type {Partial<RelayAdminSubscriptionView>} */($$parsedSource));
+    }
+}
+
+export class RelayAdminWebhookPageView {
+    /**
+     * Creates a new RelayAdminWebhookPageView instance.
+     * @param {Partial<RelayAdminWebhookPageView>} [$$source = {}] - The source object to create the RelayAdminWebhookPageView.
+     */
+    constructor($$source = {}) {
+        if (!("webhooks" in $$source)) {
+            /**
+             * @member
+             * @type {RelayAdminWebhookView[]}
+             */
+            this["webhooks"] = [];
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["next_after_seq"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminWebhookPageView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminWebhookPageView}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType10;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("webhooks" in $$parsedSource) {
+            $$parsedSource["webhooks"] = $$createField0_0($$parsedSource["webhooks"]);
+        }
+        return new RelayAdminWebhookPageView(/** @type {Partial<RelayAdminWebhookPageView>} */($$parsedSource));
+    }
+}
+
+export class RelayAdminWebhookView {
+    /**
+     * Creates a new RelayAdminWebhookView instance.
+     * @param {Partial<RelayAdminWebhookView>} [$$source = {}] - The source object to create the RelayAdminWebhookView.
+     */
+    constructor($$source = {}) {
+        if (!("seq" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["seq"] = 0;
+        }
+        if (!("received_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["received_at"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["source_ip"] = undefined;
+        }
+        if (!("method" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["method"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["path"] = undefined;
+        }
+        if (!("body_bytes" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["body_bytes"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RelayAdminWebhookView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RelayAdminWebhookView}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RelayAdminWebhookView(/** @type {Partial<RelayAdminWebhookView>} */($$parsedSource));
     }
 }
 
@@ -1415,7 +1776,7 @@ export class ScriptTestRequest {
      * @returns {ScriptTestRequest}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType6;
+        const $$createField3_0 = $$createType11;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("headers" in $$parsedSource) {
             $$parsedSource["headers"] = $$createField3_0($$parsedSource["headers"]);
@@ -1657,7 +2018,7 @@ export class SessionPageView {
      * @returns {SessionPageView}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType8;
+        const $$createField0_0 = $$createType13;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
             $$parsedSource["sessions"] = $$createField0_0($$parsedSource["sessions"]);
@@ -2100,7 +2461,7 @@ export class TargetView {
      * @returns {TargetView}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType10;
+        const $$createField3_0 = $$createType15;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("clients" in $$parsedSource) {
             $$parsedSource["clients"] = $$createField3_0($$parsedSource["clients"]);
@@ -2266,12 +2627,17 @@ export class WebhookView {
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = $Create.Map($Create.Any, $$createType0);
-const $$createType2 = RelayAdminClientView.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = RelayAdminProjectView.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = $Create.Map($Create.Any, $Create.Any);
-const $$createType7 = SessionView.createFrom;
+const $$createType2 = $Create.Array($Create.Any);
+const $$createType3 = RelayAdminClientView.createFrom;
+const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = RelayAdminProjectView.createFrom;
+const $$createType6 = $Create.Array($$createType5);
+const $$createType7 = RelayAdminSubscriptionView.createFrom;
 const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = ClientView.createFrom;
+const $$createType9 = RelayAdminWebhookView.createFrom;
 const $$createType10 = $Create.Array($$createType9);
+const $$createType11 = $Create.Map($Create.Any, $Create.Any);
+const $$createType12 = SessionView.createFrom;
+const $$createType13 = $Create.Array($$createType12);
+const $$createType14 = ClientView.createFrom;
+const $$createType15 = $Create.Array($$createType14);

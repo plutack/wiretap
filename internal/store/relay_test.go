@@ -28,6 +28,44 @@ func freshRelayStore(t *testing.T) *RelayStore {
 
 var fixedTime = time.Unix(1_700_000_000, 0).UTC()
 
+func TestMigrateRelay_PreservesLegacyOwnerAndWebhook(t *testing.T) {
+	t.Parallel()
+	db, err := OpenInMemory("legacy-relay-" + t.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	ctx := context.Background()
+	legacy := `
+		CREATE TABLE clients (client_id TEXT PRIMARY KEY, client_token TEXT NOT NULL, display_name TEXT, created_at INTEGER NOT NULL, last_seen_at INTEGER);
+		CREATE TABLE projects (path TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(client_id) ON DELETE CASCADE, created_at INTEGER NOT NULL, next_seq INTEGER NOT NULL DEFAULT 1, acked_seq INTEGER NOT NULL DEFAULT 0);
+		CREATE TABLE webhooks (project TEXT NOT NULL REFERENCES projects(path) ON DELETE CASCADE, seq INTEGER NOT NULL, received_at INTEGER NOT NULL, source_ip TEXT, method TEXT NOT NULL, path TEXT, headers TEXT NOT NULL, raw_headers BLOB, body BLOB, delivered INTEGER NOT NULL DEFAULT 0, delivered_at INTEGER, PRIMARY KEY (project, seq));
+		INSERT INTO clients VALUES ('c1', 'token', 'legacy', 1700000000, NULL);
+		INSERT INTO projects VALUES ('orders', 'c1', 1700000000, 8, 5);
+		INSERT INTO webhooks VALUES ('orders', 6, 1700000000, '', 'POST', '', '{}', NULL, X'6869', 0, NULL);`
+	if err := execScript(ctx, db, "legacy fixture", legacy); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateRelay(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	store := NewRelayStore(db)
+	project, err := store.Project(ctx, "orders")
+	if err != nil || project.NextSeq != 8 || len(project.Subscriptions) != 1 {
+		t.Fatalf("migrated project = %+v, %v", project, err)
+	}
+	if sub := project.Subscriptions[0]; sub.ClientID != "c1" || sub.AckedSeq != 5 || sub.StartSeq != 0 {
+		t.Fatalf("migrated subscription = %+v", sub)
+	}
+	webhook, err := store.WebhookBySeq(ctx, "orders", 6)
+	if err != nil || string(webhook.Body) != "hi" {
+		t.Fatalf("migrated webhook = %+v, %v", webhook, err)
+	}
+	if err := MigrateRelay(ctx, db); err != nil {
+		t.Fatalf("second migration: %v", err)
+	}
+}
+
 func TestRelayStore_CreateClient_RoundTrip(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -158,7 +196,7 @@ func TestRelayStore_ProjectsByClient_Sorted(t *testing.T) {
 	}
 }
 
-func TestRelayStore_UnbindProject_OnlyOwnerAndCascades(t *testing.T) {
+func TestRelayStore_UnbindProject_RemovesOnlySubscription(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	s := freshRelayStore(t)
@@ -180,12 +218,13 @@ func TestRelayStore_UnbindProject_OnlyOwnerAndCascades(t *testing.T) {
 	if err := s.UnbindProject(ctx, "project-a", "c1"); err != nil {
 		t.Fatalf("owner UnbindProject: %v", err)
 	}
-	if _, err := s.Project(ctx, "project-a"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("project after unbind err = %v, want ErrNotFound", err)
+	project, err := s.Project(ctx, "project-a")
+	if err != nil || len(project.Subscriptions) != 0 {
+		t.Fatalf("project after unbind = %+v, err %v; want retained without subscribers", project, err)
 	}
 	rows, _, err := s.ListWebhooks(ctx, "project-a", 0, 10)
-	if err != nil || len(rows) != 0 {
-		t.Fatalf("webhooks after unbind = %v, err %v; want empty", rows, err)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("webhooks after unbind = %v, err %v; want retained", rows, err)
 	}
 }
 
@@ -226,7 +265,7 @@ func TestRelayStore_ReclaimProject_NotFound(t *testing.T) {
 	}
 }
 
-func TestRelayStore_DeleteClient_Cascades(t *testing.T) {
+func TestRelayStore_DeleteClient_RemovesSubscriptionOnly(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	s := freshRelayStore(t)
@@ -239,8 +278,75 @@ func TestRelayStore_DeleteClient_Cascades(t *testing.T) {
 	if err := s.DeleteClient(ctx, "c1"); err != nil {
 		t.Fatalf("DeleteClient: %v", err)
 	}
-	if _, err := s.Project(ctx, "project-a"); !errors.Is(err, ErrNotFound) {
-		t.Errorf("Project after delete: err = %v, want ErrNotFound", err)
+	project, err := s.Project(ctx, "project-a")
+	if err != nil || len(project.Subscriptions) != 0 {
+		t.Errorf("Project after client delete = %+v, err = %v", project, err)
+	}
+}
+
+func TestRelayStore_MultipleSubscribersHaveIndependentCursors(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := freshRelayStore(t)
+	for _, id := range []string{"c1", "c2"} {
+		if err := s.CreateClient(ctx, id, "token-"+id, "", fixedTime); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.BindProject(ctx, "project-a", "c1", fixedTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SubscribeProject(ctx, "project-a", "c2", true, fixedTime); err != nil {
+		t.Fatal(err)
+	}
+	for range [3]struct{}{} {
+		seq, _ := s.NextWebhookSeq(ctx, "project-a")
+		if err := s.InsertWebhook(ctx, WebhookRow{Project: "project-a", Seq: seq, ReceivedAt: fixedTime, Method: "POST", HeadersJSON: "{}"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.MarkDeliveredForClient(ctx, "project-a", "c1", 3, fixedTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkDeliveredForClient(ctx, "project-a", "c2", 1, fixedTime); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.AckedSeqForClient(ctx, "project-a", "c1"); got != 3 {
+		t.Fatalf("c1 cursor = %d, want 3", got)
+	}
+	if got, _ := s.AckedSeqForClient(ctx, "project-a", "c2"); got != 1 {
+		t.Fatalf("c2 cursor = %d, want 1", got)
+	}
+	if got, _ := s.PendingCount(ctx, "project-a"); got != 2 {
+		t.Fatalf("pending for all subscribers = %d, want 2", got)
+	}
+}
+
+func TestRelayStore_NewSubscriberStartsAfterExistingHistory(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := freshRelayStore(t)
+	for _, id := range []string{"c1", "c2"} {
+		if err := s.CreateClient(ctx, id, "token-"+id, "", fixedTime); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.BindProject(ctx, "project-a", "c1", fixedTime); err != nil {
+		t.Fatal(err)
+	}
+	for range [2]struct{}{} {
+		seq, _ := s.NextWebhookSeq(ctx, "project-a")
+		_ = s.InsertWebhook(ctx, WebhookRow{Project: "project-a", Seq: seq, ReceivedAt: fixedTime, Method: "POST", HeadersJSON: "{}"})
+	}
+	if err := s.SubscribeProject(ctx, "project-a", "c2", false, fixedTime); err != nil {
+		t.Fatal(err)
+	}
+	sub, err := s.ProjectSubscription(ctx, "project-a", "c2")
+	if err != nil || sub.StartSeq != 2 || sub.AckedSeq != 2 {
+		t.Fatalf("new subscription = %+v, err %v", sub, err)
+	}
+	if got, _ := s.PendingCountForClient(ctx, "project-a", "c2"); got != 0 {
+		t.Fatalf("new subscriber pending = %d, want 0", got)
 	}
 }
 
@@ -438,6 +544,51 @@ func TestRelayStore_WebhooksAfter_Cursor(t *testing.T) {
 	}
 	if got[0].Seq != 2 || got[1].Seq != 3 {
 		t.Errorf("ordering = [%d, %d], want [2, 3]", got[0].Seq, got[1].Seq)
+	}
+	limited, err := s.WebhooksAfterLimit(ctx, "project-a", 0, 2)
+	if err != nil {
+		t.Fatalf("WebhooksAfterLimit: %v", err)
+	}
+	if len(limited) != 2 || limited[0].Seq != 1 || limited[1].Seq != 2 {
+		t.Errorf("limited rows = %+v, want seqs [1, 2]", limited)
+	}
+	if _, err := s.WebhooksAfterLimit(ctx, "project-a", 0, 0); err == nil {
+		t.Error("WebhooksAfterLimit with zero limit: want error")
+	}
+}
+
+func TestRelayStore_WebhookSummaryPaginationAndBatchDelete(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := freshRelayStore(t)
+	if err := s.CreateClient(ctx, "c1", "token", "", fixedTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.BindProject(ctx, "project-a", "c1", fixedTime); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 4; i++ {
+		seq, _ := s.NextWebhookSeq(ctx, "project-a")
+		body := bytes.Repeat([]byte{'x'}, i)
+		if err := s.InsertWebhook(ctx, WebhookRow{Project: "project-a", Seq: seq, ReceivedAt: fixedTime, Method: "POST", HeadersJSON: "{}", RawHeaders: []byte("secret"), Body: body}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, next, err := s.ListWebhookSummaries(ctx, "project-a", 0, 2)
+	if err != nil || len(first) != 2 || next != 2 || first[1].BodyLength != 2 || first[1].Body != nil || first[1].RawHeaders != nil {
+		t.Fatalf("first summary page = %+v, next %d, err %v", first, next, err)
+	}
+	second, _, err := s.ListWebhookSummaries(ctx, "project-a", next, 2)
+	if err != nil || len(second) != 2 || second[0].Seq != 3 {
+		t.Fatalf("second summary page = %+v, err %v", second, err)
+	}
+	deleted, err := s.DeleteWebhooks(ctx, "project-a", []int64{1, 3})
+	if err != nil || deleted != 2 {
+		t.Fatalf("selected delete = %d, %v", deleted, err)
+	}
+	deleted, err = s.DeleteAllWebhooks(ctx, "project-a")
+	if err != nil || deleted != 2 {
+		t.Fatalf("all delete = %d, %v", deleted, err)
 	}
 }
 

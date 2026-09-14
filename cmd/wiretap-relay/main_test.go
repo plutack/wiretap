@@ -16,7 +16,7 @@ import (
 func freshRelayServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	ctx := context.Background()
-	db, err := store.OpenInMemory("relayd-main-test")
+	db, err := store.OpenInMemory("relayd-main-" + t.Name())
 	if err != nil {
 		t.Fatalf("OpenInMemory: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestRelay_Health(t *testing.T) {
 
 // TestRelay_UnknownPathIs404 guards against accidentally making every path 200.
 // The real relayd ingress handler treats the first path segment as a project
-// name and returns 404 for unclaimed projects (see internal/relayd/server.go).
+// name and returns 404 for projects without subscribers (see relayd/server.go).
 func TestRelay_UnknownPathIs404(t *testing.T) {
 	t.Parallel()
 	hs := freshRelayServer(t)

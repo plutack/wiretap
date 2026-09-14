@@ -14,8 +14,8 @@ import (
 	"github.com/plutack/wiretap/internal/testutil"
 )
 
-// Config carries the static parameters a Client uses for every dial. They
-// do not change between reconnects; loaded from wiretap's config.yaml.
+// Config carries the parameters a Client uses for each dial. The relay's OK
+// response refreshes Projects between reconnects; the other fields are static.
 type Config struct {
 	// URL is the WebSocket endpoint of the relay, e.g.
 	// "wss://relay.example.com/tunnel". The client upgrades HTTP to WebSocket
@@ -26,10 +26,9 @@ type Config struct {
 	// dial; the relay validates them against the clients table.
 	ClientID    string
 	ClientToken string
-	// Projects is the set of project paths this PC owns. The client sends
-	// last_seqs for each in HELLO. The list should match what the relay has
-	// bound to this client (mismatches cause the relay to push unknown
-	// projects, which the client ignores with a warning).
+	// Projects is the last known set of subscriptions. The client sends local
+	// cursors for these in HELLO, then replaces the list with the authoritative
+	// projects returned by the relay.
 	Projects []string
 }
 
@@ -192,6 +191,10 @@ func (c *Client) runOnce(ctx context.Context) error {
 	if !isOK {
 		return fmt.Errorf("expected ok, got %T", msg)
 	}
+	// The relay owns subscription membership. Remember its authoritative list
+	// so future reconnects load local cursors for projects granted by an admin
+	// after this client was originally configured.
+	c.cfg.Projects = append([]string(nil), ok.Projects...)
 	if c.callbacks.OnConnect != nil {
 		c.callbacks.OnConnect(ok.Projects)
 	}

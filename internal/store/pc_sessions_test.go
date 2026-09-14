@@ -16,8 +16,8 @@ func newSessionTestStore(t *testing.T) *PCStore {
 	if err := MigratePC(context.Background(), db); err != nil {
 		t.Fatalf("MigratePC: %v", err)
 	}
-	// Migrations must stay re-runnable (they replay at every startup); the
-	// ALTER TABLE in 003 relies on the duplicate-column tolerance.
+	// Migrations must stay re-runnable; the ledger makes this second call a
+	// no-op while older databases still tolerate the already-added column.
 	if err := MigratePC(context.Background(), db); err != nil {
 		t.Fatalf("MigratePC re-run: %v", err)
 	}

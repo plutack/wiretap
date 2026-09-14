@@ -23,8 +23,12 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
   const [busy, setBusy] = useState("");
   const [createForm, setCreateForm] = useState({ name: "", projects: "" });
   const [credentials, setCredentials] = useState(null);
-  const [projectTargets, setProjectTargets] = useState({});
+  const [subscriberTargets, setSubscriberTargets] = useState({});
+  const [includeHistoryTargets, setIncludeHistoryTargets] = useState({});
   const [newProject, setNewProject] = useState({ path: "", clientID: "" });
+  const [historyProject, setHistoryProject] = useState("");
+  const [history, setHistory] = useState({ webhooks: [], next_after_seq: 0 });
+  const [selectedSeqs, setSelectedSeqs] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [remember, setRemember] = useState(true);
   const [profileName, setProfileName] = useState("");
@@ -48,7 +52,11 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
       const result = await api.relayAdminOverview({ relay_url: candidate.url, admin_token: candidate.token });
       setConnection(candidate);
       setOverview(result);
-      setProjectTargets(Object.fromEntries((result.projects || []).map((project) => [project.path, project.client_id])));
+      setSubscriberTargets((current) => Object.fromEntries((result.projects || []).map((project) => {
+        const candidates = (result.clients || []).filter((client) => !(project.subscriptions || []).some((sub) => sub.client_id === client.client_id));
+        const selected = candidates.some((client) => client.client_id === current[project.path]) ? current[project.path] : candidates[0]?.client_id || "";
+        return [project.path, selected];
+      })));
       if (!quiet) onToast(`Connected to relay ${result.version || "server"}`);
       if (persist && remember) {
         try {
@@ -87,10 +95,13 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
   };
 
   const disconnect = () => {
-	setBusy("");
+    setBusy("");
     setConnection((current) => ({ ...current, token: "" }));
     setOverview(null);
     setCredentials(null);
+    setHistoryProject("");
+    setHistory({ webhooks: [], next_after_seq: 0 });
+    setSelectedSeqs([]);
     setError("");
   };
 
@@ -129,7 +140,7 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
       ? " This is the identity used by this desktop, so its tunnel will stop authenticating."
       : "";
     const projectCount = (client.projects || []).length;
-    if (!window.confirm(`Revoke ${client.display_name || client.client_id}? This deletes ${projectCount} project binding${projectCount === 1 ? "" : "s"} and their queued relay history.${localWarning}`)) return;
+    if (!window.confirm(`Revoke ${client.display_name || client.client_id}? This removes ${projectCount} project subscription${projectCount === 1 ? "" : "s"}. Projects and relay history remain.${localWarning}`)) return;
     setBusy(`delete:${client.client_id}`);
     setError("");
     try {
@@ -144,16 +155,14 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
     }
   };
 
-  const moveProject = async (project) => {
-    const target = projectTargets[project.path];
-    if (!target || target === project.client_id) return;
-    const targetClient = (overview.clients || []).find((client) => client.client_id === target);
-    if (!window.confirm(`Move ${project.path} to ${targetClient?.display_name || target}? Queued webhook history stays with the project.`)) return;
-    setBusy(`move:${project.path}`);
+  const addSubscriber = async (project) => {
+    const target = subscriberTargets[project.path];
+    if (!target || (project.subscriptions || []).some((sub) => sub.client_id === target)) return;
+    setBusy(`subscribe:${project.path}`);
     setError("");
     try {
-      await api.relayAdminReassignProject({ ...session(), path: project.path, new_client_id: target, force: true });
-      onToast(`Moved project ${project.path}`);
+      await api.relayAdminAddSubscriber({ ...session(), path: project.path, client_id: target, include_history: Boolean(includeHistoryTargets[project.path]) });
+      onToast(`Subscribed client to ${project.path}`);
       await inspect({ quiet: true });
       onChanged && onChanged();
     } catch (e) {
@@ -161,6 +170,64 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
     } finally {
       setBusy("");
     }
+  };
+
+  const removeSubscriber = async (project, subscription) => {
+    const client = (overview.clients || []).find((item) => item.client_id === subscription.client_id);
+    if (!window.confirm(`Remove ${client?.display_name || subscription.client_id} from ${project.path}? The project and relay history will remain.`)) return;
+    setBusy(`unsubscribe:${project.path}:${subscription.client_id}`);
+    setError("");
+    try {
+      await api.relayAdminRemoveSubscriber({ ...session(), path: project.path, client_id: subscription.client_id, include_history: false });
+      onToast(`Removed subscriber from ${project.path}`);
+      await inspect({ quiet: true });
+      onChanged && onChanged();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const loadHistory = async (project, append = false) => {
+    const after = append ? Number(history.next_after_seq || 0) : 0;
+    if (append && !after) return;
+    setBusy(`history:${project}`); setError("");
+    try {
+      const page = await api.relayAdminListWebhooks({ ...session(), path: project, after_seq: after, limit: 50 });
+      setHistoryProject(project);
+      setHistory({
+        webhooks: append ? [...history.webhooks, ...(page.webhooks || [])] : (page.webhooks || []),
+        next_after_seq: page.next_after_seq || 0,
+      });
+      if (!append) setSelectedSeqs([]);
+    } catch (e) { setError(String(e)); }
+    finally { setBusy(""); }
+  };
+
+  const toggleWebhook = (seq) => setSelectedSeqs((current) => {
+    if (current.includes(seq)) return current.filter((item) => item !== seq);
+    if (current.length >= 500) {
+      setError("Select at most 500 webhooks per batch.");
+      return current;
+    }
+    return [...current, seq];
+  });
+
+  const deleteWebhooks = async ({ all = false } = {}) => {
+    const count = all ? (overview.projects || []).find((project) => project.path === historyProject)?.webhook_count || history.webhooks.length : selectedSeqs.length;
+    if (!historyProject || (!all && !selectedSeqs.length)) return;
+    if (!window.confirm(all
+      ? `Delete all ${count} relay-side webhook${count === 1 ? "" : "s"} for ${historyProject}? Local copies are unaffected.`
+      : `Delete ${selectedSeqs.length} selected webhook${selectedSeqs.length === 1 ? "" : "s"} from ${historyProject}?`)) return;
+    setBusy(`delete-webhooks:${historyProject}`); setError("");
+    try {
+      const deleted = await api.relayAdminDeleteWebhooks({ ...session(), path: historyProject, seqs: all ? [] : selectedSeqs, through_seq: 0, all });
+      onToast(`Deleted ${deleted} relay webhook${deleted === 1 ? "" : "s"}`);
+      await inspect({ quiet: true });
+      await loadHistory(historyProject);
+    } catch (e) { setError(String(e)); }
+    finally { setBusy(""); }
   };
 
   const addProject = async () => {
@@ -188,6 +255,11 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
     try {
       await api.relayAdminDeleteProject({ ...session(), path: project.path });
       onToast(`Deleted project ${project.path}`);
+      if (historyProject === project.path) {
+        setHistoryProject("");
+        setHistory({ webhooks: [], next_after_seq: 0 });
+        setSelectedSeqs([]);
+      }
       await inspect({ quiet: true });
       onChanged && onChanged();
     } catch (e) {
@@ -206,7 +278,7 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
     <header class="relay-admin-heading">
       <div>
         <h2>Relay server</h2>
-        <p>Manage identities and project ownership on a relay you operate.</p>
+        <p>Manage identities, shared project subscriptions, and retained webhook history.</p>
       </div>
       ${overview ? html`<${Button} onClick=${disconnect}>Disconnect</>` : null}
     </header>
@@ -302,15 +374,15 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
       </div>
 
       <section class="relay-admin-panel relay-project-panel">
-        <div class="relay-admin-panel-head"><div><h3>Project ownership <span>${overview.projects?.length || 0}</span></h3><p>Add paths, change owners, or remove paths. This view refreshes after every change.</p></div></div>
+        <div class="relay-admin-panel-head"><div><h3>Projects <span>${overview.projects?.length || 0}</span></h3><p>Create paths, manage subscribers, inspect retained traffic, or remove projects.</p></div></div>
         <div class="relay-project-create">
           <${Field} label="Project path">
             <${Input} class="font-mono" placeholder="orders" value=${newProject.path}
               disabled=${Boolean(busy)} onInput=${(event) => setNewProject({ ...newProject, path: event.target.value })}
               onKeyDown=${(event) => event.key === "Enter" && addProject()} />
           </>
-          <${Field} label="Owner">
-            <${Dropdown} aria-label="New project owner" value=${newProject.clientID} options=${clientOptions}
+          <${Field} label="Initial subscriber">
+            <${Dropdown} aria-label="Initial project subscriber" value=${newProject.clientID} options=${clientOptions}
               disabled=${Boolean(busy)} onChange=${(event) => setNewProject({ ...newProject, clientID: event.target.value })} />
           </>
           <${Button} variant="primary" disabled=${Boolean(busy) || !newProject.path.trim() || !newProject.clientID} onClick=${addProject}>
@@ -319,20 +391,70 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
         </div>
         <p class="relay-project-sync-note">If this desktop gains or loses a project, its saved project list and tunnel update automatically.</p>
         <div class="relay-project-list">
-          ${(overview.projects || []).map((project) => html`<article class="relay-project-row" key=${project.path}>
-            <div class="relay-project-name"><strong>${project.path}</strong><span>acknowledged through #${project.acked_seq || 0}</span></div>
-            <${Dropdown} aria-label=${`Owner for ${project.path}`} value=${projectTargets[project.path] || project.client_id}
-              options=${clientOptions} onChange=${(event) => setProjectTargets({ ...projectTargets, [project.path]: event.target.value })} />
-            <div class="relay-project-actions">
-              <${Button} class="btn-xs" disabled=${Boolean(busy) || !projectTargets[project.path] || projectTargets[project.path] === project.client_id}
-                onClick=${() => moveProject(project)}>${busy === `move:${project.path}` ? "Moving..." : "Move"}</>
-              <${Button} class="btn-xs" variant="danger" disabled=${Boolean(busy)} onClick=${() => deleteProject(project)}>
-                ${busy === `delete-project:${project.path}` ? "Deleting..." : "Delete"}
-              </>
-            </div>
-          </article>`)}
-          ${(overview.projects || []).length === 0 ? html`<div class="relay-list-empty">No project paths are claimed.</div>` : null}
+          ${(overview.projects || []).map((project) => {
+            const availableSubscribers = clientOptions.filter((option) => !(project.subscriptions || []).some((sub) => sub.client_id === option.value));
+            return html`<article class="relay-project-row" key=${project.path}>
+              <div class="relay-project-topline">
+                <div class="relay-project-name"><strong>${project.path}</strong><span>${project.webhook_count || 0} retained · next #${project.next_seq || 1}</span></div>
+                <div class="relay-project-actions">
+                  <${Button} class="btn-xs" disabled=${Boolean(busy)} onClick=${() => loadHistory(project.path)}>
+                    ${busy === `history:${project.path}` ? "Loading..." : "Webhooks"}
+                  </>
+                  <${Button} class="btn-xs" variant="danger" disabled=${Boolean(busy)} onClick=${() => deleteProject(project)}>
+                    ${busy === `delete-project:${project.path}` ? "Deleting..." : "Delete"}
+                  </>
+                </div>
+              </div>
+              <div class="relay-subscription-list">
+                ${(project.subscriptions || []).map((subscription) => {
+                  const client = (overview.clients || []).find((item) => item.client_id === subscription.client_id);
+                  return html`<div class="relay-subscription" key=${subscription.client_id}>
+                    <span><strong>${client?.display_name || subscription.client_id}</strong><small>${subscription.pending || 0} pending · ack #${subscription.acked_seq || 0}</small></span>
+                    <${Button} class="btn-xs" variant="danger" disabled=${Boolean(busy)} onClick=${() => removeSubscriber(project, subscription)}>
+                      ${busy === `unsubscribe:${project.path}:${subscription.client_id}` ? "Removing..." : "Remove"}
+                    </>
+                  </div>`;
+                })}
+                ${(project.subscriptions || []).length === 0 ? html`<span class="relay-no-subscribers">No subscribers; ingress is disabled.</span>` : null}
+              </div>
+              <div class="relay-subscription-add">
+                <${Dropdown} aria-label=${`Add subscriber to ${project.path}`} value=${subscriberTargets[project.path] || ""}
+                  options=${availableSubscribers.length ? availableSubscribers : [{
+                    value: "",
+                    label: (overview.clients || []).length ? "All clients already subscribed" : "No registered clients",
+                  }]}
+                  disabled=${Boolean(busy) || !availableSubscribers.length}
+                  onChange=${(event) => setSubscriberTargets({ ...subscriberTargets, [project.path]: event.target.value })} />
+                <${Button} class="btn-xs" disabled=${Boolean(busy) || !subscriberTargets[project.path] || (project.subscriptions || []).some((sub) => sub.client_id === subscriberTargets[project.path])}
+                  onClick=${() => addSubscriber(project)}>${busy === `subscribe:${project.path}` ? "Adding..." : "Add subscriber"}</>
+                <label class="relay-subscription-history"><input type="checkbox" disabled=${Boolean(busy) || !availableSubscribers.length} checked=${Boolean(includeHistoryTargets[project.path])}
+                  onChange=${(event) => setIncludeHistoryTargets({ ...includeHistoryTargets, [project.path]: event.target.checked })} /> Include retained history</label>
+              </div>
+            </article>`;
+          })}
+          ${(overview.projects || []).length === 0 ? html`<div class="relay-list-empty">No project paths have been created.</div>` : null}
         </div>
+      </section>
+
+      <section class="relay-admin-panel relay-history-panel">
+        <div class="relay-admin-panel-head">
+          <div><h3>Relay webhook history ${historyProject ? html`<span>${historyProject}</span>` : null}</h3><p>Delete retained relay copies without affecting webhooks already stored on desktops.</p></div>
+          ${historyProject ? html`<div class="relay-history-actions">
+            <${Button} class="btn-xs" variant="danger" disabled=${Boolean(busy) || !selectedSeqs.length} onClick=${() => deleteWebhooks()}>Delete selected (${selectedSeqs.length})</>
+            <${Button} class="btn-xs" variant="danger" disabled=${Boolean(busy) || !((overview.projects || []).find((project) => project.path === historyProject)?.webhook_count)} onClick=${() => deleteWebhooks({ all: true })}>Delete all</>
+          </div>` : null}
+        </div>
+        ${!historyProject ? html`<div class="relay-list-empty">Choose Webhooks on a project to manage its retained traffic.</div>` : html`
+          <div class="relay-history-list">
+            ${(history.webhooks || []).map((webhook) => html`<label class="relay-history-row" key=${webhook.seq}>
+              <input type="checkbox" checked=${selectedSeqs.includes(webhook.seq)} onChange=${() => toggleWebhook(webhook.seq)} />
+              <code>#${webhook.seq}</code><strong>${webhook.method}</strong><span>${webhook.path || "/"}</span>
+              <small>${new Date(Number(webhook.received_at) * 1000).toLocaleString()} · ${webhook.body_bytes || 0} bytes</small>
+            </label>`)}
+            ${(history.webhooks || []).length === 0 ? html`<div class="relay-list-empty">No relay-side webhooks retained for this project.</div>` : null}
+          </div>
+          ${history.next_after_seq ? html`<${Button} class="relay-history-more" disabled=${Boolean(busy)} onClick=${() => loadHistory(historyProject, true)}>Load more</>` : null}
+        `}
       </section>
     `}
   </div>`;

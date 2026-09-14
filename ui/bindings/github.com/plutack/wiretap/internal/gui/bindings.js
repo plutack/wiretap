@@ -258,6 +258,16 @@ export function RelayAdminAddProject($in) {
 }
 
 /**
+ * @param {$models.RelayAdminSubscriptionInput} $in
+ * @returns {$CancellablePromise<$models.RelayAdminProjectView>}
+ */
+export function RelayAdminAddSubscriber($in) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.RelayAdminAddSubscriber", $in).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType16($result);
+    }));
+}
+
+/**
  * RelayAdminCreateClient creates portable credentials without changing the
  * desktop currently registered in wiretap.
  * @param {$models.RelayAdminCreateClientInput} $in
@@ -297,25 +307,42 @@ export function RelayAdminDeleteProject($in) {
 }
 
 /**
+ * @param {$models.RelayAdminDeleteWebhooksInput} $in
+ * @returns {$CancellablePromise<number>}
+ */
+export function RelayAdminDeleteWebhooks($in) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.RelayAdminDeleteWebhooks", $in);
+}
+
+/**
+ * @param {$models.RelayAdminListWebhooksInput} $in
+ * @returns {$CancellablePromise<$models.RelayAdminWebhookPageView>}
+ */
+export function RelayAdminListWebhooks($in) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.RelayAdminListWebhooks", $in).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType18($result);
+    }));
+}
+
+/**
  * RelayAdminLoadProfile retrieves a saved token and marks the profile used.
  * @param {string} id
  * @returns {$CancellablePromise<$models.RelayAdminInput>}
  */
 export function RelayAdminLoadProfile(id) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.RelayAdminLoadProfile", id).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType18($result);
+        return $$createType19($result);
     }));
 }
 
 /**
- * RelayAdminOverview authenticates to the configured relay and returns its
- * health, registered clients, and project ownership in one snapshot.
+ * RelayAdminOverview returns relay health, clients, projects, and subscriptions.
  * @param {$models.RelayAdminInput} $in
  * @returns {$CancellablePromise<$models.RelayAdminOverviewView>}
  */
 export function RelayAdminOverview($in) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.RelayAdminOverview", $in).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType19($result);
+        return $$createType20($result);
     }));
 }
 
@@ -324,13 +351,12 @@ export function RelayAdminOverview($in) {
  */
 export function RelayAdminProfiles() {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.RelayAdminProfiles").then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType21($result);
+        return $$createType22($result);
     }));
 }
 
 /**
- * RelayAdminReassignProject transfers project ownership. Existing ownership
- * requires Force, which the GUI sets only after an explicit confirmation.
+ * RelayAdminReassignProject preserves the legacy replace-all-subscribers API.
  * @param {$models.RelayAdminReassignProjectInput} $in
  * @returns {$CancellablePromise<$models.RelayAdminProjectView>}
  */
@@ -341,6 +367,14 @@ export function RelayAdminReassignProject($in) {
 }
 
 /**
+ * @param {$models.RelayAdminSubscriptionInput} $in
+ * @returns {$CancellablePromise<void>}
+ */
+export function RelayAdminRemoveSubscriber($in) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.RelayAdminRemoveSubscriber", $in);
+}
+
+/**
  * RelayAdminSaveProfile stores non-secret relay metadata on disk and the
  * privileged token in the operating system credential store.
  * @param {$models.RelayAdminSaveProfileInput} $in
@@ -348,13 +382,13 @@ export function RelayAdminReassignProject($in) {
  */
 export function RelayAdminSaveProfile($in) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.RelayAdminSaveProfile", $in).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType20($result);
+        return $$createType21($result);
     }));
 }
 
 /**
- * RemoveRelayProject releases a path owned by the currently registered
- * desktop. The GUI confirms the relay-side history deletion before calling.
+ * RemoveRelayProject unsubscribes the currently registered desktop. The
+ * project and relay-side history remain independent admin-managed resources.
  * @param {string} project
  * @returns {$CancellablePromise<$models.SettingsView>}
  */
@@ -375,7 +409,7 @@ export function RemoveRelayProject(project) {
  */
 export function ReplayWebhook(project, seq, targetURL) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ReplayWebhook", project, seq, targetURL).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType22($result);
+        return $$createType23($result);
     }));
 }
 
@@ -410,7 +444,7 @@ export function SaveSettings($in) {
  */
 export function SendComposedRequest($in) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.SendComposedRequest", $in).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType23($result);
+        return $$createType24($result);
     }));
 }
 
@@ -436,7 +470,7 @@ export function SetScriptEnabled(id, enabled) {
  */
 export function Status() {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.Status").then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType24($result);
+        return $$createType25($result);
     }));
 }
 
@@ -450,7 +484,7 @@ export function Status() {
  */
 export function TestScript(req) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.TestScript", req).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType25($result);
+        return $$createType26($result);
     }));
 }
 
@@ -473,11 +507,12 @@ const $$createType14 = $models.TransformFileView.createFrom;
 const $$createType15 = $models.RegisterView.createFrom;
 const $$createType16 = $models.RelayAdminProjectView.createFrom;
 const $$createType17 = $models.RelayAdminCredentialsView.createFrom;
-const $$createType18 = $models.RelayAdminInput.createFrom;
-const $$createType19 = $models.RelayAdminOverviewView.createFrom;
-const $$createType20 = $models.RelayAdminProfileView.createFrom;
-const $$createType21 = $Create.Array($$createType20);
-const $$createType22 = $models.ReplayResult.createFrom;
-const $$createType23 = $models.ComposeResponseView.createFrom;
-const $$createType24 = $models.StatusView.createFrom;
-const $$createType25 = $models.ScriptTestView.createFrom;
+const $$createType18 = $models.RelayAdminWebhookPageView.createFrom;
+const $$createType19 = $models.RelayAdminInput.createFrom;
+const $$createType20 = $models.RelayAdminOverviewView.createFrom;
+const $$createType21 = $models.RelayAdminProfileView.createFrom;
+const $$createType22 = $Create.Array($$createType21);
+const $$createType23 = $models.ReplayResult.createFrom;
+const $$createType24 = $models.ComposeResponseView.createFrom;
+const $$createType25 = $models.StatusView.createFrom;
+const $$createType26 = $models.ScriptTestView.createFrom;

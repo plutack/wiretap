@@ -21,7 +21,7 @@ const NAV_ITEMS = [
   { id: "connection", label: "Relay connection", hint: "Endpoint, identity, projects" },
   { id: "capture", label: "Capture and delivery", hint: "Forwarding, proxy, storage" },
   { id: "interface", label: "Interface", hint: "Readability and window" },
-  { id: "relay", label: "Relay server", hint: "Clients and project ownership", server: true },
+  { id: "relay", label: "Relay server", hint: "Clients, subscriptions, and history", server: true },
 ];
 
 function SettingsNav({ active, onChange }) {
@@ -129,7 +129,7 @@ export function Settings({ onToast, onSaved }) {
     finally { setProjectBusy(false); }
   };
   const removeProject = async (project) => {
-    if (!window.confirm(`Remove ${project}? This deletes its queued webhook history from the relay. Local deliveries remain available.`)) return;
+    if (!window.confirm(`Unsubscribe this desktop from ${project}? The project and relay history remain available to other subscribers.`)) return;
     setProjectBusy(true);
     try { const s = await api.removeRelayProject(project); setView(s); onToast(`Removed project ${project}`); onSaved && onSaved(); }
     catch (e) { onToast("remove project: " + e, 6000); }

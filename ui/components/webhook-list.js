@@ -9,7 +9,7 @@ export function WebhookList({ webhooks, onSelect, selectedKey }) {
         <div class="empty-radar">⌁</div>
         <h2>Waiting for an inbound signal</h2>
         <p>
-          Send a request to a claimed relay path. Offline deliveries will surface here when the tunnel reconnects.
+          Send a request to a subscribed relay path. Offline deliveries will surface here when the tunnel reconnects.
         </p>
       </div>
     </div>`;
