@@ -9,13 +9,13 @@ CREATE TABLE IF NOT EXISTS clients (
     last_seen_at  INTEGER
 );
 
--- Project paths claimed by clients; e.g. "project-a".
+-- Legacy one-client project schema. Migration 002 converts each owner into
+-- the project's first subscription.
 --
 -- next_seq   -- monotonic allocation counter; the next webhook seq to hand
 --              out. Bumped by NextWebhookSeq. Decoupled from acked_seq so
 --              that allocating a seq does not imply the PC has acked it.
--- acked_seq  -- the highest seq the owning PC has ACKed. Advanced by
---              MarkDelivered; never moved by allocation alone.
+-- acked_seq  -- the highest seq the legacy owning PC has acknowledged.
 CREATE TABLE IF NOT EXISTS projects (
     path         TEXT PRIMARY KEY,
     client_id    TEXT NOT NULL REFERENCES clients(client_id) ON DELETE CASCADE,
@@ -24,8 +24,6 @@ CREATE TABLE IF NOT EXISTS projects (
     acked_seq    INTEGER NOT NULL DEFAULT 0
 );
 
--- Webhooks received at the relay, awaiting or already delivered over the
--- tunnel. (project, seq) is the natural key for dedup and cursor resume.
 -- Webhooks received at the relay, awaiting or already delivered over the
 -- tunnel. (project, seq) is the natural key for dedup and cursor resume.
 --

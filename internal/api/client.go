@@ -48,8 +48,7 @@ func WithAdminToken(tok string) ClientOption {
 	return func(h *HTTPClient) { h.adminToken = tok }
 }
 
-// WithClientAuth sets client_id / client_token for routes that require the
-// owner. Stored as HTTP basic auth on outbound calls.
+// WithClientAuth sets client_id / client_token for authenticated client routes.
 func WithClientAuth(clientID, token string) ClientOption {
 	return func(h *HTTPClient) { h.clientID, h.clientTok = clientID, token }
 }
@@ -228,7 +227,7 @@ func (c *HTTPClient) AddClientProject(ctx context.Context, project string) (*Cli
 	return &out, nil
 }
 
-// RemoveClientProject releases a path owned by the authenticated client.
+// RemoveClientProject unsubscribes the authenticated client.
 func (c *HTTPClient) RemoveClientProject(ctx context.Context, project string) (*ClientProjectsResponse, error) {
 	var out ClientProjectsResponse
 	if err := c.do(ctx, http.MethodDelete, "/client/projects/"+url.PathEscape(project), nil, &out); err != nil {
@@ -255,8 +254,8 @@ func (c *HTTPClient) GetClient(ctx context.Context, clientID string) (*Client, e
 	return &out, nil
 }
 
-// DeleteClient calls DELETE /admin/clients/:id. Requires admin auth.
-// Cascades to the client's project bindings.
+// DeleteClient calls DELETE /admin/clients/:id. Projects and webhook history
+// remain; only the client's subscriptions are cascaded.
 func (c *HTTPClient) DeleteClient(ctx context.Context, clientID string) error {
 	return c.do(ctx, http.MethodDelete, "/admin/clients/"+url.PathEscape(clientID), nil, nil)
 }
@@ -270,8 +269,8 @@ func (c *HTTPClient) ListProjects(ctx context.Context) (*ListProjectsResponse, e
 	return &out, nil
 }
 
-// AssignProject calls PUT /admin/projects/:project to create a project for an
-// existing client. Requires admin auth.
+// AssignProject calls PUT /admin/projects/:project to create a project with an
+// initial subscriber, or idempotently subscribe that client if it exists.
 func (c *HTTPClient) AssignProject(ctx context.Context, project, clientID string) (*Project, error) {
 	var out Project
 	path := "/admin/projects/" + url.PathEscape(project)
@@ -281,15 +280,36 @@ func (c *HTTPClient) AssignProject(ctx context.Context, project, clientID string
 	return &out, nil
 }
 
+// AddProjectSubscriber grants an existing client access to a project. New
+// subscriptions receive only future traffic unless includeHistory is true.
+func (c *HTTPClient) AddProjectSubscriber(ctx context.Context, project, clientID string, includeHistory bool) (*Project, error) {
+	path := "/admin/projects/" + url.PathEscape(project) + "/subscribers/" + url.PathEscape(clientID)
+	if includeHistory {
+		path += "?include_history=true"
+	}
+	var out Project
+	if err := c.do(ctx, http.MethodPut, path, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RemoveProjectSubscriber revokes one client's access without deleting the
+// project or relay-side webhook history.
+func (c *HTTPClient) RemoveProjectSubscriber(ctx context.Context, project, clientID string) error {
+	path := "/admin/projects/" + url.PathEscape(project) + "/subscribers/" + url.PathEscape(clientID)
+	return c.do(ctx, http.MethodDelete, path, nil, nil)
+}
+
 // DeleteProject calls DELETE /admin/projects/:project. Relay-side queued
 // webhook history for the project is deleted by the database cascade.
 func (c *HTTPClient) DeleteProject(ctx context.Context, project string) error {
 	return c.do(ctx, http.MethodDelete, "/admin/projects/"+url.PathEscape(project), nil, nil)
 }
 
-// ReclaimProject calls POST /admin/projects to move a path between clients.
-// Requires admin auth. With req.Force=true the relay rebinds an existing
-// path; without it the call returns 409.
+// ReclaimProject calls the legacy POST /admin/projects operation. With force,
+// it replaces all current subscriptions with one client; new callers should
+// prefer AddProjectSubscriber and RemoveProjectSubscriber.
 func (c *HTTPClient) ReclaimProject(ctx context.Context, req ReclaimProjectRequest) (*Project, error) {
 	var out Project
 	if err := c.do(ctx, http.MethodPost, "/admin/projects", req, &out); err != nil {
@@ -309,10 +329,37 @@ func (c *HTTPClient) ListWebhooks(ctx context.Context, project string, afterSeq,
 	return &out, nil
 }
 
-// ReplayWebhook calls POST /admin/projects/:p/webhooks/:seq/replay. Pushes
-// the stored webhook down the owner's tunnel again. Requires admin or owner
-// auth.
+// ListWebhookSummaries omits body and raw-header blobs for management tables.
+func (c *HTTPClient) ListWebhookSummaries(ctx context.Context, project string, afterSeq, limit int64) (*ListWebhooksResponse, error) {
+	path := fmt.Sprintf("/admin/projects/%s/webhooks?after_seq=%d&limit=%d&summary=true", url.PathEscape(project), afterSeq, limit)
+	var out ListWebhooksResponse
+	if err := c.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *HTTPClient) DeleteWebhook(ctx context.Context, project string, seq int64) error {
+	path := fmt.Sprintf("/admin/projects/%s/webhooks/%d", url.PathEscape(project), seq)
+	return c.do(ctx, http.MethodDelete, path, nil, nil)
+}
+
+func (c *HTTPClient) DeleteWebhooks(ctx context.Context, project string, req DeleteWebhooksRequest) (*DeleteWebhooksResponse, error) {
+	path := "/admin/projects/" + url.PathEscape(project) + "/webhooks/batch-delete"
+	var out DeleteWebhooksResponse
+	if err := c.do(ctx, http.MethodPost, path, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ReplayWebhook calls POST /admin/projects/:p/webhooks/:seq/replay.
 func (c *HTTPClient) ReplayWebhook(ctx context.Context, project string, seq int64) error {
 	path := fmt.Sprintf("/admin/projects/%s/webhooks/%d/replay", url.PathEscape(project), seq)
+	return c.do(ctx, http.MethodPost, path, nil, nil)
+}
+
+func (c *HTTPClient) ReplayWebhookToClient(ctx context.Context, project string, seq int64, clientID string) error {
+	path := fmt.Sprintf("/admin/projects/%s/webhooks/%d/replay?client_id=%s", url.PathEscape(project), seq, url.QueryEscape(clientID))
 	return c.do(ctx, http.MethodPost, path, nil, nil)
 }

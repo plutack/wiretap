@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -160,7 +161,7 @@ func newRelayClientsGetCmd() *cobra.Command {
 func newRelayClientsDeleteCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "delete <client-id>",
-		Short: "Delete a client (cascades to project bindings)",
+		Short: "Delete a client and revoke its project subscriptions",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newRelayClient(cmd)
@@ -186,14 +187,66 @@ func newRelayProjectsCmd() *cobra.Command {
 	cmd.AddCommand(newRelayProjectsListCmd())
 	cmd.AddCommand(newRelayProjectsAddCmd())
 	cmd.AddCommand(newRelayProjectsRemoveCmd())
+	cmd.AddCommand(newRelayProjectsCreateCmd())
+	cmd.AddCommand(newRelayProjectsDeleteCmd())
+	cmd.AddCommand(newRelayProjectsSubscribeCmd())
+	cmd.AddCommand(newRelayProjectsUnsubscribeCmd())
 	cmd.AddCommand(newRelayProjectsReclaimCmd())
 	return cmd
 }
 
-// newRelayOwnerClient uses the saved one-time registration credentials for
-// ordinary project changes. These commands intentionally do not accept or
-// require the relay admin token.
-func newRelayOwnerClient(cmd *cobra.Command) (*api.HTTPClient, *config.Credentials, error) {
+func newRelayProjectsCreateCmd() *cobra.Command {
+	var clientID string
+	cmd := &cobra.Command{
+		Use:   "create <path>",
+		Short: "Create a project with an initial subscriber",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newRelayClient(cmd)
+			if err != nil {
+				return err
+			}
+			out, err := c.AssignProject(cmd.Context(), strings.Trim(args[0], "/"), clientID)
+			if err != nil {
+				return err
+			}
+			printJSON(cmd, out)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&clientID, "client-id", "", "initial subscriber client ID (required)")
+	_ = cmd.MarkFlagRequired("client-id")
+	return cmd
+}
+
+func newRelayProjectsDeleteCmd() *cobra.Command {
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "delete <path>",
+		Short: "Permanently delete a project and its relay history",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !force {
+				return fmt.Errorf("deleting a project permanently removes its relay history; pass --force to continue")
+			}
+			c, err := newRelayClient(cmd)
+			if err != nil {
+				return err
+			}
+			if err := c.DeleteProject(cmd.Context(), strings.Trim(args[0], "/")); err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "deleted")
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&force, "force", false, "confirm deletion of the project and relay history")
+	return cmd
+}
+
+// newRelaySelfClient uses this desktop's saved registration credentials for
+// its own project changes. These commands do not require the admin token.
+func newRelaySelfClient(cmd *cobra.Command) (*api.HTTPClient, *config.Credentials, error) {
 	relayURL, _ := cmd.Flags().GetString("url")
 	if strings.TrimSpace(relayURL) == "" {
 		cfg, err := newConfigManager().Load()
@@ -220,7 +273,7 @@ func newRelayProjectsAddCmd() *cobra.Command {
 		Short: "Add a project to this registered client without rotating credentials",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, creds, err := newRelayOwnerClient(cmd)
+			c, creds, err := newRelaySelfClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -239,16 +292,12 @@ func newRelayProjectsAddCmd() *cobra.Command {
 }
 
 func newRelayProjectsRemoveCmd() *cobra.Command {
-	var force bool
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "remove <path>",
-		Short: "Remove one of this client's projects",
+		Short: "Unsubscribe this client without deleting project history",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if !force {
-				return fmt.Errorf("removing a project deletes its queued relay webhooks; pass --force to continue")
-			}
-			c, creds, err := newRelayOwnerClient(cmd)
+			c, creds, err := newRelaySelfClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -264,14 +313,61 @@ func newRelayProjectsRemoveCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&force, "force", false, "confirm deletion of the project's queued relay webhooks")
+}
+
+func newRelayProjectsSubscribeCmd() *cobra.Command {
+	var clientID string
+	var includeHistory bool
+	cmd := &cobra.Command{
+		Use:   "subscribe <path>",
+		Short: "Add a client subscriber to an existing project",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newRelayClient(cmd)
+			if err != nil {
+				return err
+			}
+			out, err := c.AddProjectSubscriber(cmd.Context(), strings.Trim(args[0], "/"), clientID, includeHistory)
+			if err != nil {
+				return err
+			}
+			printJSON(cmd, out)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&clientID, "client-id", "", "client ID to subscribe (required)")
+	cmd.Flags().BoolVar(&includeHistory, "include-history", false, "deliver retained history to the new subscriber")
+	_ = cmd.MarkFlagRequired("client-id")
+	return cmd
+}
+
+func newRelayProjectsUnsubscribeCmd() *cobra.Command {
+	var clientID string
+	cmd := &cobra.Command{
+		Use:   "unsubscribe <path>",
+		Short: "Remove a client subscriber without deleting the project",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newRelayClient(cmd)
+			if err != nil {
+				return err
+			}
+			if err := c.RemoveProjectSubscriber(cmd.Context(), strings.Trim(args[0], "/"), clientID); err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "unsubscribed")
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&clientID, "client-id", "", "client ID to unsubscribe (required)")
+	_ = cmd.MarkFlagRequired("client-id")
 	return cmd
 }
 
 func newRelayProjectsListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
-		Short: "List all claimed project paths",
+		Short: "List all relay project paths",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, err := newRelayClient(cmd)
 			if err != nil {
@@ -293,7 +389,7 @@ func newRelayProjectsReclaimCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "reclaim <path>",
-		Short: "Reclaim a project path for a different client",
+		Short: "Replace all project subscribers with one client",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newRelayClient(cmd)
@@ -312,8 +408,8 @@ func newRelayProjectsReclaimCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&clientID, "client-id", "", "client ID to rebind the path to (required)")
-	cmd.Flags().BoolVar(&force, "force", false, "reclaim even if the path is already owned by another client")
+	cmd.Flags().StringVar(&clientID, "client-id", "", "replacement client ID (required)")
+	cmd.Flags().BoolVar(&force, "force", false, "replace all existing project subscribers")
 	_ = cmd.MarkFlagRequired("client-id")
 	return cmd
 }
@@ -323,10 +419,57 @@ func newRelayProjectsReclaimCmd() *cobra.Command {
 func newRelayWebhooksCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "webhooks",
-		Short: "Webhook inspection and replay",
+		Short: "Webhook inspection, replay, and retention management",
 	}
 	cmd.AddCommand(newRelayWebhooksListCmd())
 	cmd.AddCommand(newRelayWebhooksReplayCmd())
+	cmd.AddCommand(newRelayWebhooksDeleteCmd())
+	return cmd
+}
+
+func newRelayWebhooksDeleteCmd() *cobra.Command {
+	var all bool
+	var through int64
+	cmd := &cobra.Command{
+		Use:   "delete <project> [seq...]",
+		Short: "Delete selected, ranged, or all retained relay webhooks",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newRelayClient(cmd)
+			if err != nil {
+				return err
+			}
+			req := api.DeleteWebhooksRequest{All: all, ThroughSeq: through}
+			for _, raw := range args[1:] {
+				seq, err := strconv.ParseInt(raw, 10, 64)
+				if err != nil || seq <= 0 {
+					return fmt.Errorf("invalid seq %q", raw)
+				}
+				req.Seqs = append(req.Seqs, seq)
+			}
+			modes := 0
+			if all {
+				modes++
+			}
+			if through > 0 {
+				modes++
+			}
+			if len(req.Seqs) > 0 {
+				modes++
+			}
+			if modes != 1 {
+				return fmt.Errorf("choose exactly one of sequence arguments, --through, or --all")
+			}
+			out, err := c.DeleteWebhooks(cmd.Context(), strings.Trim(args[0], "/"), req)
+			if err != nil {
+				return err
+			}
+			printJSON(cmd, out)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&all, "all", false, "delete all retained webhooks for the project")
+	cmd.Flags().Int64Var(&through, "through", 0, "delete webhooks through this sequence, inclusive")
 	return cmd
 }
 
@@ -357,26 +500,34 @@ func newRelayWebhooksListCmd() *cobra.Command {
 }
 
 func newRelayWebhooksReplayCmd() *cobra.Command {
-	return &cobra.Command{
+	var clientID string
+	cmd := &cobra.Command{
 		Use:   "replay <project> <seq>",
-		Short: "Re-push a stored webhook to the owning client over its tunnel",
+		Short: "Re-push a stored webhook to connected subscribers",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newRelayClient(cmd)
 			if err != nil {
 				return err
 			}
-			var seq int64
-			if _, err := fmt.Sscanf(args[1], "%d", &seq); err != nil {
-				return fmt.Errorf("invalid seq %q: %w", args[1], err)
+			seq, err := strconv.ParseInt(args[1], 10, 64)
+			if err != nil || seq <= 0 {
+				return fmt.Errorf("invalid seq %q", args[1])
 			}
-			if err := c.ReplayWebhook(cmd.Context(), args[0], seq); err != nil {
+			if clientID != "" {
+				err = c.ReplayWebhookToClient(cmd.Context(), args[0], seq, clientID)
+			} else {
+				err = c.ReplayWebhook(cmd.Context(), args[0], seq)
+			}
+			if err != nil {
 				return err
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), "replayed")
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&clientID, "client-id", "", "replay only to this connected subscriber")
+	return cmd
 }
 
 // ---- helpers ----

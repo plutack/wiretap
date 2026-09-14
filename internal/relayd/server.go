@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/plutack/wiretap/internal/api"
@@ -87,7 +88,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /admin/projects", s.requireAdmin(s.handleReclaimProject))
 	mux.HandleFunc("PUT /admin/projects/{project}", s.requireAdmin(s.handleAssignProject))
 	mux.HandleFunc("DELETE /admin/projects/{project}", s.requireAdmin(s.handleDeleteProject))
+	mux.HandleFunc("PUT /admin/projects/{project}/subscribers/{clientID}", s.requireAdmin(s.handleAddProjectSubscriber))
+	mux.HandleFunc("DELETE /admin/projects/{project}/subscribers/{clientID}", s.requireAdmin(s.handleRemoveProjectSubscriber))
 	mux.HandleFunc("GET /admin/projects/{project}/webhooks", s.requireAdmin(s.handleListWebhooks))
+	mux.HandleFunc("DELETE /admin/projects/{project}/webhooks/{seq}", s.requireAdmin(s.handleDeleteWebhook))
+	mux.HandleFunc("POST /admin/projects/{project}/webhooks/{seq}/replay", s.requireAdmin(s.handleReplayWebhook))
+	mux.HandleFunc("POST /admin/projects/{project}/webhooks/batch-delete", s.requireAdmin(s.handleBatchDeleteWebhooks))
 	// WebSocket tunnel. Auth via HTTP basic auth on the upgrade request.
 	mux.HandleFunc("GET /tunnel", s.HandleTunnel)
 	// Catch-all for ingress. The first segment of the path is the project;
@@ -112,13 +118,13 @@ func (s *Server) handleAddClientProject(w http.ResponseWriter, r *http.Request) 
 	}
 	if err := s.store.BindProject(r.Context(), req.Path, clientID, s.clock.Now()); err != nil {
 		if errors.Is(err, store.ErrConflict) {
-			// Treat a retry by the same owner as success. This matters when the
+			// Treat a retry by the same subscriber as success. This matters when the
 			// first response was lost after the insert committed.
-			if current, lookupErr := s.store.Project(r.Context(), req.Path); lookupErr == nil && current.ClientID == clientID {
+			if _, lookupErr := s.store.ProjectSubscription(r.Context(), req.Path, clientID); lookupErr == nil {
 				s.writeClientProjects(w, r, clientID)
 				return
 			}
-			writeErr(w, http.StatusConflict, "conflict", fmt.Sprintf("project %q is already claimed", req.Path))
+			writeErr(w, http.StatusConflict, "conflict", fmt.Sprintf("project %q already exists", req.Path))
 			return
 		}
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
@@ -127,19 +133,20 @@ func (s *Server) handleAddClientProject(w http.ResponseWriter, r *http.Request) 
 	s.writeClientProjects(w, r, clientID)
 }
 
-// handleRemoveClientProject releases one path owned by the authenticated
-// client. SQLite cascades deletion to relay-side webhooks for that path.
+// handleRemoveClientProject removes only the authenticated client's
+// subscription. Project history is administrator-managed.
 func (s *Server) handleRemoveClientProject(w http.ResponseWriter, r *http.Request) {
 	clientID, _ := r.Context().Value(clientIDKey{}).(string)
 	project := r.PathValue("project")
 	if err := s.store.UnbindProject(r.Context(), project, clientID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			writeErr(w, http.StatusNotFound, "not_found", "project is not owned by this client")
+			writeErr(w, http.StatusNotFound, "not_found", "client is not subscribed to this project")
 			return
 		}
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
+	s.tunnels.removeProject(clientID, project)
 	s.writeClientProjects(w, r, clientID)
 }
 
@@ -164,7 +171,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 // handleRegister creates a new client and binds the requested project
 // paths. The admin_token check is enforced by requireAdmin wrapping.
 //
-// On conflict (path already owned by another client) we roll back the
+// On conflict (path already exists) we roll back the
 // client row to keep the registration atomic and return 409. This is one of
 // the few multi-statement handlers, so we wrap the work in a transaction.
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -190,20 +197,25 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", "create client: "+err.Error())
 		return
 	}
-	// Bind each project. On any failure roll back the client row so the
-	// registration is all-or-nothing; clients can retry with adjusted paths.
+	// Bind each project. On any failure remove paths created by this request and
+	// roll back the client row so registration remains all-or-nothing.
+	createdProjects := make([]string, 0, len(req.Projects))
 	for _, p := range req.Projects {
 		if err := s.store.BindProject(r.Context(), p, clientID, now); err != nil {
+			for _, created := range createdProjects {
+				_ = s.store.DeleteProject(r.Context(), created)
+			}
 			if errors.Is(err, store.ErrConflict) {
 				_ = s.store.DeleteClient(r.Context(), clientID)
 				writeErr(w, http.StatusConflict, "conflict",
-					fmt.Sprintf("project %q already claimed", p))
+					fmt.Sprintf("project %q already exists", p))
 				return
 			}
 			_ = s.store.DeleteClient(r.Context(), clientID)
 			writeErr(w, http.StatusInternalServerError, "internal", "bind project: "+err.Error())
 			return
 		}
+		createdProjects = append(createdProjects, p)
 	}
 	writeJSON(w, http.StatusCreated, api.RegisterResponse{
 		ClientID: clientID, ClientToken: clientTok, Projects: req.Projects,
@@ -215,8 +227,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 // headers are captured byte-exact for faithful replay.
 //
 // We never require auth on ingress: webhook senders don't carry our tokens.
-// The project must exist and be owned by some registered client; otherwise
-// we 404 to avoid leaking the existence of unclaimed paths.
+// The project must exist and have at least one registered subscriber; otherwise
+// we 404 to avoid leaking the existence of inactive paths.
 func (s *Server) handleIngress(w http.ResponseWriter, r *http.Request) {
 	// Reserved routes never reach here (they're registered earlier in the
 	// mux), but defensive check the path starts with /something.
@@ -231,7 +243,7 @@ func (s *Server) handleIngress(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "invalid_path", "no such project")
 		return
 	}
-	// Ensure someone owns this project.
+	// Ensure the project has at least one subscriber.
 	if _, err := s.store.ClientByProject(r.Context(), project); err != nil {
 		// Treat not-found as 404 (don't leak existence to scanners).
 		writeErr(w, http.StatusNotFound, "not_found", "no such project")
@@ -380,6 +392,7 @@ func (s *Server) handleGetClient(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeleteClient(w http.ResponseWriter, r *http.Request) {
 	clientID := r.PathValue("clientID")
+	projects, _ := s.store.ProjectsByClient(r.Context(), clientID)
 	if err := s.store.DeleteClient(r.Context(), clientID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "not_found", "no such client")
@@ -387,6 +400,9 @@ func (s *Server) handleDeleteClient(w http.ResponseWriter, r *http.Request) {
 		}
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
+	}
+	for _, project := range projects {
+		s.tunnels.removeProject(clientID, project)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -399,12 +415,7 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	}
 	projects := make([]api.Project, 0, len(rows))
 	for _, p := range rows {
-		projects = append(projects, api.Project{
-			Path:      p.Path,
-			ClientID:  p.ClientID,
-			CreatedAt: p.CreatedAt.Unix(),
-			AckedSeq:  p.AckedSeq,
-		})
+		projects = append(projects, s.projectResponse(r.Context(), p))
 	}
 	writeJSON(w, http.StatusOK, api.ListProjectsResponse{Projects: projects})
 }
@@ -433,26 +444,115 @@ func (s *Server) handleAssignProject(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
-	if err := s.store.BindProject(r.Context(), project, req.ClientID, s.clock.Now()); err != nil {
-		if errors.Is(err, store.ErrConflict) {
-			writeErr(w, http.StatusConflict, "conflict", fmt.Sprintf("project %q is already claimed", project))
-			return
+	status := http.StatusOK
+	changed := false
+	if _, err := s.store.Project(r.Context(), project); errors.Is(err, store.ErrNotFound) {
+		if bindErr := s.store.BindProject(r.Context(), project, req.ClientID, s.clock.Now()); bindErr != nil {
+			if !errors.Is(bindErr, store.ErrConflict) {
+				writeErr(w, http.StatusInternalServerError, "internal", bindErr.Error())
+				return
+			}
+			// Another administrator may have created the path after our lookup.
+			// Complete this request by adding the requested subscription.
+			if subErr := s.store.SubscribeProject(r.Context(), project, req.ClientID, req.IncludeHistory, s.clock.Now()); subErr != nil {
+				if !errors.Is(subErr, store.ErrConflict) {
+					writeErr(w, http.StatusInternalServerError, "internal", subErr.Error())
+					return
+				}
+			} else {
+				changed = true
+			}
+		} else {
+			status = http.StatusCreated
+			changed = true
 		}
+	} else if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
+	} else if err := s.store.SubscribeProject(r.Context(), project, req.ClientID, req.IncludeHistory, s.clock.Now()); err != nil {
+		if !errors.Is(err, store.ErrConflict) {
+			writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+			return
+		}
+	} else {
+		changed = true
+	}
+	if changed {
+		s.restartClientTunnel(req.ClientID)
 	}
 	created, err := s.store.Project(r.Context(), project)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, api.Project{Path: created.Path, ClientID: created.ClientID, CreatedAt: created.CreatedAt.Unix(), AckedSeq: created.AckedSeq})
+	writeJSON(w, status, s.projectResponse(r.Context(), *created))
+}
+
+func (s *Server) handleAddProjectSubscriber(w http.ResponseWriter, r *http.Request) {
+	project := strings.Trim(strings.TrimSpace(r.PathValue("project")), "/")
+	clientID := strings.TrimSpace(r.PathValue("clientID"))
+	if !projectPathRE.MatchString(project) || clientID == "" {
+		writeErr(w, http.StatusBadRequest, "invalid_request", "valid project and client_id are required")
+		return
+	}
+	if _, err := s.store.Client(r.Context(), clientID); err != nil {
+		writeErr(w, http.StatusNotFound, "not_found", "client_id does not exist")
+		return
+	}
+	includeHistory := r.URL.Query().Get("include_history") == "true"
+	changed := false
+	if err := s.store.SubscribeProject(r.Context(), project, clientID, includeHistory, s.clock.Now()); err != nil {
+		if errors.Is(err, store.ErrConflict) {
+			// Idempotent administrative PUT.
+		} else if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "project does not exist")
+			return
+		} else {
+			writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+			return
+		}
+	} else {
+		changed = true
+	}
+	if changed {
+		s.restartClientTunnel(clientID)
+	}
+	row, err := s.store.Project(r.Context(), project)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, s.projectResponse(r.Context(), *row))
+}
+
+func (s *Server) handleRemoveProjectSubscriber(w http.ResponseWriter, r *http.Request) {
+	project := r.PathValue("project")
+	clientID := r.PathValue("clientID")
+	if err := s.store.UnbindProject(r.Context(), project, clientID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "subscription does not exist")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	s.tunnels.removeProject(clientID, project)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	project := r.PathValue("project")
 	if !projectPathRE.MatchString(project) {
 		writeErr(w, http.StatusBadRequest, "invalid_path", fmt.Sprintf("project %q does not match %s", project, projectPathRE.String()))
+		return
+	}
+	current, err := s.store.Project(r.Context(), project)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "no such project")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
 	if err := s.store.DeleteProject(r.Context(), project); err != nil {
@@ -462,6 +562,9 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		}
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
+	}
+	for _, sub := range current.Subscriptions {
+		s.tunnels.removeProject(sub.ClientID, project)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -476,7 +579,7 @@ func (s *Server) handleReclaimProject(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid_request", "path and new_client_id are required")
 		return
 	}
-	// Confirm the new owner exists.
+	// Confirm the replacement subscriber exists.
 	if _, err := s.store.Client(r.Context(), req.NewClientID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "not_found", "new_client_id does not exist")
@@ -485,7 +588,7 @@ func (s *Server) handleReclaimProject(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
-	// Check current owner to surface the conflict vs not-found error.
+	// Check current subscriptions to surface conflict vs not-found.
 	current, err := s.store.Project(r.Context(), req.Path)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -495,36 +598,46 @@ func (s *Server) handleReclaimProject(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
-	if current.ClientID == req.NewClientID {
+	if len(current.Subscriptions) == 1 && current.Subscriptions[0].ClientID == req.NewClientID {
 		// Idempotent no-op.
-		writeJSON(w, http.StatusOK, api.Project{
-			Path:      current.Path,
-			ClientID:  current.ClientID,
-			CreatedAt: current.CreatedAt.Unix(),
-			AckedSeq:  current.AckedSeq,
-		})
+		writeJSON(w, http.StatusOK, s.projectResponse(r.Context(), *current))
 		return
 	}
 	if !req.Force {
 		writeErr(w, http.StatusConflict, "conflict",
-			fmt.Sprintf("project %q is owned by %q; use force=true to reclaim", req.Path, current.ClientID))
+			fmt.Sprintf("project %q has existing subscribers; use force=true to replace them", req.Path))
 		return
 	}
 	if err := s.store.ReclaimProject(r.Context(), req.Path, req.NewClientID, s.clock.Now()); err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
+	for _, sub := range current.Subscriptions {
+		s.tunnels.removeProject(sub.ClientID, req.Path)
+	}
+	s.restartClientTunnel(req.NewClientID)
 	updated, err := s.store.Project(r.Context(), req.Path)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, api.Project{
-		Path:      updated.Path,
-		ClientID:  updated.ClientID,
-		CreatedAt: updated.CreatedAt.Unix(),
-		AckedSeq:  updated.AckedSeq,
-	})
+	writeJSON(w, http.StatusOK, s.projectResponse(r.Context(), *updated))
+}
+
+func (s *Server) projectResponse(ctx context.Context, row store.ProjectRow) api.Project {
+	out := api.Project{
+		Path: row.Path, CreatedAt: row.CreatedAt.Unix(), NextSeq: row.NextSeq,
+		WebhookCount: row.WebhookCount, ClientID: row.ClientID, AckedSeq: row.AckedSeq,
+		Subscriptions: make([]api.ProjectSubscription, 0, len(row.Subscriptions)),
+	}
+	for _, sub := range row.Subscriptions {
+		pending, _ := s.store.PendingCountForClient(ctx, row.Path, sub.ClientID)
+		out.Subscriptions = append(out.Subscriptions, api.ProjectSubscription{
+			ClientID: sub.ClientID, CreatedAt: sub.CreatedAt.Unix(), StartSeq: sub.StartSeq,
+			AckedSeq: sub.AckedSeq, Pending: pending,
+		})
+	}
+	return out
 }
 
 func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {
@@ -533,9 +646,29 @@ func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid_request", "missing project")
 		return
 	}
+	if _, err := s.store.Project(r.Context(), project); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "project does not exist")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
 	afterSeq := parseInt64Query(r, "after_seq", 0)
 	limit := parseInt64Query(r, "limit", 50)
-	rows, next, err := s.store.ListWebhooks(r.Context(), project, afterSeq, limit)
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	var (
+		rows []store.WebhookRow
+		next int64
+		err  error
+	)
+	if r.URL.Query().Get("summary") == "true" {
+		rows, next, err = s.store.ListWebhookSummaries(r.Context(), project, afterSeq, limit)
+	} else {
+		rows, next, err = s.store.ListWebhooks(r.Context(), project, afterSeq, limit)
+	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
@@ -544,6 +677,10 @@ func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {
 	for _, wh := range rows {
 		var headers map[string][]string
 		_ = json.Unmarshal([]byte(wh.HeadersJSON), &headers)
+		bodyBytes := wh.BodyLength
+		if bodyBytes == 0 {
+			bodyBytes = len(wh.Body)
+		}
 		webhooks = append(webhooks, api.Webhook{
 			Project:    wh.Project,
 			Seq:        wh.Seq,
@@ -554,12 +691,137 @@ func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {
 			Headers:    headers,
 			RawHeaders: wh.RawHeaders,
 			Body:       wh.Body,
+			BodyBytes:  bodyBytes,
 		})
 	}
 	writeJSON(w, http.StatusOK, api.ListWebhooksResponse{
 		Webhooks:     webhooks,
 		NextAfterSeq: next,
 	})
+}
+
+func (s *Server) handleDeleteWebhook(w http.ResponseWriter, r *http.Request) {
+	project := r.PathValue("project")
+	seq, err := parseInt64(r.PathValue("seq"))
+	if err != nil || seq <= 0 {
+		writeErr(w, http.StatusBadRequest, "invalid_request", "webhook sequence must be a positive integer")
+		return
+	}
+	if err := s.store.DeleteWebhook(r.Context(), project, seq); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "webhook does not exist")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleReplayWebhook(w http.ResponseWriter, r *http.Request) {
+	project := r.PathValue("project")
+	seq, err := parseInt64(r.PathValue("seq"))
+	if err != nil || seq <= 0 {
+		writeErr(w, http.StatusBadRequest, "invalid_request", "webhook sequence must be a positive integer")
+		return
+	}
+	row, err := s.store.WebhookBySeq(r.Context(), project, seq)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "webhook does not exist")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	target := strings.TrimSpace(r.URL.Query().Get("client_id"))
+	sent := 0
+	for _, session := range s.tunnels.sessions(project) {
+		if target != "" && session.clientID != target {
+			continue
+		}
+		if session.send(r.Context(), rowToPush(*row)) {
+			sent++
+		}
+	}
+	if target != "" && sent == 0 {
+		if _, err := s.store.ProjectSubscription(r.Context(), project, target); err != nil {
+			writeErr(w, http.StatusNotFound, "not_found", "client is not subscribed to this project")
+		} else {
+			writeErr(w, http.StatusConflict, "not_connected", "target client is not connected")
+		}
+		return
+	}
+	if sent == 0 {
+		writeErr(w, http.StatusConflict, "not_connected", "no project subscribers are connected")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleBatchDeleteWebhooks(w http.ResponseWriter, r *http.Request) {
+	project := r.PathValue("project")
+	if _, err := s.store.Project(r.Context(), project); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "project does not exist")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	var req api.DeleteWebhooksRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return
+	}
+	modes := 0
+	if len(req.Seqs) > 0 {
+		if len(req.Seqs) > 500 {
+			writeErr(w, http.StatusBadRequest, "invalid_request", "at most 500 sequences may be deleted per request")
+			return
+		}
+		modes++
+	}
+	if req.ThroughSeq > 0 {
+		modes++
+	}
+	if req.All {
+		modes++
+	}
+	if modes != 1 {
+		writeErr(w, http.StatusBadRequest, "invalid_request", "choose exactly one of seqs, through_seq, or all")
+		return
+	}
+	var (
+		deleted int64
+		err     error
+	)
+	switch {
+	case req.All:
+		deleted, err = s.store.DeleteAllWebhooks(r.Context(), project)
+	case req.ThroughSeq > 0:
+		deleted, err = s.store.DeleteWebhooksThrough(r.Context(), project, req.ThroughSeq)
+	default:
+		seen := make(map[int64]struct{}, len(req.Seqs))
+		seqs := make([]int64, 0, len(req.Seqs))
+		for _, seq := range req.Seqs {
+			if seq <= 0 {
+				writeErr(w, http.StatusBadRequest, "invalid_request", "every sequence must be a positive integer")
+				return
+			}
+			if _, exists := seen[seq]; exists {
+				continue
+			}
+			seen[seq] = struct{}{}
+			seqs = append(seqs, seq)
+		}
+		deleted, err = s.store.DeleteWebhooks(r.Context(), project, seqs)
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, api.DeleteWebhooksResponse{Deleted: deleted})
 }
 
 // parseInt64Query parses a query parameter as int64, returning fallback on
@@ -576,18 +838,8 @@ func parseInt64Query(r *http.Request, key string, fallback int64) int64 {
 	return n
 }
 
-// parseInt64 is the directed import for strconv.ParseInt with defaults.
-// Indirected so tests can override; not currently overridden.
-var parseInt64 = func(s string) (int64, error) {
-	return strconvParseInt(s)
-}
-
-// strconvParseInt is a stand-in alias to keep imports tidy; tests override
-// parseInt64 directly when needed.
-func strconvParseInt(s string) (int64, error) {
-	var n int64
-	_, err := fmt.Sscanf(s, "%d", &n)
-	return n, err
+var parseInt64 = func(value string) (int64, error) {
+	return strconv.ParseInt(value, 10, 64)
 }
 
 // AckedSeqThroughStore reports the relay's current acked_seq cursor for

@@ -15,92 +15,189 @@ import (
 	"github.com/plutack/wiretap/internal/store"
 )
 
-// TunnelRegistry keeps the currently-connected tunnels per project so the
-// ingress handler can push freshly-stored webhooks straight down to the
-// owner's PC instead of waiting for the PC to (re)connect.
-//
-// A tunnel is a long-lived goroutine reading messages from the PC and a
-// push channel for the relay to send messages to the PC. Each project has
-// at most one tunnel — when a new tunnel attaches for the same project, we
-// close the old one. Multi-PC sync is not supported yet.
+// TunnelRegistry indexes each connected client session under all subscribed
+// projects. A project may have many sessions; reconnecting replaces only the
+// preceding session for that same client identity.
 type TunnelRegistry struct {
-	mu      sync.RWMutex
-	tunnels map[string]*TunnelSession // keyed by project path
+	mu        sync.RWMutex
+	byProject map[string]map[string]*TunnelSession
+	byClient  map[string]*TunnelSession
 }
 
 // TunnelSession is the relay's side of one open tunnel.
 type TunnelSession struct {
-	project   string
 	clientID  string
-	out       chan relayproto.Message // relay -> PC (WriteMessage closes if full)
-	done      chan struct{}           // closed when the loop exits
+	out       chan relayproto.Message
+	done      chan struct{}
 	closeOnce sync.Once
+	projects  map[string]chan struct{} // project -> coalescing pump wake channel
+	mu        sync.RWMutex
 }
 
 // NewTunnelRegistry returns an empty registry.
 func NewTunnelRegistry() *TunnelRegistry {
-	return &TunnelRegistry{tunnels: make(map[string]*TunnelSession)}
+	return &TunnelRegistry{
+		byProject: make(map[string]map[string]*TunnelSession),
+		byClient:  make(map[string]*TunnelSession),
+	}
 }
 
-// attach registers a tunnel for project, replacing any prior tunnel for
-// the same project. The returned session's out channel is buffered so the
-// ingress path does not block on slow PC consumers.
-func (r *TunnelRegistry) attach(project, clientID string) *TunnelSession {
+func (r *TunnelRegistry) attach(clientID string, projects []string) *TunnelSession {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if old, ok := r.tunnels[project]; ok {
-		// Politely close the prior tunnel; the new attach wins.
+	if old := r.byClient[clientID]; old != nil {
 		old.close()
+		r.detachLocked(old)
 	}
 	s := &TunnelSession{
-		project:  project,
 		clientID: clientID,
-		out:      make(chan relayproto.Message, 32),
+		out:      make(chan relayproto.Message, 64),
 		done:     make(chan struct{}),
+		projects: make(map[string]chan struct{}, len(projects)),
 	}
-	r.tunnels[project] = s
+	r.byClient[clientID] = s
+	for _, project := range projects {
+		r.addProjectLocked(s, project)
+	}
 	return s
 }
 
-// lookup returns the active tunnel for project or nil.
-func (r *TunnelRegistry) lookup(project string) *TunnelSession {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.tunnels[project]
+func (r *TunnelRegistry) sessions(project string) []*TunnelSession {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	indexed := r.byProject[project]
+	out := make([]*TunnelSession, 0, len(indexed))
+	for _, session := range indexed {
+		out = append(out, session)
+	}
+	return out
 }
 
-// detach removes the session from the registry if it is still the active one.
-// No-op if another tunnel has already replaced it.
 func (r *TunnelRegistry) detach(s *TunnelSession) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if cur, ok := r.tunnels[s.project]; ok && cur == s {
-		delete(r.tunnels, s.project)
+	if r.byClient[s.clientID] == s {
+		r.detachLocked(s)
 	}
+}
+
+func (r *TunnelRegistry) detachLocked(s *TunnelSession) {
+	delete(r.byClient, s.clientID)
+	for project := range s.projectWakes() {
+		delete(r.byProject[project], s.clientID)
+		if len(r.byProject[project]) == 0 {
+			delete(r.byProject, project)
+		}
+	}
+}
+
+func (r *TunnelRegistry) addProjectLocked(s *TunnelSession, project string) chan struct{} {
+	wake := s.addProject(project)
+	if r.byProject[project] == nil {
+		r.byProject[project] = make(map[string]*TunnelSession)
+	}
+	r.byProject[project][s.clientID] = s
+	return wake
+}
+
+func (s *Server) restartClientTunnel(clientID string) {
+	s.tunnels.restartClient(clientID)
+}
+
+func (r *TunnelRegistry) restartClient(clientID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s := r.byClient[clientID]
+	if s == nil {
+		return
+	}
+	s.close()
+	r.detachLocked(s)
+}
+
+func (r *TunnelRegistry) removeProject(clientID, project string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s := r.byClient[clientID]
+	if s == nil {
+		return
+	}
+	s.removeProject(project)
+	delete(r.byProject[project], clientID)
+	if len(r.byProject[project]) == 0 {
+		delete(r.byProject, project)
+	}
+	// Reconnect the client so both protocol directions immediately use the
+	// authoritative subscription set and no buffered message for the removed
+	// project can be delivered afterward.
+	s.close()
+	r.detachLocked(s)
 }
 
 // close stops the session and unblocks anyone waiting on done.
 func (s *TunnelSession) close() {
 	s.closeOnce.Do(func() {
-		// Closing out lets the writer loop exit. done is closed by the loop
-		// when it returns — but if the writer is blocked on a read, closing
-		// out alone won't release it; the run goroutine handles that via ctx.
-		// We close done here as well to make detach/idempotent.
+		// The handler and all delivery pumps select on done. The handler then
+		// closes the WebSocket, unblocking its reader goroutine.
 		close(s.done)
 	})
 }
 
-// send pushes a message to the PC. Returns false if the session is gone or
-// the buffer is full (caller should treat as dropped for now).
-func (s *TunnelSession) send(m relayproto.Message) bool {
+func (s *TunnelSession) send(ctx context.Context, m relayproto.Message) bool {
 	select {
 	case s.out <- m:
 		return true
 	case <-s.done:
 		return false
-	default:
-		// Buffer full — drop. Backpressure is a future improvement.
+	case <-ctx.Done():
 		return false
+	}
+}
+
+func (s *TunnelSession) addProject(project string) chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if wake := s.projects[project]; wake != nil {
+		return wake
+	}
+	wake := make(chan struct{}, 1)
+	s.projects[project] = wake
+	return wake
+}
+
+func (s *TunnelSession) removeProject(project string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.projects, project)
+}
+
+func (s *TunnelSession) owns(project string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.projects[project]
+	return ok
+}
+
+func (s *TunnelSession) projectWakes() map[string]chan struct{} {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string]chan struct{}, len(s.projects))
+	for project, wake := range s.projects {
+		out[project] = wake
+	}
+	return out
+}
+
+func (s *TunnelSession) notify(project string) {
+	s.mu.RLock()
+	wake := s.projects[project]
+	s.mu.RUnlock()
+	if wake == nil {
+		return
+	}
+	select {
+	case wake <- struct{}{}:
+	default:
 	}
 }
 
@@ -110,11 +207,7 @@ func (s *TunnelSession) send(m relayproto.Message) bool {
 func (r *TunnelRegistry) countTunnels() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	unique := make(map[*TunnelSession]struct{}, len(r.tunnels))
-	for _, session := range r.tunnels {
-		unique[session] = struct{}{}
-	}
-	return len(unique)
+	return len(r.byClient)
 }
 
 // HandleTunnel upgrades the HTTP request to a WebSocket and runs the
@@ -124,11 +217,11 @@ func (r *TunnelRegistry) countTunnels() int {
 //
 // The flow is:
 //  1. PC dials wss://relay/tunnel with HTTP basic auth.
-//  2. Relay validates, attaches a TunnelSession per owned project.
+//  2. Relay validates and indexes the session under its subscribed projects.
 //  3. PC sends HELLO with last_seqs per project.
 //  4. Relay sends OK with resume_from (mirrors last_seqs).
 //  5. Relay pumps pending undelivered webhooks (seq > last_seqs) as PUSH.
-//  6. PC sends ACK per project; relay marks rows delivered + bumps acked_seq.
+//  6. PC sends ACK per project; relay advances that subscription's cursor.
 //  7. Loop continues: ingress calls pushIfTunnelAttached → PUSH; PC ACKs.
 func (s *Server) HandleTunnel(w http.ResponseWriter, r *http.Request) {
 	// Validate client creds before upgrading.
@@ -159,14 +252,14 @@ func (s *Server) HandleTunnel(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	// Look up projects owned by this client.
+	// Look up projects subscribed to by this client.
 	paths, err := s.store.ProjectsByClient(r.Context(), c.ClientID)
 	if err != nil {
 		_ = conn.Close(websocket.StatusInternalError, "store error")
 		return
 	}
 	if len(paths) == 0 {
-		_ = conn.Close(websocket.StatusPolicyViolation, "client owns no projects")
+		_ = conn.Close(websocket.StatusPolicyViolation, "client has no project subscriptions")
 		return
 	}
 
@@ -185,56 +278,55 @@ func (s *Server) HandleTunnel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Attach a tunnel per project. All share the same outbound channel so the
-	// PC multiplexes one stream. (For MVP, projects share one channel per
-	// session, keyed by the lowest-path project — simpler than carrying one
-	// channel per project. The wire Push carries project so the PC routes.)
-	primary := paths[0]
-	session := s.tunnels.attach(primary, c.ClientID)
+	// One authenticated connection multiplexes every project subscribed to by
+	// this client. Other subscribers to those projects retain their sessions.
+	session := s.tunnels.attach(c.ClientID, paths)
 	defer s.tunnels.detach(session)
-	// For extra projects, attach under the same session by aliasing the
-	// registry to point each path at this session.
-	for _, p := range paths[1:] {
-		s.tunnels.attachSession(p, session)
-	}
-	defer func() {
-		// Detach aliased projects too so a reconnect starts fresh.
-		for _, p := range paths[1:] {
-			s.tunnels.detachByProject(p, session)
-		}
-	}()
 
 	// Touch last_seen_at.
 	_ = s.store.TouchClient(ctx, c.ClientID, s.clock.Now())
+	resume := make(map[string]int64, len(paths))
+	for _, project := range paths {
+		cursor := hello.LastSeqs[project]
+		if sub, err := s.store.ProjectSubscription(ctx, project, c.ClientID); err == nil && cursor < sub.StartSeq {
+			cursor = sub.StartSeq
+		}
+		if row, err := s.store.Project(ctx, project); err == nil && cursor >= row.NextSeq {
+			cursor = row.NextSeq - 1
+		}
+		resume[project] = cursor
+	}
 
 	// Send OK.
 	if err := writeJSONMessage(ctx, conn, relayproto.OK{
 		Base:       relayproto.Base{Type: relayproto.TypeOK},
 		Projects:   paths,
-		ResumeFrom: hello.LastSeqs,
+		ResumeFrom: resume,
 	}); err != nil {
 		return
 	}
 
-	// Push pending undelivered webhooks per project.
+	// Start an independent catch-up pump per project. Ingress only wakes these
+	// pumps, so slow consumers no longer block ingress or silently lose a push
+	// when the outbound channel is temporarily full.
 	for _, p := range paths {
-		cursor := hello.LastSeqs[p]
-		rows, err := s.store.WebhooksAfter(ctx, p, cursor)
-		if err != nil {
-			continue
-		}
-		for _, row := range rows {
-			_ = session.send(rowToPush(row))
-		}
+		wake := session.addProject(p)
+		go s.deliveryPump(ctx, session, p, resume[p], wake)
+		session.notify(p)
 	}
 
 	// Read loop (PC -> relay): ACK and REPLAY messages.
-	go s.tunnelReadLoop(ctx, conn, session, paths)
+	go func() {
+		s.tunnelReadLoop(ctx, conn, session)
+		cancel()
+	}()
 
 	// Write loop (relay -> PC): drain session.out until ctx is cancelled.
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case <-session.done:
 			return
 		case m, ok := <-session.out:
 			if !ok {
@@ -247,29 +339,43 @@ func (s *Server) HandleTunnel(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// attachSession aliases an existing session under another project path. Used
-// when one client owns multiple projects; all paths share the same session.
-func (r *TunnelRegistry) attachSession(project string, sess *TunnelSession) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if old, ok := r.tunnels[project]; ok {
-		old.close()
-	}
-	r.tunnels[project] = sess
-}
-
-// detachByProject removes the alias iff it still points at sess.
-func (r *TunnelRegistry) detachByProject(project string, sess *TunnelSession) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if cur, ok := r.tunnels[project]; ok && cur == sess {
-		delete(r.tunnels, project)
+func (s *Server) deliveryPump(ctx context.Context, session *TunnelSession, project string, cursor int64, wake <-chan struct{}) {
+	const batchSize int64 = 100
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-session.done:
+			return
+		case <-wake:
+		case <-ticker.C:
+		}
+		if !session.owns(project) {
+			return
+		}
+		for {
+			rows, err := s.store.WebhooksAfterLimit(ctx, project, cursor, batchSize)
+			if err != nil {
+				break
+			}
+			for _, row := range rows {
+				if !session.owns(project) || !session.send(ctx, rowToPush(row)) {
+					return
+				}
+				cursor = row.Seq
+			}
+			if int64(len(rows)) < batchSize {
+				break
+			}
+		}
 	}
 }
 
 // tunnelReadLoop reads PC->relay messages. It validates direction and the
-// project is owned by the current session, then dispatches ACK and REPLAY.
-func (s *Server) tunnelReadLoop(ctx context.Context, conn *websocket.Conn, sess *TunnelSession, ownedPaths []string) {
+// project belongs to the current session, then dispatches ACK and REPLAY.
+func (s *Server) tunnelReadLoop(ctx context.Context, conn *websocket.Conn, sess *TunnelSession) {
 	for {
 		m, err := readMessage(ctx, conn)
 		if err != nil {
@@ -281,12 +387,12 @@ func (s *Server) tunnelReadLoop(ctx context.Context, conn *websocket.Conn, sess 
 		}
 		switch v := m.(type) {
 		case relayproto.Ack:
-			if !s.ownsProject(ownedPaths, v.Project) {
+			if !sess.owns(v.Project) {
 				continue
 			}
-			_ = s.store.MarkDelivered(ctx, v.Project, v.UpToSeq, s.clock.Now())
+			_ = s.store.MarkDeliveredForClient(ctx, v.Project, sess.clientID, v.UpToSeq, s.clock.Now())
 		case relayproto.Replay:
-			if !s.ownsProject(ownedPaths, v.Project) {
+			if !sess.owns(v.Project) {
 				continue
 			}
 			// Re-push the listed webhooks to the local app as fresh PUSH
@@ -296,32 +402,19 @@ func (s *Server) tunnelReadLoop(ctx context.Context, conn *websocket.Conn, sess 
 				if err != nil {
 					continue
 				}
-				_ = sess.send(rowToPush(*row))
+				_ = sess.send(ctx, rowToPush(*row))
 			}
 		}
 	}
 }
 
-func (s *Server) ownsProject(paths []string, p string) bool {
-	for _, x := range paths {
-		if x == p {
-			return true
-		}
-	}
-	return false
-}
-
-// pushIfTunnelAttached forwards a freshly-stored webhook to the owning
-// client's tunnel if one is connected. No-op when no tunnel is attached;
-// the webhook sits in the relay's SQLite until the next reconnect.
-//
-// This is the implementation referenced from server.go's handleIngress.
+// pushIfTunnelAttached wakes every connected subscriber's catch-up pump.
 func (s *Server) pushIfTunnelAttached(ctx context.Context, project string, row store.WebhookRow) {
-	sess := s.tunnels.lookup(project)
-	if sess == nil {
-		return
+	_ = ctx
+	_ = row
+	for _, session := range s.tunnels.sessions(project) {
+		session.notify(project)
 	}
-	_ = sess.send(rowToPush(row))
 }
 
 // readHello blocks until a HELLO message arrives or ctx is cancelled.

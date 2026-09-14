@@ -227,6 +227,50 @@ func TestClient_ReclaimRequest(t *testing.T) {
 	}
 }
 
+func TestClient_SubscriptionAndWebhookManagementRoutes(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("PUT /admin/projects/orders/subscribers/c2", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("include_history") != "true" {
+			t.Error("missing include_history query")
+		}
+		_ = json.NewEncoder(w).Encode(Project{Path: "orders", Subscriptions: []ProjectSubscription{{ClientID: "c2"}}})
+	})
+	mux.HandleFunc("DELETE /admin/projects/orders/subscribers/c2", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("GET /admin/projects/orders/webhooks", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("summary") != "true" {
+			t.Error("missing summary query")
+		}
+		_ = json.NewEncoder(w).Encode(ListWebhooksResponse{Webhooks: []Webhook{{Seq: 4, BodyBytes: 20}}})
+	})
+	mux.HandleFunc("POST /admin/projects/orders/webhooks/batch-delete", func(w http.ResponseWriter, r *http.Request) {
+		var req DeleteWebhooksRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if len(req.Seqs) != 2 {
+			t.Fatalf("delete request = %+v", req)
+		}
+		_ = json.NewEncoder(w).Encode(DeleteWebhooksResponse{Deleted: 2})
+	})
+	c := stubServer(t, mux, WithAdminToken("secret"))
+	project, err := c.AddProjectSubscriber(context.Background(), "orders", "c2", true)
+	if err != nil || len(project.Subscriptions) != 1 {
+		t.Fatalf("add subscriber = %+v, %v", project, err)
+	}
+	page, err := c.ListWebhookSummaries(context.Background(), "orders", 0, 50)
+	if err != nil || page.Webhooks[0].BodyBytes != 20 {
+		t.Fatalf("summaries = %+v, %v", page, err)
+	}
+	deleted, err := c.DeleteWebhooks(context.Background(), "orders", DeleteWebhooksRequest{Seqs: []int64{2, 4}})
+	if err != nil || deleted.Deleted != 2 {
+		t.Fatalf("delete = %+v, %v", deleted, err)
+	}
+	if err := c.RemoveProjectSubscriber(context.Background(), "orders", "c2"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestClient_NonJSONErrorBody(t *testing.T) {
 	t.Parallel()
 	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

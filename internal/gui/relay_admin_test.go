@@ -182,6 +182,64 @@ func TestBindings_RelayAdminMutations(t *testing.T) {
 	}
 }
 
+func TestBindings_RelayAdminSubscriptionsAndWebhookDeletion(t *testing.T) {
+	t.Parallel()
+	b, _ := newBindings(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("PUT /admin/projects/orders/subscribers/client-b", func(w http.ResponseWriter, r *http.Request) {
+		assertAdminToken(t, r)
+		if r.URL.Query().Get("include_history") != "true" {
+			t.Error("include_history was not forwarded")
+		}
+		_ = json.NewEncoder(w).Encode(api.Project{Path: "orders", Subscriptions: []api.ProjectSubscription{{ClientID: "client-b"}}})
+	})
+	mux.HandleFunc("DELETE /admin/projects/orders/subscribers/client-b", func(w http.ResponseWriter, r *http.Request) {
+		assertAdminToken(t, r)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("GET /admin/projects/orders/webhooks", func(w http.ResponseWriter, r *http.Request) {
+		assertAdminToken(t, r)
+		_ = json.NewEncoder(w).Encode(api.ListWebhooksResponse{Webhooks: []api.Webhook{{
+			Project: "orders", Seq: 7, ReceivedAt: 1700000000, Method: "POST", Path: "/paid", BodyBytes: 5,
+		}}})
+	})
+	mux.HandleFunc("POST /admin/projects/orders/webhooks/batch-delete", func(w http.ResponseWriter, r *http.Request) {
+		assertAdminToken(t, r)
+		var req api.DeleteWebhooksRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if len(req.Seqs) != 1 || req.Seqs[0] != 7 {
+			t.Fatalf("delete request = %+v", req)
+		}
+		_ = json.NewEncoder(w).Encode(api.DeleteWebhooksResponse{Deleted: 1})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	project, err := b.RelayAdminAddSubscriber(RelayAdminSubscriptionInput{
+		RelayURL: srv.URL, AdminToken: "admin-secret", Path: "orders", ClientID: "client-b", IncludeHistory: true,
+	})
+	if err != nil || len(project.Subscriptions) != 1 {
+		t.Fatalf("add subscriber = %+v, %v", project, err)
+	}
+	page, err := b.RelayAdminListWebhooks(RelayAdminListWebhooksInput{
+		RelayURL: srv.URL, AdminToken: "admin-secret", Path: "orders", Limit: 50,
+	})
+	if err != nil || len(page.Webhooks) != 1 || page.Webhooks[0].BodyBytes != 5 {
+		t.Fatalf("webhook page = %+v, %v", page, err)
+	}
+	deleted, err := b.RelayAdminDeleteWebhooks(RelayAdminDeleteWebhooksInput{
+		RelayURL: srv.URL, AdminToken: "admin-secret", Path: "orders", Seqs: []int64{7},
+	})
+	if err != nil || deleted != 1 {
+		t.Fatalf("deleted = %d, %v", deleted, err)
+	}
+	if err := b.RelayAdminRemoveSubscriber(RelayAdminSubscriptionInput{
+		RelayURL: srv.URL, AdminToken: "admin-secret", Path: "orders", ClientID: "client-b",
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRelayAdminClientValidation(t *testing.T) {
 	t.Parallel()
 	if _, _, err := relayAdminClient("https://relay.example.com", ""); err == nil {

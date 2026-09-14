@@ -27,12 +27,12 @@ type RegisterResponse struct {
 }
 
 // ProjectRequest is the body of POST /client/projects. The authenticated
-// client becomes the owner; adding a project never rotates client credentials.
+// client creates a new project as its first subscriber.
 type ProjectRequest struct {
 	Path string `json:"path"`
 }
 
-// ClientProjectsResponse is returned after an owner project mutation.
+// ClientProjectsResponse is returned after a client subscription mutation.
 type ClientProjectsResponse struct {
 	Projects []string `json:"projects"`
 }
@@ -62,12 +62,25 @@ type Client struct {
 	Projects    []string `json:"projects,omitempty"`
 }
 
-// Project is the public projection of a claimed project path.
+// Project is the public projection of a relay project and its subscribers.
 type Project struct {
-	Path      string `json:"path"`
-	ClientID  string `json:"client_id"` // owning client_id
+	Path          string                `json:"path"`
+	CreatedAt     int64                 `json:"created_at"`
+	NextSeq       int64                 `json:"next_seq"`
+	WebhookCount  int64                 `json:"webhook_count"`
+	Subscriptions []ProjectSubscription `json:"subscriptions"`
+	// Legacy single-owner projection retained for older admin clients.
+	ClientID string `json:"client_id,omitempty"`
+	AckedSeq int64  `json:"acked_seq,omitempty"`
+}
+
+// ProjectSubscription exposes one client's independent delivery state.
+type ProjectSubscription struct {
+	ClientID  string `json:"client_id"`
 	CreatedAt int64  `json:"created_at"`
-	AckedSeq  int64  `json:"acked_seq"` // highest acked webhook seq by owner
+	StartSeq  int64  `json:"start_seq"`
+	AckedSeq  int64  `json:"acked_seq"`
+	Pending   int64  `json:"pending"`
 }
 
 // Webhook is the public projection of a stored webhook. Returned by
@@ -87,11 +100,11 @@ type Webhook struct {
 	Headers    map[string][]string `json:"headers"`
 	RawHeaders []byte              `json:"raw_headers,omitempty"` // base64 in JSON
 	Body       []byte              `json:"body"`                  // base64 in JSON
+	BodyBytes  int                 `json:"body_bytes,omitempty"`
 }
 
-// ReclaimProjectRequest is the body of POST /admin/projects (reclaim).
-// With force=true the relay moves an already-owned path to new_client_id;
-// without force it errors with ErrConflict.
+// ReclaimProjectRequest is the legacy replace-subscriptions operation. With
+// force=true every existing subscriber is replaced by new_client_id.
 type ReclaimProjectRequest struct {
 	Path        string `json:"path"`
 	NewClientID string `json:"new_client_id"`
@@ -101,7 +114,20 @@ type ReclaimProjectRequest struct {
 // AssignProjectRequest is the body of PUT /admin/projects/:project. It
 // creates a new project binding without creating or rotating a client.
 type AssignProjectRequest struct {
-	ClientID string `json:"client_id"`
+	ClientID       string `json:"client_id"`
+	IncludeHistory bool   `json:"include_history,omitempty"`
+}
+
+// DeleteWebhooksRequest selects one batch deletion mode. Exactly one of Seqs,
+// ThroughSeq, or All must be supplied.
+type DeleteWebhooksRequest struct {
+	Seqs       []int64 `json:"seqs,omitempty"`
+	ThroughSeq int64   `json:"through_seq,omitempty"`
+	All        bool    `json:"all,omitempty"`
+}
+
+type DeleteWebhooksResponse struct {
+	Deleted int64 `json:"deleted"`
 }
 
 // ListClientsResponse wraps GET /admin/clients.
@@ -116,7 +142,7 @@ type ListProjectsResponse struct {
 
 // ListWebhooksResponse wraps GET /admin/projects/:p/webhooks. Includes a
 // cursor for pagination: the next request passes after_seq = next_after_seq
-// to continue. Empty cur.ser indicates end of results.
+// to continue. A zero cursor indicates the end of results.
 type ListWebhooksResponse struct {
 	Webhooks     []Webhook `json:"webhooks"`
 	NextAfterSeq int64     `json:"next_after_seq,omitempty"`

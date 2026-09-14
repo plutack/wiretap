@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -100,10 +101,7 @@ func TestRelayCmd_ProjectsAddAndRemovePreserveCredentials(t *testing.T) {
 	if creds.ClientID != "c1" || creds.ClientToken != "t1" || strings.Join(creds.Projects, ",") != "alpha,beta" {
 		t.Fatalf("credentials after add = %+v", creds)
 	}
-	if _, _, err := runCmd(t, "dev", "relay", "--url", srv.URL, "projects", "remove", "alpha"); err == nil {
-		t.Fatal("remove without --force should fail")
-	}
-	if _, _, err := runCmd(t, "dev", "relay", "--url", srv.URL, "projects", "remove", "alpha", "--force"); err != nil {
+	if _, _, err := runCmd(t, "dev", "relay", "--url", srv.URL, "projects", "remove", "alpha"); err != nil {
 		t.Fatalf("projects remove: %v", err)
 	}
 	creds, _ = mgr.LoadCredentials()
@@ -204,6 +202,30 @@ func TestRelayCmd_ProjectsReclaim(t *testing.T) {
 	}
 }
 
+func TestRelayCmd_ProjectSubscriptions(t *testing.T) {
+	var subscribed, unsubscribed bool
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPut:
+			subscribed = r.URL.Path == "/admin/projects/alpha/subscribers/c2" && r.URL.Query().Get("include_history") == "true"
+			_ = json.NewEncoder(w).Encode(api.Project{Path: "alpha", Subscriptions: []api.ProjectSubscription{{ClientID: "c2"}}})
+		case http.MethodDelete:
+			unsubscribed = r.URL.Path == "/admin/projects/alpha/subscribers/c2"
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+	withTestRelayClient(t, h)
+	if _, _, err := runCmd(t, "dev", "relay", "projects", "subscribe", "alpha", "--client-id", "c2", "--include-history", "--admin-token", "x"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := runCmd(t, "dev", "relay", "projects", "unsubscribe", "alpha", "--client-id", "c2", "--admin-token", "x"); err != nil {
+		t.Fatal(err)
+	}
+	if !subscribed || !unsubscribed {
+		t.Fatalf("subscribed=%v unsubscribed=%v", subscribed, unsubscribed)
+	}
+}
+
 func TestRelayCmd_WebhooksList(t *testing.T) {
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(api.ListWebhooksResponse{
@@ -233,6 +255,39 @@ func TestRelayCmd_WebhooksReplay(t *testing.T) {
 	}
 	if !strings.Contains(out, "replayed") {
 		t.Errorf("stdout = %q, want 'replayed'", out)
+	}
+}
+
+func TestRelayCmd_WebhooksBatchDelete(t *testing.T) {
+	var got api.DeleteWebhooksRequest
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_ = json.NewEncoder(w).Encode(api.DeleteWebhooksResponse{Deleted: int64(len(got.Seqs))})
+	})
+	withTestRelayClient(t, h)
+	out, _, err := runCmd(t, "dev", "relay", "webhooks", "delete", "alpha", "2", "4", "--admin-token", "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Seqs) != 2 || !strings.Contains(out, `"deleted": 2`) {
+		t.Fatalf("request=%+v output=%q", got, out)
+	}
+}
+
+func TestRelayCmd_WebhooksRejectsMalformedSequence(t *testing.T) {
+	var calls atomic.Int64
+	withTestRelayClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	if _, _, err := runCmd(t, "dev", "relay", "webhooks", "delete", "alpha", "12junk", "--admin-token", "x"); err == nil {
+		t.Fatal("delete malformed sequence: want error")
+	}
+	if _, _, err := runCmd(t, "dev", "relay", "webhooks", "replay", "alpha", "12junk", "--admin-token", "x"); err == nil {
+		t.Fatal("replay malformed sequence: want error")
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("malformed sequences made %d HTTP requests", calls.Load())
 	}
 }
 

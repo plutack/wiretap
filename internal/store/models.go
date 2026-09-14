@@ -18,9 +18,26 @@ type ClientRow struct {
 
 // ProjectRow is a row in the relay's `projects` table.
 type ProjectRow struct {
-	Path      string
+	Path          string
+	CreatedAt     time.Time
+	NextSeq       int64
+	WebhookCount  int64
+	Subscriptions []ProjectSubscriptionRow
+	// ClientID and AckedSeq preserve the pre-subscription projection for older
+	// callers. They reflect the first subscriber in stable client-id order.
+	ClientID string
+	AckedSeq int64
+}
+
+// ProjectSubscriptionRow is one client's independent delivery state for a
+// relay project. StartSeq is the last sequence that existed when the client
+// joined; it prevents a new subscriber from receiving historical traffic by
+// default. AckedSeq advances only for this client.
+type ProjectSubscriptionRow struct {
+	Project   string
 	ClientID  string
 	CreatedAt time.Time
+	StartSeq  int64
 	AckedSeq  int64
 }
 
@@ -41,6 +58,7 @@ type WebhookRow struct {
 	HeadersJSON string    // parsed http.Header as JSON
 	RawHeaders  []byte    // raw header block as received; preserves order+dupes
 	Body        []byte    // raw request body, byte-exact
+	BodyLength  int       // populated by relay summary queries
 	Delivered   bool      // PC side always false
 	DeliveredAt time.Time // PC side always zero
 }
