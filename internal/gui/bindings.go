@@ -433,7 +433,7 @@ func (b *Bindings) ReplayWebhook(project string, seq int64, targetURL string) (R
 // defaults, same as the TUI).
 //
 // ConnectedProjects mirrors app.App.ConnectedProjects — the list the relay
-// says this client owns, set by the tunnel's OnConnect callback. It is nil when
+// says this client subscribes to, set by the tunnel's OnConnect callback. It is nil when
 // no tunnel is attached, so the GUI can render "watching: tunnel down".
 func (b *Bindings) Status() StatusView {
 	v := StatusView{Version: b.version, StoreOpen: b.app.Store() != nil}

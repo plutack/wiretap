@@ -63,15 +63,15 @@ type Hello struct {
 }
 
 // Ack acknowledges receipt of webhooks up to up_to_seq for a project. The
-// relay marks rows delivered and tracks the cursor in projects.acked_seq.
+// relay advances the authenticated client's independent subscription cursor.
 type Ack struct {
 	Base
 	Project string `json:"project"`
 	UpToSeq int64  `json:"up_to_seq"`
 }
 
-// Replay asks the relay to re-push specific already-delivered webhooks to
-// the local app. Used by the "redeliver to local" feature in the dashboard.
+// Replay asks the relay to re-push specific retained webhooks to the local
+// app. Used by the "redeliver to local" feature in the dashboard.
 type Replay struct {
 	Base
 	Project string  `json:"project"`

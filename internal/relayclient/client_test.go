@@ -95,16 +95,19 @@ func TestClient_HappyPath(t *testing.T) {
 	// Send OK.
 	if err := conn.Send(relayproto.OK{
 		Base:       relayproto.Base{Type: relayproto.TypeOK},
-		Projects:   []string{"project-a"},
-		ResumeFrom: map[string]int64{"project-a": 0},
+		Projects:   []string{"project-a", "admin-granted"},
+		ResumeFrom: map[string]int64{"project-a": 0, "admin-granted": 0},
 	}); err != nil {
 		t.Fatalf("send OK: %v", err)
 	}
 
 	select {
 	case projects := <-gotConnect:
-		if len(projects) != 1 || projects[0] != "project-a" {
-			t.Errorf("OnConnect projects = %v, want [project-a]", projects)
+		if len(projects) != 2 || projects[0] != "project-a" || projects[1] != "admin-granted" {
+			t.Errorf("OnConnect projects = %v, want [project-a admin-granted]", projects)
+		}
+		if len(c.cfg.Projects) != 2 || c.cfg.Projects[1] != "admin-granted" {
+			t.Errorf("runtime projects = %v, want relay-authoritative list", c.cfg.Projects)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for OnConnect")

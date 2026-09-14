@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS intercept_sessions (
 
 -- Tag each capture with its session. NULL for rows captured before this
 -- migration and for inserts outside a session (e.g. tests, direct API use).
--- The migration runner tolerates the duplicate-column error on re-runs
--- (migrations are replayed at every startup; see migrate.go).
+-- Older databases may already have this column before the migration ledger is
+-- seeded, so the runner tolerates the duplicate-column error once.
 ALTER TABLE traffic_captures ADD COLUMN session_id INTEGER;
 
 CREATE INDEX IF NOT EXISTS idx_traffic_captures_session
