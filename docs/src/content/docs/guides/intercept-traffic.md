@@ -18,6 +18,38 @@ wiretap intercept start --shell gitbash
 
 POSIX-compatible shells use the Bash form. Fish and PowerShell receive native syntax.
 
+## Attach additional shells
+
+An active interception proxy can serve multiple shells concurrently. In each
+additional terminal, run:
+
+```sh
+wiretap intercept attach
+```
+
+Every attached shell routes through the existing proxy, trusts the same local
+CA, and stores captures under the same interception session. Select a different
+supported shell when needed:
+
+```sh
+wiretap intercept attach --shell fish
+```
+
+Leaving an attached shell does not stop interception. Leaving the original
+shell does, because the original `intercept start` process owns the proxy. For
+a long-running owner independent of any child shell, use this pattern:
+
+```sh
+# Terminal 1
+wiretap intercept start --no-shell
+
+# Terminals 2, 3, and later
+wiretap intercept attach
+```
+
+When the owner stops, attached shells close rather than retaining proxy
+variables that point to a dead listener.
+
 ## Run without a child shell
 
 For CI or another managed process, keep the proxy in the foreground and configure the client yourself:
@@ -31,8 +63,8 @@ With the default configuration:
 ```sh
 export HTTP_PROXY=http://127.0.0.1:8888
 export HTTPS_PROXY=http://127.0.0.1:8888
-export SSL_CERT_FILE="$HOME/.local/share/wiretap/ca.crt"
-export NODE_EXTRA_CA_CERTS="$HOME/.local/share/wiretap/ca.crt"
+export SSL_CERT_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/wiretap/ca/wiretap-ca.crt"
+export NODE_EXTRA_CA_CERTS="$SSL_CERT_FILE"
 ```
 
 Press Ctrl-C to stop the proxy.
