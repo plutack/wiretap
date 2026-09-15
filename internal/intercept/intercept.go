@@ -109,33 +109,33 @@ func Start(ctx context.Context, deps Deps) (*Session, error) {
 	caCertPath := filepath.Join(deps.ConfigDir, "ca", "wiretap-ca.crt")
 
 	overrideDir := filepath.Join(deps.ConfigDir, "override-bin")
-	if err := overridebin.Write(overrideDir, overridebin.Env{
-		ProxyAddr:       deps.ProxyAddr,
-		CACertPath:      caCertPath,
-		OverrideBinPath: overrideDir,
-	}); err != nil {
-		return nil, fmt.Errorf("intercept: write override bin: %w", err)
-	}
-
 	startupFiles := deps.StartupFiles
 	if len(startupFiles) == 0 {
 		startupFiles = StartupFilesFor(deps.ShellKind)
 	}
-	if err := injectIntoFiles(startupFiles, deps.ShellKind, shellscript.Env{
-		ProxyAddr:       deps.ProxyAddr,
-		OverrideBinPath: overrideDir,
-		CACertPath:      caCertPath,
-	}); err != nil {
-		return nil, fmt.Errorf("intercept: patch startup files: %w", err)
+
+	// Bind before generating shell configuration so :0 addresses resolve to
+	// the real listener port. The proxy does not begin serving until the
+	// recorder, startup files, and local API are all ready.
+	recorder := &storeRecorder{st: deps.PCStore, clock: clock}
+	proxyOpts := []proxy.Option{proxy.WithClock(clock)}
+	if transformer := newScriptTransformer(deps.ScriptEngine, deps.PCStore, deps.OnScriptError); transformer != nil {
+		proxyOpts = append(proxyOpts, proxy.WithTransformer(transformer))
 	}
+	prox := proxy.New(deps.ProxyAddr, proxy.NewCastoreSigner(ca), recorder, proxyOpts...)
+	if err := prox.Listen(); err != nil {
+		return nil, fmt.Errorf("intercept: start proxy: %w", err)
+	}
+	proxyAddr := prox.Addr()
 
 	// Record this run as an intercept session so captures are grouped in the
 	// local DB. Best-effort: a failed insert degrades to unsessioned capture
 	// rather than blocking interception.
-	sessionID, err := deps.PCStore.CreateInterceptSession(ctx, clock.Now(), string(deps.ShellKind), deps.ProxyAddr)
+	sessionID, err := deps.PCStore.CreateInterceptSession(ctx, clock.Now(), string(deps.ShellKind), proxyAddr)
 	if err != nil {
 		sessionID = 0
 	}
+	recorder.sessionID = sessionID
 	sessionStarted := false
 	defer func() {
 		if !sessionStarted && sessionID != 0 {
@@ -143,23 +143,40 @@ func Start(ctx context.Context, deps Deps) (*Session, error) {
 		}
 	}()
 
-	recorder := &storeRecorder{st: deps.PCStore, clock: clock, sessionID: sessionID}
-	proxyOpts := []proxy.Option{proxy.WithClock(clock)}
-	if transformer := newScriptTransformer(deps.ScriptEngine, deps.PCStore, deps.OnScriptError); transformer != nil {
-		proxyOpts = append(proxyOpts, proxy.WithTransformer(transformer))
+	cleanPersistentState := func() {
+		for _, f := range startupFiles {
+			_ = resetStartupFile(f)
+		}
+		_ = os.RemoveAll(overrideDir)
 	}
-	prox := proxy.New(deps.ProxyAddr, proxy.NewCastoreSigner(ca), recorder, proxyOpts...)
-	if _, err := prox.StartAsync(); err != nil {
-		return nil, fmt.Errorf("intercept: start proxy: %w", err)
+	shellEnv := shellscript.Env{
+		ProxyAddr:       proxyAddr,
+		OverrideBinPath: overrideDir,
+		CACertPath:      caCertPath,
+	}
+	if err := overridebin.Write(overrideDir, overridebin.Env{
+		ProxyAddr:       proxyAddr,
+		CACertPath:      caCertPath,
+		OverrideBinPath: overrideDir,
+	}); err != nil {
+		_ = prox.Stop(ctx)
+		return nil, fmt.Errorf("intercept: write override bin: %w", err)
+	}
+	if err := injectIntoFiles(startupFiles, deps.ShellKind, shellEnv); err != nil {
+		cleanPersistentState()
+		_ = prox.Stop(ctx)
+		return nil, fmt.Errorf("intercept: patch startup files: %w", err)
 	}
 
 	apiLn, err := net.Listen("tcp", deps.LocalAPIAddr)
 	if err != nil {
+		cleanPersistentState()
 		_ = prox.Stop(ctx)
 		return nil, fmt.Errorf("intercept: listen local API: %w", err)
 	}
 	api := localapi.New(deps.PCStore, localapi.WithVersion(deps.Version))
 	httpSrv := &http.Server{Handler: api.Routes()}
+	go func() { _ = prox.Start() }()
 	go func() { _ = httpSrv.Serve(apiLn) }()
 
 	sessionStarted = true
@@ -273,6 +290,95 @@ func (s *Session) SpawnShell(ctx context.Context, kind shellscript.ShellKind) er
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// SpawnAttachedShell opens an interactive shell configured for an already
+// running interception session. Unlike SpawnShell, it does not depend on a
+// managed block in the shell's startup files. This lets one active proxy serve
+// any number of shells, including shells of a different kind from the one used
+// to start the session.
+func SpawnAttachedShell(ctx context.Context, kind shellscript.ShellKind, env shellscript.Env) error {
+	script, err := attachedShellScript(kind, env)
+	if err != nil {
+		return err
+	}
+
+	ext := ".sh"
+	switch kind {
+	case shellscript.ShellFish:
+		ext = ".fish"
+	case shellscript.ShellPowerShell:
+		ext = ".ps1"
+	}
+	f, err := os.CreateTemp("", "wiretap-attach-*"+ext)
+	if err != nil {
+		return fmt.Errorf("intercept: create attached-shell init file: %w", err)
+	}
+	initPath := f.Name()
+	defer os.Remove(initPath)
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("intercept: secure attached-shell init file: %w", err)
+	}
+	if _, err := f.WriteString(script); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("intercept: write attached-shell init file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("intercept: close attached-shell init file: %w", err)
+	}
+
+	name, args := AttachedShellCommand(kind, initPath)
+	cmd := exec.CommandContext(ctx, name, args...)
+	// The owner's startup-file block may be present for one shell kind. Remove
+	// the marker while the attached shell reads its normal profile so that the
+	// generated init script below is the only thing that enables interception.
+	cmd.Env = envWithout(os.Environ(), "WIRETAP_ACTIVE")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// attachedShellScript returns the init file sourced by SpawnAttachedShell.
+// Bash --rcfile replaces ~/.bashrc, so its init file sources the user's normal
+// rc file before enabling interception. Fish and PowerShell load their normal
+// profiles before evaluating the supplied init file themselves.
+func attachedShellScript(kind shellscript.ShellKind, env shellscript.Env) (string, error) {
+	script, err := shellscript.Generate(kind, env)
+	if err != nil {
+		return "", err
+	}
+	if kind == shellscript.ShellBash || kind == shellscript.ShellGitBash {
+		return "if [ -f \"$HOME/.bashrc\" ]; then . \"$HOME/.bashrc\"; fi\n" + script, nil
+	}
+	return script, nil
+}
+
+// AttachedShellCommand returns the executable and arguments that load an
+// attach-specific init file while retaining an interactive shell.
+func AttachedShellCommand(kind shellscript.ShellKind, initPath string) (string, []string) {
+	switch kind {
+	case shellscript.ShellBash, shellscript.ShellGitBash:
+		return "bash", []string{"--rcfile", initPath, "-i"}
+	case shellscript.ShellFish:
+		return "fish", []string{"-C", "source " + initPath}
+	case shellscript.ShellPowerShell:
+		return "pwsh", []string{"-NoLogo", "-NoExit", "-File", initPath}
+	default:
+		return "bash", []string{"--rcfile", initPath, "-i"}
+	}
+}
+
+func envWithout(env []string, name string) []string {
+	prefix := name + "="
+	out := make([]string, 0, len(env))
+	for _, entry := range env {
+		if !strings.HasPrefix(entry, prefix) {
+			out = append(out, entry)
+		}
+	}
+	return out
 }
 
 // --- startup-file helpers (pure or near-pure) ---------------------------

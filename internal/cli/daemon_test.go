@@ -11,7 +11,7 @@ import (
 func TestWriteReadRemovePIDFile(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	if err := writePIDFile(dir, 12345, 67); err != nil {
+	if err := writePIDFile(dir, 12345, 67, "127.0.0.1:8888", "127.0.0.1:9876"); err != nil {
 		t.Fatalf("writePIDFile: %v", err)
 	}
 	pid, err := readPIDFile(dir)
@@ -22,7 +22,7 @@ func TestWriteReadRemovePIDFile(t *testing.T) {
 		t.Errorf("pid = %d, want 12345", pid)
 	}
 	record, err := readPIDRecord(dir)
-	if err != nil || record.SessionID != 67 {
+	if err != nil || record.SessionID != 67 || record.ProxyAddr != "127.0.0.1:8888" || record.LocalAPIAddr != "127.0.0.1:9876" {
 		t.Errorf("record = %+v, err = %v", record, err)
 	}
 	removePIDFile(dir)
@@ -65,9 +65,12 @@ func TestPIDRoundTrip_HasSamePIDAfterParse(t *testing.T) {
 func TestPIDFileContent_IncludesSessionID(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writePIDFile(dir, 42, 9)
+	writePIDFile(dir, 42, 9, "127.0.0.1:8888", "127.0.0.1:9876")
 	b, _ := os.ReadFile(filepath.Join(dir, pidFileName))
-	if !strings.Contains(string(b), `"pid":42`) || !strings.Contains(string(b), `"session_id":9`) {
+	if !strings.Contains(string(b), `"pid":42`) ||
+		!strings.Contains(string(b), `"session_id":9`) ||
+		!strings.Contains(string(b), `"proxy_addr":"127.0.0.1:8888"`) ||
+		!strings.Contains(string(b), `"local_api_addr":"127.0.0.1:9876"`) {
 		t.Errorf("pid file body = %q", string(b))
 	}
 }

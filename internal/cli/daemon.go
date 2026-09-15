@@ -22,15 +22,22 @@ const (
 )
 
 type interceptPIDRecord struct {
-	PID       int   `json:"pid"`
-	SessionID int64 `json:"session_id,omitempty"`
+	PID          int    `json:"pid"`
+	SessionID    int64  `json:"session_id,omitempty"`
+	ProxyAddr    string `json:"proxy_addr,omitempty"`
+	LocalAPIAddr string `json:"local_api_addr,omitempty"`
 }
 
-func writePIDFile(configDir string, pid int, sessionID int64) error {
+func writePIDFile(configDir string, pid int, sessionID int64, proxyAddr, localAPIAddr string) error {
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		return fmt.Errorf("create config dir %s: %w", configDir, err)
 	}
-	b, err := json.Marshal(interceptPIDRecord{PID: pid, SessionID: sessionID})
+	b, err := json.Marshal(interceptPIDRecord{
+		PID:          pid,
+		SessionID:    sessionID,
+		ProxyAddr:    proxyAddr,
+		LocalAPIAddr: localAPIAddr,
+	})
 	if err != nil {
 		return fmt.Errorf("encode pid file: %w", err)
 	}

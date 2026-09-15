@@ -292,6 +292,16 @@ func TestStartStopLifecycle(t *testing.T) {
 	if !strings.Contains(string(body), "WIRETAP_ACTIVE") {
 		t.Errorf("rc missing guard:\n%s", body)
 	}
+	if strings.Contains(string(body), "127.0.0.1:0") || !strings.Contains(string(body), sess.ProxyAddr()) {
+		t.Errorf("rc should contain resolved proxy address %q, not configured :0:\n%s", sess.ProxyAddr(), body)
+	}
+	sessions, err := pcStore.InterceptSessions(ctx, 1)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("list intercept sessions: rows=%+v err=%v", sessions, err)
+	}
+	if sessions[0].ProxyAddr != sess.ProxyAddr() {
+		t.Errorf("stored proxy address = %q, want resolved %q", sessions[0].ProxyAddr, sess.ProxyAddr())
+	}
 
 	// Local API liveness.
 	health, err := http.Get("http://" + sess.LocalAPIAddr() + "/local/health")
@@ -356,5 +366,62 @@ func TestStartStopLifecycle(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(configDir, "override-bin")); !os.IsNotExist(err) {
 		t.Errorf("override-bin dir should be removed after Stop (err=%v)", err)
+	}
+}
+
+func TestAttachedShellCommand(t *testing.T) {
+	t.Parallel()
+	initPath := "/tmp/wiretap-attach/init"
+	tests := []struct {
+		kind     shellscript.ShellKind
+		wantName string
+		wantArgs []string
+	}{
+		{shellscript.ShellBash, "bash", []string{"--rcfile", initPath, "-i"}},
+		{shellscript.ShellGitBash, "bash", []string{"--rcfile", initPath, "-i"}},
+		{shellscript.ShellFish, "fish", []string{"-C", "source " + initPath}},
+		{shellscript.ShellPowerShell, "pwsh", []string{"-NoLogo", "-NoExit", "-File", initPath}},
+	}
+	for _, tc := range tests {
+		t.Run(string(tc.kind), func(t *testing.T) {
+			name, args := AttachedShellCommand(tc.kind, initPath)
+			if name != tc.wantName || strings.Join(args, "\x00") != strings.Join(tc.wantArgs, "\x00") {
+				t.Fatalf("command = %s %q, want %s %q", name, args, tc.wantName, tc.wantArgs)
+			}
+		})
+	}
+}
+
+func TestAttachedShellScript_LoadsBashRCThenEnablesInterception(t *testing.T) {
+	t.Parallel()
+	script, err := attachedShellScript(shellscript.ShellBash, shellscript.Env{
+		ProxyAddr:       "127.0.0.1:8888",
+		OverrideBinPath: "/tmp/override-bin",
+		CACertPath:      "/tmp/wiretap-ca.crt",
+	})
+	if err != nil {
+		t.Fatalf("attachedShellScript: %v", err)
+	}
+	rcAt := strings.Index(script, `. "$HOME/.bashrc"`)
+	enableAt := strings.Index(script, "export WIRETAP_ACTIVE=1")
+	if rcAt < 0 || enableAt < 0 || rcAt >= enableAt {
+		t.Fatalf("attached script does not load .bashrc before enabling interception:\n%s", script)
+	}
+	for _, want := range []string{
+		`HTTP_PROXY="http://127.0.0.1:8888"`,
+		`SSL_CERT_FILE="/tmp/wiretap-ca.crt"`,
+		`wiretap_stop_interception()`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("attached script missing %q:\n%s", want, script)
+		}
+	}
+}
+
+func TestEnvWithout(t *testing.T) {
+	t.Parallel()
+	got := envWithout([]string{"PATH=/bin", "WIRETAP_ACTIVE=1", "OTHER=x"}, "WIRETAP_ACTIVE")
+	if strings.Join(got, ",") != "PATH=/bin,OTHER=x" {
+		t.Fatalf("envWithout = %q", got)
 	}
 }

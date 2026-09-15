@@ -3,11 +3,13 @@ package cli
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -27,6 +29,7 @@ func newInterceptCmd(version string) *cobra.Command {
 		Short: "Intercept outbound HTTP/HTTPS traffic from a spawned shell",
 	}
 	cmd.AddCommand(newInterceptStartCmd(version))
+	cmd.AddCommand(newInterceptAttachCmd())
 	cmd.AddCommand(newInterceptStopCmd())
 	cmd.AddCommand(newInterceptTrustCACmd())
 	return cmd
@@ -50,6 +53,20 @@ func newInterceptStartCmd(version string) *cobra.Command {
 				cfg = &def
 			}
 			kind := detectShellKind(shell, cfg.Intercept.Shell)
+			configDir, err := m.Dir()
+			if err != nil {
+				return fmt.Errorf("resolve config dir: %w", err)
+			}
+			if record, err := readPIDRecord(configDir); err == nil && processAlive(record.PID) {
+				localAPIAddr := record.LocalAPIAddr
+				if localAPIAddr == "" {
+					localAPIAddr = cfg.Intercept.LocalAPIAddr
+				}
+				if interceptHealth(cmd.Context(), localAPIAddr) == nil {
+					return fmt.Errorf("wiretap: interception is already running (pid %d); use `wiretap intercept attach`", record.PID)
+				}
+				removePIDFile(configDir)
+			}
 
 			deps, err := resolveInterceptDeps(m, cfg, kind, version)
 			if err != nil {
@@ -60,7 +77,7 @@ func newInterceptStartCmd(version string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := writePIDFile(deps.ConfigDir, os.Getpid(), sess.SessionID()); err != nil {
+			if err := writePIDFile(deps.ConfigDir, os.Getpid(), sess.SessionID(), sess.ProxyAddr(), sess.LocalAPIAddr()); err != nil {
 				_ = sess.Stop(context.Background())
 				return fmt.Errorf("write pid file: %w", err)
 			}
@@ -99,6 +116,113 @@ func newInterceptStartCmd(version string) *cobra.Command {
 	cmd.Flags().BoolVar(&noShell, "no-shell", false, "start the proxy + API without spawning a shell")
 	cmd.Flags().StringVar(&shell, "shell", "", "shell kind (bash|fish|powershell|gitbash); default: auto-detect from $SHELL or config")
 	return cmd
+}
+
+func newInterceptAttachCmd() *cobra.Command {
+	var shell string
+	cmd := &cobra.Command{
+		Use:   "attach",
+		Short: "Open another shell on the active interception session",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			m := newConfigManager()
+			cfg, err := m.Load()
+			if err != nil {
+				def := config.Default()
+				cfg = &def
+			}
+			kind := detectShellKind(shell, cfg.Intercept.Shell)
+			configDir, err := m.Dir()
+			if err != nil {
+				return fmt.Errorf("resolve config dir: %w", err)
+			}
+			record, err := readPIDRecord(configDir)
+			if err != nil {
+				return noActiveInterceptError(err)
+			}
+			if !processAlive(record.PID) {
+				removePIDFile(configDir)
+				return noActiveInterceptError(nil)
+			}
+
+			proxyAddr := record.ProxyAddr
+			if proxyAddr == "" {
+				proxyAddr = cfg.Intercept.ProxyAddr
+			}
+			localAPIAddr := record.LocalAPIAddr
+			if localAPIAddr == "" {
+				localAPIAddr = cfg.Intercept.LocalAPIAddr
+			}
+			if err := interceptHealth(cmd.Context(), localAPIAddr); err != nil {
+				return fmt.Errorf("wiretap: active interception is not healthy: %w", err)
+			}
+
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "wiretap: attaching %s shell to interception session %d at http://%s\n", kind, record.SessionID, proxyAddr)
+			attachCtx, cancel := context.WithCancel(cmd.Context())
+			defer cancel()
+			go monitorInterceptOwner(attachCtx, cancel, record.PID)
+			err = interceptAttachSpawn(attachCtx, kind, shellscript.Env{
+				ProxyAddr:       proxyAddr,
+				OverrideBinPath: filepath.Join(configDir, "override-bin"),
+				CACertPath:      filepath.Join(configDir, "ca", "wiretap-ca.crt"),
+			})
+			if attachCtx.Err() != nil && cmd.Context().Err() == nil {
+				fmt.Fprintln(out, "wiretap: interception session stopped")
+				return nil
+			}
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&shell, "shell", "", "shell kind (bash|fish|powershell|gitbash); default: auto-detect from $SHELL or config")
+	return cmd
+}
+
+func noActiveInterceptError(cause error) error {
+	if cause != nil && !os.IsNotExist(cause) {
+		return fmt.Errorf("wiretap: read active interception: %w", cause)
+	}
+	return fmt.Errorf("wiretap: no active interception; run `wiretap intercept start` first")
+}
+
+func checkInterceptHealth(ctx context.Context, addr string) error {
+	if addr == "" {
+		return fmt.Errorf("local API address is missing")
+	}
+	checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(checkCtx, http.MethodGet, "http://"+addr+"/local/health", nil)
+	if err != nil {
+		return err
+	}
+	client := &http.Client{
+		Transport: &http.Transport{Proxy: nil},
+		Timeout:   2 * time.Second,
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("local API returned %s", resp.Status)
+	}
+	return nil
+}
+
+func monitorInterceptOwner(ctx context.Context, cancel context.CancelFunc, pid int) {
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if !processAlive(pid) {
+				cancel()
+				return
+			}
+		}
+	}
 }
 
 func newInterceptStopCmd() *cobra.Command {
@@ -155,6 +279,9 @@ func resolveInterceptDeps(m *config.Manager, cfg *config.Config, kind shellscrip
 	configDir, err := m.Dir()
 	if err != nil {
 		return intercept.Deps{}, fmt.Errorf("resolve config dir: %w", err)
+	}
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return intercept.Deps{}, fmt.Errorf("create config dir %s: %w", configDir, err)
 	}
 
 	storePath := cfg.Store.Path
@@ -278,5 +405,7 @@ var (
 	interceptSpawn = func(sess *intercept.Session, ctx context.Context, kind shellscript.ShellKind) error {
 		return sess.SpawnShell(ctx, kind)
 	}
-	interceptCleanup = intercept.Cleanup
+	interceptAttachSpawn = intercept.SpawnAttachedShell
+	interceptHealth      = checkInterceptHealth
+	interceptCleanup     = intercept.Cleanup
 )

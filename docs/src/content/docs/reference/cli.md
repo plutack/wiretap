@@ -24,6 +24,8 @@ Run `wiretap <command> --help` for the flags shipped by your installed version.
 | `wiretap intercept start` | Start proxy, local API, and an intercepted child shell |
 | `wiretap intercept start --shell <kind>` | Select `bash`, `fish`, `powershell`, or `gitbash` |
 | `wiretap intercept start --no-shell` | Run proxy and API without spawning a shell |
+| `wiretap intercept attach` | Open another shell on the active interception session |
+| `wiretap intercept attach --shell <kind>` | Attach using `bash`, `fish`, `powershell`, or `gitbash` |
 | `wiretap intercept trust-ca` | Install the local CA into system trust; may require elevation |
 | `wiretap intercept stop` | Remove Wiretap-managed shell startup blocks |
 

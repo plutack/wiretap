@@ -154,3 +154,82 @@ func TestDetectShellKind(t *testing.T) {
 		})
 	}
 }
+
+func TestInterceptAttachCmd_UsesActiveRuntime(t *testing.T) {
+	t.Setenv("SHELL", "/bin/bash")
+	base := withTempConfigManager(t)
+	configDir := filepath.Join(base, "wiretap")
+	if err := writePIDFile(configDir, os.Getpid(), 41, "127.0.0.1:32123", "127.0.0.1:32124"); err != nil {
+		t.Fatalf("write pid file: %v", err)
+	}
+
+	origSpawn := interceptAttachSpawn
+	origHealth := interceptHealth
+	defer func() {
+		interceptAttachSpawn = origSpawn
+		interceptHealth = origHealth
+	}()
+	var gotKind shellscript.ShellKind
+	var gotEnv shellscript.Env
+	interceptHealth = func(_ context.Context, addr string) error {
+		if addr != "127.0.0.1:32124" {
+			t.Fatalf("health addr = %q", addr)
+		}
+		return nil
+	}
+	interceptAttachSpawn = func(_ context.Context, kind shellscript.ShellKind, env shellscript.Env) error {
+		gotKind = kind
+		gotEnv = env
+		return nil
+	}
+
+	out, _, err := runCmd(t, "dev", "intercept", "attach", "--shell", "fish")
+	if err != nil {
+		t.Fatalf("intercept attach: %v", err)
+	}
+	if gotKind != shellscript.ShellFish {
+		t.Errorf("kind = %s, want fish", gotKind)
+	}
+	if gotEnv.ProxyAddr != "127.0.0.1:32123" {
+		t.Errorf("proxy addr = %q", gotEnv.ProxyAddr)
+	}
+	if gotEnv.OverrideBinPath != filepath.Join(configDir, "override-bin") || gotEnv.CACertPath != filepath.Join(configDir, "ca", "wiretap-ca.crt") {
+		t.Errorf("attach env paths = %+v", gotEnv)
+	}
+	if !strings.Contains(out, "attaching fish shell to interception session 41") {
+		t.Errorf("stdout = %q", out)
+	}
+}
+
+func TestInterceptAttachCmd_RequiresActiveSession(t *testing.T) {
+	withTempConfigManager(t)
+	_, _, err := runCmd(t, "dev", "intercept", "attach")
+	if err == nil || !strings.Contains(err.Error(), "no active interception") {
+		t.Fatalf("err = %v, want no-active-interception error", err)
+	}
+}
+
+func TestInterceptStartCmd_RejectsHealthyActiveSession(t *testing.T) {
+	base := withTempConfigManager(t)
+	configDir := filepath.Join(base, "wiretap")
+	if err := writePIDFile(configDir, os.Getpid(), 42, "127.0.0.1:8888", "127.0.0.1:9876"); err != nil {
+		t.Fatalf("write pid file: %v", err)
+	}
+
+	origStart := interceptStart
+	origHealth := interceptHealth
+	defer func() {
+		interceptStart = origStart
+		interceptHealth = origHealth
+	}()
+	interceptHealth = func(context.Context, string) error { return nil }
+	interceptStart = func(context.Context, intercept.Deps) (*intercept.Session, error) {
+		t.Fatal("intercept.Start should not run while a healthy session is active")
+		return nil, nil
+	}
+
+	_, _, err := runCmd(t, "dev", "intercept", "start")
+	if err == nil || !strings.Contains(err.Error(), "interception is already running") || !strings.Contains(err.Error(), "intercept attach") {
+		t.Fatalf("err = %v, want already-running attach guidance", err)
+	}
+}
