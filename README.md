@@ -41,9 +41,15 @@ Useful alternatives:
 ```sh
 wiretap intercept start --shell fish
 wiretap intercept start --no-shell
+wiretap intercept attach
+wiretap intercept attach --shell fish
 sudo wiretap intercept trust-ca
 wiretap intercept stop
 ```
+
+While an interception session is active, run `wiretap intercept attach` in
+other terminals to open additional shells on the same proxy and capture
+session. Exiting an attached shell does not stop the owner session.
 
 The local control API is available during interception:
 

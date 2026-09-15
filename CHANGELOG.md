@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.3.1 — 2026-09-15
+
+### Multiple intercepted shells
+
+- Added `wiretap intercept attach` to open any number of concurrent shells on
+  one active interception proxy and capture session.
+- Added `--shell` selection for attached Bash, Fish, PowerShell, and Git Bash
+  shells without depending on the owner's startup-file configuration.
+- Made attached shells verify the active control API and close when the owning
+  interception process stops, avoiding stale proxy environments.
+- Persisted resolved proxy and control API addresses in the interception
+  runtime record, while retaining compatibility with older PID files.
+- Fixed ephemeral-port interception so generated shell variables, tool shims,
+  and stored session metadata use the actual bound proxy address.
+- Fixed first-run interception by creating the Wiretap config directory before
+  opening its default SQLite store.
+
 ## v0.3.0 — 2026-09-14
 
 ### Shared project delivery

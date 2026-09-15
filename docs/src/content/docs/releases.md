@@ -1,25 +1,25 @@
 ---
 title: Releases and downloads
-description: Download Wiretap v0.3.0, verify artifacts, and review recent changes.
+description: Download Wiretap v0.3.1, verify artifacts, and review recent changes.
 ---
 
-## Current release: v0.3.0
+## Current release: v0.3.1
 
-Released September 14, 2026. This release adds multi-subscriber project delivery, independent delivery cursors, and relay webhook retention management.
+Released September 15, 2026. This release adds multiple concurrent shells to one local interception session.
 
-[Open the v0.3.0 release](https://github.com/plutack/wiretap/releases/tag/v0.3.0) · [View every release](https://github.com/plutack/wiretap/releases) · [Download checksums](https://github.com/plutack/wiretap/releases/latest/download/SHA256SUMS)
+[Open the v0.3.1 release](https://github.com/plutack/wiretap/releases/tag/v0.3.1) · [View every release](https://github.com/plutack/wiretap/releases) · [Download checksums](https://github.com/plutack/wiretap/releases/latest/download/SHA256SUMS)
 
 ### Assets
 
 | Platform | Artifact |
 | --- | --- |
-| Linux x86-64 | [`wiretap_0.3.0_linux_amd64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.3.0/wiretap_0.3.0_linux_amd64.tar.gz) |
-| Linux ARM64 | [`wiretap_0.3.0_linux_arm64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.3.0/wiretap_0.3.0_linux_arm64.tar.gz) |
-| AppImage x86-64 | [`wiretap_0.3.0_x86_64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.3.0/wiretap_0.3.0_x86_64.AppImage) |
-| AppImage ARM64 | [`wiretap_0.3.0_aarch64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.3.0/wiretap_0.3.0_aarch64.AppImage) |
-| Arch Linux x86-64 | [`wiretap-0.3.0-x86_64.pkg.tar.zst`](https://github.com/plutack/wiretap/releases/download/v0.3.0/wiretap-0.3.0-x86_64.pkg.tar.zst) |
-| Windows x86-64 | [`wiretap_0.3.0_windows_x86_64-installer.exe`](https://github.com/plutack/wiretap/releases/download/v0.3.0/wiretap_0.3.0_windows_x86_64-installer.exe) |
-| Windows portable x86-64 | [`wiretap_0.3.0_windows_x86_64.zip`](https://github.com/plutack/wiretap/releases/download/v0.3.0/wiretap_0.3.0_windows_x86_64.zip) |
+| Linux x86-64 | [`wiretap_0.3.1_linux_amd64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.3.1/wiretap_0.3.1_linux_amd64.tar.gz) |
+| Linux ARM64 | [`wiretap_0.3.1_linux_arm64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.3.1/wiretap_0.3.1_linux_arm64.tar.gz) |
+| AppImage x86-64 | [`wiretap_0.3.1_x86_64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.3.1/wiretap_0.3.1_x86_64.AppImage) |
+| AppImage ARM64 | [`wiretap_0.3.1_aarch64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.3.1/wiretap_0.3.1_aarch64.AppImage) |
+| Arch Linux x86-64 | [`wiretap-0.3.1-x86_64.pkg.tar.zst`](https://github.com/plutack/wiretap/releases/download/v0.3.1/wiretap-0.3.1-x86_64.pkg.tar.zst) |
+| Windows x86-64 | [`wiretap_0.3.1_windows_x86_64-installer.exe`](https://github.com/plutack/wiretap/releases/download/v0.3.1/wiretap_0.3.1_windows_x86_64-installer.exe) |
+| Windows portable x86-64 | [`wiretap_0.3.1_windows_x86_64.zip`](https://github.com/plutack/wiretap/releases/download/v0.3.1/wiretap_0.3.1_windows_x86_64.zip) |
 
 See [Install Wiretap](/getting-started/install/) for runtime dependencies and verification steps.
 
@@ -28,6 +28,10 @@ Release assets currently include SHA-256 checksums but are not cryptographically
 :::
 
 ## Recent releases
+
+### v0.3.0
+
+Adds multi-subscriber project delivery, independent delivery cursors, and relay webhook retention management.
 
 ### v0.2.15
 
