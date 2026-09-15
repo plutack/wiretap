@@ -254,12 +254,18 @@ func (p *Proxy) Listen() error {
 
 // Start binds and serves until Stop or the listener is closed. Blocks.
 func (p *Proxy) Start() error {
-	if p.server == nil {
+	p.mu.Lock()
+	srv, ln := p.server, p.ln
+	p.mu.Unlock()
+	if srv == nil || ln == nil {
 		if err := p.Listen(); err != nil {
 			return err
 		}
+		p.mu.Lock()
+		srv, ln = p.server, p.ln
+		p.mu.Unlock()
 	}
-	return p.server.Serve(p.ln)
+	return srv.Serve(ln)
 }
 
 // StartAsync binds synchronously, then serves in a goroutine, returning the
