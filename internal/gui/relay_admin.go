@@ -159,8 +159,12 @@ type RelayAdminWebhookPageView struct {
 }
 
 // RelayAdminCredentialsView contains a newly-created client token. The relay
-// returns it once, so the GUI keeps it only in component memory for copying.
+// returns it once, so the GUI keeps it only in component memory for copying or
+// downloading as a portable handoff.
 type RelayAdminCredentialsView struct {
+	Format      string   `json:"format"`
+	Version     int      `json:"version"`
+	RelayURL    string   `json:"relay_url"`
 	ClientID    string   `json:"client_id"`
 	ClientToken string   `json:"client_token"`
 	Projects    []string `json:"projects"`
@@ -335,7 +339,7 @@ func relayAdminProfileView(profile config.RelayAdminProfile) RelayAdminProfileVi
 // RelayAdminCreateClient creates portable credentials without changing the
 // desktop currently registered in wiretap.
 func (b *Bindings) RelayAdminCreateClient(in RelayAdminCreateClientInput) (RelayAdminCredentialsView, error) {
-	client, _, err := relayAdminClient(in.RelayURL, in.AdminToken)
+	client, base, err := relayAdminClient(in.RelayURL, in.AdminToken)
 	if err != nil {
 		return RelayAdminCredentialsView{}, err
 	}
@@ -349,8 +353,17 @@ func (b *Bindings) RelayAdminCreateClient(in RelayAdminCreateClientInput) (Relay
 	if err != nil {
 		return RelayAdminCredentialsView{}, fmt.Errorf("create relay client: %w", err)
 	}
+	tunnelURL, err := app.TunnelURLFromBase(base)
+	if err != nil {
+		return RelayAdminCredentialsView{}, fmt.Errorf("create relay client file: %w", err)
+	}
+	clientFile, err := config.NewRelayClientFile(tunnelURL, out.ClientID, out.ClientToken, out.Projects)
+	if err != nil {
+		return RelayAdminCredentialsView{}, fmt.Errorf("create relay client file: %w", err)
+	}
 	return RelayAdminCredentialsView{
-		ClientID: out.ClientID, ClientToken: out.ClientToken, Projects: out.Projects,
+		Format: clientFile.Format, Version: clientFile.Version, RelayURL: clientFile.RelayURL,
+		ClientID: clientFile.ClientID, ClientToken: clientFile.ClientToken, Projects: clientFile.Projects,
 	}, nil
 }
 

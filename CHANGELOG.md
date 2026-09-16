@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.2 — 2026-09-16
+
+### Portable relay client handoff
+
+- Added a versioned relay client file containing the tunnel URL, client ID,
+  one-time token, and initial project subscriptions.
+- Added **Download credentials** after client creation in the Relay server GUI.
+- Added `wiretap config import <client-file>` with an explicit `--force` guard
+  before replacing a different local identity.
+- Added credential-file import to the Relay connection GUI, with confirmation
+  before replacement and keyring-first token storage.
+- Made GUI imports reconnect only the isolated background WebSocket tunnel;
+  the desktop, local store, interception sessions, and GUI remain running.
+
 ## v0.3.1 — 2026-09-15
 
 ### Multiple intercepted shells

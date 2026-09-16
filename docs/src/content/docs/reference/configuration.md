@@ -17,6 +17,26 @@ The config file lives in your platform's user-config directory, with `wiretap` a
 
 Empty values use platform defaults. Paths may be absolute or relative to the process working directory; prefer absolute paths outside the Wiretap config directory.
 
+## Import a relay client file
+
+A relay administrator can create and download a portable client file from
+**Settings → Relay server**. Install it on the recipient desktop with:
+
+```sh
+wiretap config import ./wiretap-client.json
+```
+
+Or choose the file under **Settings → Relay connection → Import client
+credentials**. Replacing a different configured identity requires confirmation
+in the GUI or `--force` on the CLI. A GUI import reconnects only the background
+WebSocket tunnel; the application, local database, and interception sessions
+stay open.
+
+The handoff file contains a plaintext bearer token. Transfer it securely and
+delete it after import. Wiretap moves the token to the operating-system keyring
+when available, with the existing mode-`0600` credentials-file fallback for
+headless systems.
+
 ## Complete example
 
 ```yaml

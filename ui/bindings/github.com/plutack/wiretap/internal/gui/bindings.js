@@ -160,6 +160,19 @@ export function GetWebhook(project, seq) {
 }
 
 /**
+ * ImportRelayClientFile installs a portable client handoff and reconnects only
+ * the background relay tunnel. force is required to replace another identity.
+ * @param {string} contents
+ * @param {boolean} force
+ * @returns {$CancellablePromise<$models.SettingsView>}
+ */
+export function ImportRelayClientFile(contents, force) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ImportRelayClientFile", contents, force).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
+}
+
+/**
  * ListCaptures returns the most recent traffic captures, newest-first,
  * optionally filtered to one interception session (0 = all). Bodies and full
  * header maps are omitted (use GetCapture for the detail payload).
@@ -464,7 +477,7 @@ export function SetScriptEnabled(id, enabled) {
  * defaults, same as the TUI).
  * 
  * ConnectedProjects mirrors app.App.ConnectedProjects — the list the relay
- * says this client owns, set by the tunnel's OnConnect callback. It is nil when
+ * says this client subscribes to, set by the tunnel's OnConnect callback. It is nil when
  * no tunnel is attached, so the GUI can render "watching: tunnel down".
  * @returns {$CancellablePromise<$models.StatusView>}
  */

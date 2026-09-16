@@ -54,13 +54,14 @@ func newVersionCmd() *cobra.Command {
 	}
 }
 
-// newConfigCmd groups `wiretap config` subcommands. Today only `init`.
+// newConfigCmd groups configuration initialization and portable client import.
 func newConfigCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Configuration management",
 	}
 	cmd.AddCommand(newConfigInitCmd())
+	cmd.AddCommand(newConfigImportCmd())
 	return cmd
 }
 

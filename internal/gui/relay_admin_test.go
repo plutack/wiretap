@@ -114,6 +114,10 @@ func TestBindings_RelayAdminCreateClientDoesNotReplaceDesktop(t *testing.T) {
 	if view.ClientID != "new-client" || view.ClientToken != "one-time-token" || len(view.Projects) != 2 {
 		t.Fatalf("credentials = %+v", view)
 	}
+	if view.Format != config.RelayClientFileFormat || view.Version != config.RelayClientFileVersion ||
+		view.RelayURL != "ws"+strings.TrimPrefix(srv.URL, "http")+"/tunnel" {
+		t.Fatalf("portable client file metadata = %+v", view)
+	}
 	if _, err := a.RelayCredentials(); err == nil {
 		t.Fatal("admin-created credentials unexpectedly replaced this desktop's identity")
 	}

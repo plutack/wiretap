@@ -199,6 +199,17 @@ Scripts execute locally and do not require Node.js. See the [transform guide](do
 
 Run `wiretap config init` to create the platform-specific `config.yaml`. On Linux it is stored at `~/.config/wiretap/config.yaml`.
 
+A relay administrator can hand another user a versioned client file. Import it
+without needing the relay admin token:
+
+```sh
+wiretap config import ./wiretap-client.json
+```
+
+Importing a different identity requires `--force`. The token is moved into the
+operating-system keyring when available, and the source file should be deleted
+after the secure handoff is complete.
+
 Every configuration key is documented in [`config.example.yaml`](config.example.yaml). Copy the settings you want to change; omitted settings retain their defaults.
 
 Alternatively, use the GUI: the gear icon in the top bar opens a Settings
@@ -225,6 +236,9 @@ collection for the application.
 Enter the relay URL and admin token to inspect health, manage registered
 clients, create portable client credentials, manage shared project subscriptions,
 and control relay-side webhook retention.
+New client credentials can be downloaded as a JSON handoff file. The recipient
+can import it from **Relay connection** or with `wiretap config import`; the GUI
+reconnects only its background tunnel and does not restart Wiretap.
 For temporary connections, the admin token remains in memory only and is
 cleared when you leave the workspace. Saved profiles retrieve it from the
 system keyring when needed. Creating a client there does not replace this
