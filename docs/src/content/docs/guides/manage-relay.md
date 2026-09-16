@@ -31,7 +31,7 @@ Enable **Remember this relay** to save a named profile. Wiretap stores its admin
 
 From this workspace, an operator can:
 
-- create credentials for another client without replacing this desktop's identity;
+- create and download credentials for another client without replacing this desktop's identity;
 - revoke a client and remove its subscriptions without deleting shared projects or history;
 - create a project with an initial subscriber;
 - add or remove subscribers and choose whether a new subscriber receives retained history;
@@ -40,6 +40,26 @@ From this workspace, an operator can:
 - delete a project and all its subscriptions and retained history.
 
 Changes affecting the current desktop synchronize its saved project list and tunnel automatically.
+
+## Hand a client to another user
+
+Create the client in **Settings → Relay server**, then select **Download
+credentials** while the one-time token is still visible. Send the JSON file
+through a secure channel. It contains the relay tunnel URL, client identity,
+bearer token, and initial project subscriptions.
+
+The recipient can open **Settings → Relay connection**, choose **Import client
+credentials**, and select the file. They can also run:
+
+```sh
+wiretap config import ./wiretap-client.json
+```
+
+Wiretap rejects replacement of a different identity unless the user confirms
+it in the GUI or passes `--force` on the CLI. A live GUI import swaps and
+reconnects only the background WebSocket tunnel; it does not restart the app,
+database, or interception sessions. Delete the handoff file after import
+because it contains the plaintext client token.
 
 ## Use the CLI
 

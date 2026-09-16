@@ -15,6 +15,7 @@ import {
   GetCaptureBody,
   GetSettings,
   GetWebhook,
+  ImportRelayClientFile,
   ListCaptures,
 	ListComposeRecipes,
   ListScripts,
@@ -69,6 +70,7 @@ export const api = {
   exportWebhook: (project, seq, target, client) =>
     ExportWebhook(project, seq, target, client),
   getSettings: () => GetSettings(),
+  importRelayClientFile: (contents, force = false) => ImportRelayClientFile(contents, force),
   saveSettings: (input) => SaveSettings(input),
   registerRelay: (input) => RegisterRelay(input),
   relayAdminOverview: (input) => RelayAdminOverview(input),

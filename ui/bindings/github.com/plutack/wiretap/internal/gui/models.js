@@ -582,7 +582,7 @@ export class RegisterInput {
 
 /**
  * RegisterView reports a successful registration: the assigned client id,
- * the claimed projects, and the tunnel URL written to the config.
+ * initial project subscriptions, and the tunnel URL written to the config.
  */
 export class RegisterView {
     /**
@@ -809,6 +809,27 @@ export class RelayAdminCredentialsView {
      * @param {Partial<RelayAdminCredentialsView>} [$$source = {}] - The source object to create the RelayAdminCredentialsView.
      */
     constructor($$source = {}) {
+        if (!("format" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["format"] = "";
+        }
+        if (!("version" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["version"] = 0;
+        }
+        if (!("relay_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["relay_url"] = "";
+        }
         if (!("client_id" in $$source)) {
             /**
              * @member
@@ -840,10 +861,10 @@ export class RelayAdminCredentialsView {
      * @returns {RelayAdminCredentialsView}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType0;
+        const $$createField5_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("projects" in $$parsedSource) {
-            $$parsedSource["projects"] = $$createField2_0($$parsedSource["projects"]);
+            $$parsedSource["projects"] = $$createField5_0($$parsedSource["projects"]);
         }
         return new RelayAdminCredentialsView(/** @type {Partial<RelayAdminCredentialsView>} */($$parsedSource));
     }
