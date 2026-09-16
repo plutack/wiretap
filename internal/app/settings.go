@@ -116,6 +116,22 @@ func (a *App) RestartTunnel(ctx context.Context) error {
 	return a.StartTunnel(ctx)
 }
 
+// ImportRelayClient installs a portable relay identity, refreshes the active
+// config/credential snapshots, and replaces only the background tunnel. The
+// desktop process, local store, interception proxy, and GUI remain running.
+func (a *App) ImportRelayClient(ctx context.Context, clientFile config.RelayClientFile, force bool) error {
+	if err := a.mgr.ImportRelayClient(clientFile, force); err != nil {
+		return err
+	}
+	if _, err := a.ReloadConfig(); err != nil {
+		return fmt.Errorf("reload imported relay configuration: %w", err)
+	}
+	if err := a.RestartTunnel(ctx); err != nil {
+		return fmt.Errorf("restart imported relay tunnel: %w", err)
+	}
+	return nil
+}
+
 // TunnelURLFromBase derives the WebSocket tunnel endpoint from a relay's
 // HTTP(S) base URL: https://relay.example.com → wss://relay.example.com/tunnel.
 // The inverse of IngressBaseURL (export.go). Accepts ws/wss input unchanged

@@ -1,25 +1,25 @@
 ---
 title: Releases and downloads
-description: Download Wiretap v0.3.1, verify artifacts, and review recent changes.
+description: Download Wiretap v0.3.2, verify artifacts, and review recent changes.
 ---
 
-## Current release: v0.3.1
+## Current release: v0.3.2
 
-Released September 15, 2026. This release adds multiple concurrent shells to one local interception session.
+Released September 16, 2026. This release adds portable relay client export and import without restarting the desktop.
 
-[Open the v0.3.1 release](https://github.com/plutack/wiretap/releases/tag/v0.3.1) · [View every release](https://github.com/plutack/wiretap/releases) · [Download checksums](https://github.com/plutack/wiretap/releases/latest/download/SHA256SUMS)
+[Open the v0.3.2 release](https://github.com/plutack/wiretap/releases/tag/v0.3.2) · [View every release](https://github.com/plutack/wiretap/releases) · [Download checksums](https://github.com/plutack/wiretap/releases/latest/download/SHA256SUMS)
 
 ### Assets
 
 | Platform | Artifact |
 | --- | --- |
-| Linux x86-64 | [`wiretap_0.3.1_linux_amd64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.3.1/wiretap_0.3.1_linux_amd64.tar.gz) |
-| Linux ARM64 | [`wiretap_0.3.1_linux_arm64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.3.1/wiretap_0.3.1_linux_arm64.tar.gz) |
-| AppImage x86-64 | [`wiretap_0.3.1_x86_64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.3.1/wiretap_0.3.1_x86_64.AppImage) |
-| AppImage ARM64 | [`wiretap_0.3.1_aarch64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.3.1/wiretap_0.3.1_aarch64.AppImage) |
-| Arch Linux x86-64 | [`wiretap-0.3.1-x86_64.pkg.tar.zst`](https://github.com/plutack/wiretap/releases/download/v0.3.1/wiretap-0.3.1-x86_64.pkg.tar.zst) |
-| Windows x86-64 | [`wiretap_0.3.1_windows_x86_64-installer.exe`](https://github.com/plutack/wiretap/releases/download/v0.3.1/wiretap_0.3.1_windows_x86_64-installer.exe) |
-| Windows portable x86-64 | [`wiretap_0.3.1_windows_x86_64.zip`](https://github.com/plutack/wiretap/releases/download/v0.3.1/wiretap_0.3.1_windows_x86_64.zip) |
+| Linux x86-64 | [`wiretap_0.3.2_linux_amd64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.3.2/wiretap_0.3.2_linux_amd64.tar.gz) |
+| Linux ARM64 | [`wiretap_0.3.2_linux_arm64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.3.2/wiretap_0.3.2_linux_arm64.tar.gz) |
+| AppImage x86-64 | [`wiretap_0.3.2_x86_64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.3.2/wiretap_0.3.2_x86_64.AppImage) |
+| AppImage ARM64 | [`wiretap_0.3.2_aarch64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.3.2/wiretap_0.3.2_aarch64.AppImage) |
+| Arch Linux x86-64 | [`wiretap-0.3.2-x86_64.pkg.tar.zst`](https://github.com/plutack/wiretap/releases/download/v0.3.2/wiretap-0.3.2-x86_64.pkg.tar.zst) |
+| Windows x86-64 | [`wiretap_0.3.2_windows_x86_64-installer.exe`](https://github.com/plutack/wiretap/releases/download/v0.3.2/wiretap_0.3.2_windows_x86_64-installer.exe) |
+| Windows portable x86-64 | [`wiretap_0.3.2_windows_x86_64.zip`](https://github.com/plutack/wiretap/releases/download/v0.3.2/wiretap_0.3.2_windows_x86_64.zip) |
 
 See [Install Wiretap](/getting-started/install/) for runtime dependencies and verification steps.
 
@@ -28,6 +28,15 @@ Release assets currently include SHA-256 checksums but are not cryptographically
 :::
 
 ## Recent releases
+
+### v0.3.2
+
+Adds portable relay client credential download and import, with keyring-first
+storage and an isolated tunnel reconnect instead of an application restart.
+
+### v0.3.1
+
+Adds multiple concurrent shells to one local interception session.
 
 ### v0.3.0
 

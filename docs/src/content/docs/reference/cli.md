@@ -10,12 +10,16 @@ Run `wiretap <command> --help` for the flags shipped by your installed version.
 | Command | Purpose |
 | --- | --- |
 | `wiretap config init` | Create the default configuration file |
+| `wiretap config import <client-file>` | Install a portable relay client identity |
 | `wiretap gui` | Open the desktop dashboard; requires a GUI-enabled build |
 | `wiretap tui` | Open the terminal dashboard |
 | `wiretap version` | Print the embedded version |
 | `wiretap completion <shell>` | Generate shell completion |
 
 `wiretap config init --force` replaces an existing config file.
+`wiretap config import --force <client-file>` is required when the file would
+replace a different local relay identity. The imported bearer token prefers the
+operating-system keyring; delete the handoff file after use.
 
 ## Interception
 
