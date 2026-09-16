@@ -81,17 +81,9 @@ func (m *Manager) writeCredentials(c Credentials) error {
 // with os.IsNotExist to distinguish "not registered yet" from a real I/O
 // failure.
 func (m *Manager) LoadCredentials() (*Credentials, error) {
-	p, err := m.CredsPath()
+	c, err := m.loadCredentialsMetadata()
 	if err != nil {
 		return nil, err
-	}
-	b, err := os.ReadFile(p)
-	if err != nil {
-		return nil, fmt.Errorf("config: read %s: %w", p, err)
-	}
-	var c Credentials
-	if err := json.Unmarshal(b, &c); err != nil {
-		return nil, fmt.Errorf("config: parse %s: %w", p, err)
 	}
 	if c.TokenKeyring != "" {
 		if m.clientSecrets == nil {
@@ -103,25 +95,44 @@ func (m *Manager) LoadCredentials() (*Credentials, error) {
 		}
 		c.ClientToken = token
 		c.TokenStorage = TokenStorageKeyring
-		return &c, nil
+		return c, nil
 	}
 	c.TokenStorage = TokenStorageFile
 	if c.ClientToken != "" && m.clientSecrets != nil {
 		account := credentialKeyringAccount(c.ClientID)
 		if err := m.clientSecrets.Set(account, c.ClientToken); err == nil {
-			disk := c
+			disk := *c
 			disk.ClientToken = ""
 			disk.TokenKeyring = account
 			disk.TokenStorage = ""
 			if err := m.writeCredentials(disk); err != nil {
 				c.StorageWarning = "Token reached the system keyring, but the protected credentials file could not be migrated."
-				return &c, nil
+				return c, nil
 			}
 			c.TokenKeyring = account
 			c.TokenStorage = TokenStorageKeyring
 		} else {
 			c.StorageWarning = "System keyring unavailable; token remains in the protected credentials file."
 		}
+	}
+	return c, nil
+}
+
+// loadCredentialsMetadata reads the on-disk identity without resolving its
+// keyring token. Import uses this so --force can recover from a missing or
+// locked keyring entry while still detecting which identity it replaces.
+func (m *Manager) loadCredentialsMetadata() (*Credentials, error) {
+	p, err := m.CredsPath()
+	if err != nil {
+		return nil, err
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return nil, fmt.Errorf("config: read %s: %w", p, err)
+	}
+	var c Credentials
+	if err := json.Unmarshal(b, &c); err != nil {
+		return nil, fmt.Errorf("config: parse %s: %w", p, err)
 	}
 	return &c, nil
 }

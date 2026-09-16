@@ -4,6 +4,7 @@ import { html } from "../vendor/preact/index.js";
 import { useEffect, useState } from "../vendor/preact/index.js";
 import { api } from "../lib/api.js";
 import { copyText } from "../lib/clipboard.js";
+import { downloadText } from "../lib/download.js";
 import { Button, Field, Input } from "./ui.js";
 import { Dropdown } from "./dropdown.js";
 
@@ -133,6 +134,12 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
     } catch (e) {
       setError(`Copy credentials: ${String(e)}`);
     }
+  };
+
+  const downloadCredentials = () => {
+    const filenameID = String(credentials.client_id || "client").replace(/[^a-zA-Z0-9._-]/g, "-");
+    downloadText(`wiretap-${filenameID}.json`, `${JSON.stringify(credentials, null, 2)}\n`);
+    onToast("Client credentials downloaded");
   };
 
   const revokeClient = async (client) => {
@@ -331,10 +338,11 @@ export function RelayAdmin({ defaultURL, localClientID, onToast, onChanged }) {
       </section>
 
       ${credentials ? html`<section class="relay-credentials" aria-live="polite">
-        <div><strong>Save these credentials now</strong><p>The client token cannot be retrieved again from the relay.</p></div>
+        <div><strong>Save these credentials now</strong><p>The client token cannot be retrieved again from the relay. The downloaded file contains a bearer secret; send it securely and delete it after import.</p></div>
         <pre>${JSON.stringify(credentials, null, 2)}</pre>
         <div class="relay-credential-actions">
-          <${Button} variant="primary" onClick=${copyCredentials}>Copy JSON</>
+          <${Button} variant="primary" onClick=${downloadCredentials}>Download credentials</>
+          <${Button} onClick=${copyCredentials}>Copy JSON</>
           <${Button} onClick=${() => setCredentials(null)}>Dismiss</>
         </div>
       </section>` : null}

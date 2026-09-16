@@ -3,6 +3,7 @@ package gui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -279,6 +280,63 @@ func TestBindings_RegisterRelay_Validation(t *testing.T) {
 		if _, err := b.RegisterRelay(in); err == nil {
 			t.Errorf("RegisterRelay(%+v): expected validation error", in)
 		}
+	}
+}
+
+func TestBindings_ImportRelayClientFilePersistsAndReconnectsTunnel(t *testing.T) {
+	t.Parallel()
+	b, a, starts := newSettingsBindings(t)
+	clientFile, err := config.NewRelayClientFile(
+		"wss://relay.example.com/tunnel", "shared-client", "shared-token", []string{"orders", "audit"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := clientFile.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	view, err := b.ImportRelayClientFile(string(raw), false)
+	if err != nil {
+		t.Fatalf("ImportRelayClientFile: %v", err)
+	}
+	if !view.Registered || view.ClientID != "shared-client" || view.RelayURL != clientFile.RelayURL || len(view.Projects) != 2 {
+		t.Fatalf("settings after import = %+v", view)
+	}
+	if starts.Load() != 1 || !view.TunnelRunning {
+		t.Fatalf("tunnel starts = %d, running = %v; want one isolated tunnel start", starts.Load(), view.TunnelRunning)
+	}
+	creds, err := a.RelayCredentials()
+	if err != nil || creds.ClientToken != "shared-token" {
+		t.Fatalf("imported credentials = %+v, %v", creds, err)
+	}
+}
+
+func TestBindings_ImportRelayClientFileRequiresForceForDifferentIdentity(t *testing.T) {
+	t.Parallel()
+	b, a, starts := newSettingsBindings(t)
+	if err := a.SaveRelayCredentials(config.Credentials{ClientID: "existing", ClientToken: "old-token"}); err != nil {
+		t.Fatal(err)
+	}
+	clientFile, err := config.NewRelayClientFile("wss://relay.example.com/tunnel", "replacement", "new-token", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := clientFile.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := b.ImportRelayClientFile(string(raw), false); !errors.Is(err, config.ErrRelayIdentityExists) {
+		t.Fatalf("ImportRelayClientFile error = %v, want ErrRelayIdentityExists", err)
+	}
+	if starts.Load() != 0 {
+		t.Fatalf("tunnel starts = %d after rejected import, want zero", starts.Load())
+	}
+	view, err := b.ImportRelayClientFile(string(raw), true)
+	if err != nil || view.ClientID != "replacement" || starts.Load() != 1 {
+		t.Fatalf("forced import view=%+v err=%v starts=%d", view, err, starts.Load())
 	}
 }
 

@@ -72,6 +72,19 @@ type RegisterView struct {
 	TunnelURL string   `json:"tunnel_url"`
 }
 
+// ImportRelayClientFile installs a portable client handoff and reconnects only
+// the background relay tunnel. force is required to replace another identity.
+func (b *Bindings) ImportRelayClientFile(contents string, force bool) (SettingsView, error) {
+	clientFile, err := config.ParseRelayClientFile([]byte(contents))
+	if err != nil {
+		return SettingsView{}, err
+	}
+	if err := b.app.ImportRelayClient(context.Background(), clientFile, force); err != nil {
+		return SettingsView{}, fmt.Errorf("import relay client: %w", err)
+	}
+	return b.GetSettings()
+}
+
 // AddRelayProject claims a path for the currently registered desktop without
 // issuing a new client id/token, then reconnects using the updated project set.
 func (b *Bindings) AddRelayProject(project string) (SettingsView, error) {

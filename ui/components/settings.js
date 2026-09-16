@@ -1,5 +1,5 @@
 import { html } from "../vendor/preact/index.js";
-import { useEffect, useState } from "../vendor/preact/index.js";
+import { useEffect, useRef, useState } from "../vendor/preact/index.js";
 import { api } from "../lib/api.js";
 import { Button, Input, Select, Field } from "./ui.js";
 import { Dropdown } from "./dropdown.js";
@@ -72,6 +72,8 @@ export function Settings({ onToast, onSaved }) {
   const [projectDraft, setProjectDraft] = useState("");
   const [projectBusy, setProjectBusy] = useState(false);
   const [displayPrefs, setDisplayPrefs] = useState(loadDisplayPrefs());
+  const [importing, setImporting] = useState(false);
+  const importInput = useRef(null);
 
   const load = async () => {
     try {
@@ -135,6 +137,25 @@ export function Settings({ onToast, onSaved }) {
     catch (e) { onToast("remove project: " + e, 6000); }
     finally { setProjectBusy(false); }
   };
+  const importRelayClient = async (event) => {
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) return;
+    const replacing = Boolean(view.registered);
+    if (replacing && !window.confirm(`Replace relay client ${view.client_id}? Its current credentials will no longer be used by this desktop.`)) {
+      input.value = "";
+      return;
+    }
+    setImporting(true);
+    try {
+      const contents = await file.text();
+      const imported = await api.importRelayClientFile(contents, replacing);
+      await load();
+      onToast(`Imported relay client ${imported.client_id}; tunnel is reconnecting.`);
+      onSaved && onSaved();
+    } catch (e) { onToast("import credentials: " + e, 6000); }
+    finally { setImporting(false); input.value = ""; }
+  };
 
   return html`<div class="settings-workspace">
     <${SettingsNav} active=${section} onChange=${setSection} />
@@ -146,6 +167,13 @@ export function Settings({ onToast, onSaved }) {
           <strong>${view.tunnel_running ? "Tunnel connected" : "Tunnel stopped"}</strong>
           <p>${view.registered ? html`Registered as <code>${view.client_id}</code>` : "This desktop has not been registered."}</p>
         </div></div>
+        <${SettingsCard} title="Import client credentials" hint="Use a portable client file created by a relay administrator. Only the background tunnel reconnects; Wiretap stays open.">
+          <div class="settings-inline-action">
+            <div><strong>${view.registered ? "Replace this desktop's relay identity" : "Connect this desktop without an admin token"}</strong><p class="settings-path-note">The client token is moved to the system keyring when available.</p></div>
+            <${Button} variant="primary" disabled=${importing} onClick=${() => importInput.current?.click()}>${importing ? "Importing..." : "Choose file"}</>
+          </div>
+          <input ref=${importInput} type="file" accept="application/json,.json" hidden onChange=${importRelayClient} />
+        </>
         <${SettingsCard} title="Relay endpoint" hint="Accepts the public HTTPS base URL or its WSS tunnel URL.">
           <${Field} label="Relay tunnel URL"><${Input} class="font-mono" placeholder="wss://relay.example.com/tunnel" value=${form.relay_url} onInput=${set("relay_url")} /></>
         </>
