@@ -6,10 +6,12 @@ let scheduled = false;
 let warningShown = false;
 
 export function supportsSyntaxHighlights() {
-  return typeof CSS !== "undefined"
-    && "highlights" in CSS
-    && typeof Highlight !== "undefined"
-    && typeof Range !== "undefined";
+  return (
+    typeof CSS !== "undefined" &&
+    "highlights" in CSS &&
+    typeof Highlight !== "undefined" &&
+    typeof Range !== "undefined"
+  );
 }
 
 export function requestSyntaxHighlight() {

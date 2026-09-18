@@ -6,8 +6,17 @@ import { HeaderTable, StatusBadge } from "./badges.js";
 import { fmtBytes } from "../lib/format.js";
 import { pasteText } from "../lib/clipboard.js";
 
-const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((value) => ({ value, label: value }));
-const EMPTY = { method: "POST", url: "", headers: { "Content-Type": ["application/json"] }, body: "{\n  \n}", apply_transforms: true };
+const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((value) => ({
+  value,
+  label: value,
+}));
+const EMPTY = {
+  method: "POST",
+  url: "",
+  headers: { "Content-Type": ["application/json"] },
+  body: "{\n  \n}",
+  apply_transforms: true,
+};
 
 function normalizeHeaders(value) {
   const out = {};
@@ -19,9 +28,15 @@ function normalizeHeaders(value) {
 
 function importJSON(text) {
   const parsed = JSON.parse(text);
-  const envelope = parsed && typeof parsed === "object" && !Array.isArray(parsed) && "url" in parsed;
+  const envelope =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) && "url" in parsed;
   if (!envelope) return { ...EMPTY, body: JSON.stringify(parsed, null, 2) };
-  const body = parsed.body == null ? "" : typeof parsed.body === "string" ? parsed.body : JSON.stringify(parsed.body, null, 2);
+  const body =
+    parsed.body == null
+      ? ""
+      : typeof parsed.body === "string"
+        ? parsed.body
+        : JSON.stringify(parsed.body, null, 2);
   return {
     method: String(parsed.method || "POST").toUpperCase(),
     url: String(parsed.url || ""),
@@ -36,10 +51,19 @@ function responseContentType(headers) {
   return pair ? String(pair[1]?.[0] || "") : "";
 }
 
-export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, onSend, onToast, compact = false }) {
+export function RequestComposer({
+  initialRequest,
+  recipes = [],
+  onApplyRecipe,
+  onSend,
+  onToast,
+  compact = false,
+}) {
   const [mode, setMode] = useState("manual");
   const [request, setRequest] = useState(initialRequest || EMPTY);
-  const [headersText, setHeadersText] = useState(JSON.stringify((initialRequest || EMPTY).headers, null, 2));
+  const [headersText, setHeadersText] = useState(
+    JSON.stringify((initialRequest || EMPTY).headers, null, 2),
+  );
   const [response, setResponse] = useState(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -150,7 +174,11 @@ export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, o
   const selectedRecipe = recipes.find((recipe) => recipe.id === recipeID);
 
   const headerCount = (() => {
-    try { return Object.keys(JSON.parse(headersText || "{}")).length; } catch { return "!"; }
+    try {
+      return Object.keys(JSON.parse(headersText || "{}")).length;
+    } catch {
+      return "!";
+    }
   })();
 
   return html`<div class="composer-shell ${compact ? "is-compact" : ""}">
@@ -160,12 +188,20 @@ export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, o
         <p>Prepare, inspect, and send a request from one workspace.</p>
       </div>
       <div class="composer-mode-switch" role="tablist" aria-label="Composer input mode">
-        <button role="tab" aria-selected=${mode === "manual"} class=${mode === "manual" ? "active" : ""} onClick=${() => { setMode("manual"); setError(""); }}>Manual request</button>
-        <button role="tab" aria-selected=${mode === "recipe"} class=${mode === "recipe" ? "active" : ""} onClick=${() => { setMode("recipe"); setError(""); }}>Source recipe</button>
+        <button role="tab" aria-selected=${mode === "manual"} class=${mode === "manual" ? "active" : ""} onClick=${() => {
+          setMode("manual");
+          setError("");
+        }}>Manual request</button>
+        <button role="tab" aria-selected=${mode === "recipe"} class=${mode === "recipe" ? "active" : ""} onClick=${() => {
+          setMode("recipe");
+          setError("");
+        }}>Source recipe</button>
       </div>
     </header>
 
-    ${mode === "recipe" ? html`
+    ${
+      mode === "recipe"
+        ? html`
       <section class="recipe-workspace">
         <div class="recipe-intro">
           <span class="recipe-step">1</span>
@@ -182,13 +218,17 @@ export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, o
           </div>
           <${Button} variant="primary" disabled=${preparing || !recipeID || !source.trim()} onClick=${prepare}>${preparing ? "Preparing..." : "Transform request"}</>
         </div>
-        ${recipes.length ? html`<div class="recipe-description">
+        ${
+          recipes.length
+            ? html`<div class="recipe-description">
           <strong>${selectedRecipe?.name || "Select a recipe"}</strong>
           <span>${selectedRecipe?.description || "Local source-to-request recipe"}</span>
-        </div>` : html`<div class="recipe-empty">
+        </div>`
+            : html`<div class="recipe-empty">
           <strong>No compose recipes yet</strong>
           <span>Create a transform with the <code>on_compose</code> trigger, then enable it.</span>
-        </div>`}
+        </div>`
+        }
         <div class="recipe-source-head">
           <label>Source data <span>JSON or plain text</span></label>
           <div>
@@ -204,7 +244,8 @@ export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, o
         ${error ? html`<div class="composer-error">${error}</div>` : null}
         <p class="recipe-safety">A recipe prepares a draft only. Review the generated URL, headers, and body before sending.</p>
       </section>
-    ` : html`
+    `
+        : html`
       <div class="composer-manual-actions">
         <span>Request draft</span>
         <div>
@@ -225,9 +266,11 @@ export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, o
             <button role="tab" aria-selected=${requestTab === "headers"} class=${requestTab === "headers" ? "active" : ""} onClick=${() => setRequestTab("headers")}>Headers <span>${headerCount}</span></button>
             <span class="composer-tab-hint">${requestTab === "body" ? "text or JSON" : "JSON object; values may be strings or arrays"}</span>
           </div>
-          ${requestTab === "headers"
-            ? html`<textarea aria-label="Request headers JSON" class="composer-editor composer-request-editor" spellcheck="false" value=${headersText} onInput=${(e) => setHeadersText(e.target.value)}></textarea>`
-            : html`<textarea aria-label="Request body" class="composer-editor composer-request-editor" spellcheck="false" value=${request.body} onInput=${(e) => setRequest({ ...request, body: e.target.value })}></textarea>`}
+          ${
+            requestTab === "headers"
+              ? html`<textarea aria-label="Request headers JSON" class="composer-editor composer-request-editor" spellcheck="false" value=${headersText} onInput=${(e) => setHeadersText(e.target.value)}></textarea>`
+              : html`<textarea aria-label="Request body" class="composer-editor composer-request-editor" spellcheck="false" value=${request.body} onInput=${(e) => setRequest({ ...request, body: e.target.value })}></textarea>`
+          }
           <label class="composer-transform-toggle">
             <input class="checkbox" type="checkbox" checked=${request.apply_transforms} onChange=${(e) => setRequest({ ...request, apply_transforms: e.target.checked })} />
             Apply enabled <code>on_replay</code> transforms before sending
@@ -236,7 +279,9 @@ export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, o
         </div>
 
         <div class="composer-panel composer-response">
-          ${response ? html`
+          ${
+            response
+              ? html`
             <div class="composer-response-summary">
               <${StatusBadge} status=${response.status} />
               <strong>${response.duration_ms} ms</strong>
@@ -248,13 +293,18 @@ export function RequestComposer({ initialRequest, recipes = [], onApplyRecipe, o
               <button role="tab" aria-selected=${responseTab === "headers"} class=${responseTab === "headers" ? "active" : ""} onClick=${() => setResponseTab("headers")}>Headers <span>${Object.keys(response.headers || {}).length}</span></button>
             </div>
             <div class="composer-response-content">
-              ${responseTab === "headers"
-                ? html`<${HeaderTable} headers=${response.headers} />`
-                : html`<${CodeBlock} bodyBase64=${response.body_base64} bodyLength=${response.body_len} truncated=${response.truncated} contentType=${responseContentType(response.headers)} />`}
+              ${
+                responseTab === "headers"
+                  ? html`<${HeaderTable} headers=${response.headers} />`
+                  : html`<${CodeBlock} bodyBase64=${response.body_base64} bodyLength=${response.body_len} truncated=${response.truncated} contentType=${responseContentType(response.headers)} />`
+              }
             </div>
-          ` : html`<div class="composer-response-empty"><span>↗</span><strong>Response inspector</strong><p>Send the request to inspect status, headers, body, and timing.</p></div>`}
+          `
+              : html`<div class="composer-response-empty"><span>↗</span><strong>Response inspector</strong><p>Send the request to inspect status, headers, body, and timing.</p></div>`
+          }
         </div>
       </section>
-    `}
+    `
+    }
   </div>`;
 }

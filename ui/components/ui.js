@@ -8,7 +8,8 @@ import { Dropdown } from "./dropdown.js";
 
 /** Button with a visual variant: "primary" | "ghost" | "danger". */
 export function Button({ variant = "ghost", type = "button", class: cls = "", children, ...rest }) {
-  const v = { primary: "btn-primary", ghost: "btn-ghost", danger: "btn-danger" }[variant] || "btn-ghost";
+  const v =
+    { primary: "btn-primary", ghost: "btn-ghost", danger: "btn-danger" }[variant] || "btn-ghost";
   return html`<button type=${type} class="btn ${v} ${cls}" ...${rest}>${children}</button>`;
 }
 

@@ -241,10 +241,14 @@ func TestHandleIngress_Success_RawHeadersAndBodyPreserved(t *testing.T) {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d, body = %s", resp.StatusCode, b)
 	}
+	// The response is a receipt: it must not echo the allocated sequence, which
+	// would disclose the project's lifetime webhook volume.
 	var out api.IngressResponse
-	_ = json.NewDecoder(resp.Body).Decode(&out)
-	if out.Seq != 1 {
-		t.Errorf("seq = %d, want 1", out.Seq)
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Status != "received" {
+		t.Errorf("status = %q, want %q", out.Status, "received")
 	}
 
 	rows, err := s.store.WebhooksAfter(context.Background(), "project-a", 0)
@@ -253,6 +257,9 @@ func TestHandleIngress_Success_RawHeadersAndBodyPreserved(t *testing.T) {
 	}
 	if len(rows) != 1 {
 		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	if rows[0].Seq != 1 {
+		t.Errorf("stored seq = %d, want 1", rows[0].Seq)
 	}
 	if string(rows[0].Body) != string(body) {
 		t.Errorf("stored body = %q, want %q", rows[0].Body, body)
@@ -549,8 +556,10 @@ func TestHandleAdminReplayReportsOfflineAndUnknownTargets(t *testing.T) {
 	}
 }
 
-// ingress POST helper for tests that prefer raw HTTP. Returns seq from body.
-func postIngress(t *testing.T, hs *httptest.Server, project string, body []byte, headers map[string]string) (int64, *http.Response) {
+// ingress POST helper for tests that prefer raw HTTP. It asserts the ingress
+// contract (200 OK plus a receipt body carrying no sequence) so every caller
+// exercises it, and returns the response for callers that need the raw status.
+func postIngress(t *testing.T, hs *httptest.Server, project string, body []byte, headers map[string]string) *http.Response {
 	t.Helper()
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, hs.URL+"/"+project, bytes.NewReader(body))
 	for k, v := range headers {
@@ -561,9 +570,18 @@ func postIngress(t *testing.T, hs *httptest.Server, project string, body []byte,
 		t.Fatalf("postIngress: %v", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("ingress status = %d, body = %s", resp.StatusCode, b)
+	}
 	var out api.IngressResponse
-	_ = json.NewDecoder(resp.Body).Decode(&out)
-	return out.Seq, resp
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("ingress decode: %v", err)
+	}
+	if out.Status != "received" {
+		t.Fatalf("ingress status = %q, want %q", out.Status, "received")
+	}
+	return resp
 }
 
 func TestHandleListWebhooks_AfterIngress(t *testing.T) {
@@ -572,13 +590,7 @@ func TestHandleListWebhooks_AfterIngress(t *testing.T) {
 	makeClientFor(t, s, "c1", "t1", "project-a")
 	for i := 0; i < 3; i++ {
 		body := []byte(fmt.Sprintf(`{"i":%d}`, i))
-		seq, resp := postIngress(t, hs, "project-a", body, map[string]string{"Content-Type": "application/json"})
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("ingress[%d] status = %d", i, resp.StatusCode)
-		}
-		if seq != int64(i+1) {
-			t.Errorf("seq[%d] = %d, want %d", i, seq, i+1)
-		}
+		postIngress(t, hs, "project-a", body, map[string]string{"Content-Type": "application/json"})
 	}
 	resp, err := c.ListWebhooks(context.Background(), "project-a", 0, 0)
 	if err != nil {

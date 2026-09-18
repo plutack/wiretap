@@ -3,7 +3,6 @@ package relayd
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -112,13 +111,6 @@ func TestTunnel_HappyPath(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("ingress status = %d", resp.StatusCode)
-	}
-	var inResp struct {
-		Seq int64 `json:"seq"`
-	}
-	_ = json.NewDecoder(resp.Body).Decode(&inResp)
-	if inResp.Seq != 1 {
-		t.Fatalf("ingress seq = %d, want 1", inResp.Seq)
 	}
 
 	// The webhook is stored but undelivered.

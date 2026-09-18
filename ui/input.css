@@ -58,8 +58,12 @@
     color: var(--wt-action-text);
     box-shadow: 0 1px 2px var(--wt-shadow);
   }
-  .btn-primary:hover { background: var(--wt-action-hover); }
-  .btn-primary:active { background: var(--wt-action); }
+  .btn-primary:hover {
+    background: var(--wt-action-hover);
+  }
+  .btn-primary:active {
+    background: var(--wt-action);
+  }
   .btn-ghost {
     @apply border border-neutral-700 bg-neutral-900 text-neutral-200
       hover:border-neutral-600 hover:bg-neutral-800;

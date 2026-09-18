@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -104,6 +105,62 @@ func TestApp_AutoForwardWebhook_Disabled(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	if calls.Load() != 0 {
 		t.Errorf("forward attempted with empty forward_url")
+	}
+}
+
+// TestApp_OpenClosesCrashedSessions confirms startup reconciles sessions left
+// open by a crash: the row gets a real end time and is flagged as interrupted.
+func TestApp_OpenClosesCrashedSessions(t *testing.T) {
+	t.Parallel()
+	a, _ := newTestApp(t)
+	dir, err := a.mgr.Dir()
+	if err != nil {
+		t.Fatalf("config dir: %v", err)
+	}
+	path := filepath.Join(dir, "wiretap.db")
+	// Open normally creates the config dir; the seed below runs first.
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir config dir: %v", err)
+	}
+
+	// Seed a crashed session before the app opens. A killed `intercept start`
+	// leaves exactly this: no PID file, no ended_at.
+	db, err := store.Open(path)
+	if err != nil {
+		t.Fatalf("seed store: %v", err)
+	}
+	if err := store.MigratePC(context.Background(), db); err != nil {
+		t.Fatalf("seed migrate: %v", err)
+	}
+	started := time.Now().Add(-2 * time.Hour).Truncate(time.Second)
+	if _, err := store.NewPCStore(db).CreateInterceptSession(context.Background(), started, "bash", "127.0.0.1:8888"); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("seed close: %v", err)
+	}
+
+	if err := a.Open(context.Background()); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = a.Close() })
+
+	sessions, err := a.InterceptSessions(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("InterceptSessions: %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("sessions = %d, want 1", len(sessions))
+	}
+	got := sessions[0]
+	if !got.Interrupted {
+		t.Error("Interrupted = false, want true")
+	}
+	if got.EndedAt.IsZero() {
+		t.Fatal("EndedAt is zero; Open did not close out the crashed session")
+	}
+	if got.EndedAt.Unix() != started.Unix() {
+		t.Errorf("EndedAt = %v, want started_at %v", got.EndedAt, started)
 	}
 }
 
@@ -268,12 +325,12 @@ func TestApp_QuerierSurface(t *testing.T) {
 		t.Error("capture id = 0")
 	}
 
-	whs, err := a.Webhooks(ctx, "", 10)
+	whs, err := a.Webhooks(ctx, store.WebhookFilter{Limit: 10})
 	if err != nil {
 		t.Fatalf("Webhooks: %v", err)
 	}
-	if len(whs) != 1 || whs[0].Project != "project-a" {
-		t.Errorf("webhooks = %+v", whs)
+	if len(whs.Rows) != 1 || whs.Rows[0].Project != "project-a" {
+		t.Errorf("webhooks = %+v", whs.Rows)
 	}
 	wh, err := a.WebhookBySeq(ctx, "project-a", 1)
 	if err != nil {
@@ -282,12 +339,12 @@ func TestApp_QuerierSurface(t *testing.T) {
 	if wh.Method != "POST" {
 		t.Errorf("method = %q", wh.Method)
 	}
-	caps, err := a.Captures(ctx, 10)
+	caps, err := a.Captures(ctx, store.CaptureFilter{Limit: 10})
 	if err != nil {
 		t.Fatalf("Captures: %v", err)
 	}
-	if len(caps) != 1 || caps[0].URL != "https://x/y" {
-		t.Errorf("captures = %+v", caps)
+	if len(caps.Rows) != 1 || caps.Rows[0].URL != "https://x/y" {
+		t.Errorf("captures = %+v", caps.Rows)
 	}
 
 	// WebhookBySeq on missing row → ErrNotFound.
@@ -491,10 +548,10 @@ func TestApp_ErrorsBeforeOpen(t *testing.T) {
 	t.Parallel()
 	a, _ := newTestApp(t)
 	ctx := context.Background()
-	if _, err := a.Webhooks(ctx, "", 10); err == nil {
+	if _, err := a.Webhooks(ctx, store.WebhookFilter{}); err == nil {
 		t.Error("Webhooks before Open: want error, got nil")
 	}
-	if _, err := a.Captures(ctx, 10); err == nil {
+	if _, err := a.Captures(ctx, store.CaptureFilter{}); err == nil {
 		t.Error("Captures before Open: want error, got nil")
 	}
 	if err := a.StartTunnel(ctx); err == nil {

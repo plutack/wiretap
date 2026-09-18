@@ -113,6 +113,19 @@ curl 'http://127.0.0.1:9876/local/captures?limit=50'
 curl 'http://127.0.0.1:9876/local/webhooks?project=new-project&limit=50'
 ```
 
+Filters run against the whole local history, not just the newest page:
+
+```sh
+# Any capture whose URL contains "checkout"
+curl 'http://127.0.0.1:9876/local/captures?q=checkout'
+
+# Failed requests only: a status family, or an exact code like 404
+curl 'http://127.0.0.1:9876/local/captures?status=5xx'
+curl 'http://127.0.0.1:9876/local/captures?q=orders&method=POST&status=201'
+```
+
+Each response includes `total` and `has_more`. `total` counts every match, so when it exceeds the returned page there are older matches to page through with a smaller `?limit=` and a narrower query.
+
 Keep `intercept.local_api_addr` on loopback. These endpoints are unauthenticated and can return captured data.
 
 ## Apply transforms

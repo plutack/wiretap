@@ -229,6 +229,10 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 // We never require auth on ingress: webhook senders don't carry our tokens.
 // The project must exist and have at least one registered subscriber; otherwise
 // we 404 to avoid leaking the existence of inactive paths.
+//
+// Success is 200 OK with a small receipt body. We deliberately do not echo the
+// allocated sequence, which is a per-project counter and would disclose how many
+// webhooks that project has ever received to anyone who can POST to the path.
 func (s *Server) handleIngress(w http.ResponseWriter, r *http.Request) {
 	// Reserved routes never reach here (they're registered earlier in the
 	// mux), but defensive check the path starts with /something.
@@ -289,7 +293,7 @@ func (s *Server) handleIngress(w http.ResponseWriter, r *http.Request) {
 	// reconnect.
 	s.pushIfTunnelAttached(r.Context(), project, row)
 
-	writeJSON(w, http.StatusOK, api.IngressResponse{Seq: seq})
+	writeJSON(w, http.StatusOK, api.IngressResponse{Status: "received"})
 }
 
 // readBody returns the request body, capped at maxBodyBytes to prevent a

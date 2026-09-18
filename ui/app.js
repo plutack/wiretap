@@ -27,7 +27,18 @@ function Toast({ message }) {
   return html`<div class="workbench-toast">${message}</div>`;
 }
 
-function CommandDeck({ activeTab, onChange, counts, onSearch, project, filtered, followControl }) {
+function CommandDeck({
+  activeTab,
+  onChange,
+  counts,
+  onSearch,
+  project,
+  filtered,
+  total,
+  bodySearch,
+  onBodySearchChange,
+  followControl,
+}) {
   const tab = (id, label, glyph) => html`<button
     onClick=${() => onChange(id)}
     class="mode-tab ${activeTab === id ? "active" : ""}"
@@ -44,14 +55,34 @@ function CommandDeck({ activeTab, onChange, counts, onSearch, project, filtered,
         ${tab("traffic", "Traffic", "⇄")}
         ${tab("composer", "Compose", "↗")}
       </nav>
-      ${activeTab === "composer" ? html`<div class="workspace-summary">Manual HTTP request workbench</div>` : html`<${SearchBar}
+      ${
+        activeTab === "composer"
+          ? html`<div class="workspace-summary">Manual HTTP request workbench</div>`
+          : html`<${SearchBar}
         onSearch=${onSearch}
-        placeholder=${activeTab === "webhooks" ? "Filter source, method, or route…" : "Filter method, host, or URL…"}
-      />`}
-      ${activeTab === "composer" ? null : html`<div class="workspace-summary">
-        ${project ? `source:${project} · ` : ""}${filtered} visible
+        placeholder=${activeTab === "webhooks" ? "Filter source, method, or route…" : "Filter method, host, URL, or status…"}
+      />`
+      }
+      ${
+        activeTab === "composer"
+          ? null
+          : html`<div class="workspace-summary">
+        ${project ? `source:${project} · ` : ""}${total > filtered ? `${filtered} of ${total} matches` : `${filtered} visible`}
+        ${
+          activeTab === "traffic"
+            ? html`<label class="body-search-toggle" title="Also match request and response bodies. Slower: body content is not indexed, so this reads every body it scans.">
+              <input
+                type="checkbox"
+                checked=${bodySearch}
+                onChange=${(event) => onBodySearchChange(event.target.checked)}
+              />
+              <span>bodies</span>
+            </label>`
+            : null
+        }
         ${followControl}
-      </div>`}
+      </div>`
+      }
     </div>
   </div>`;
 }
@@ -60,9 +91,11 @@ function App() {
   const [activeTab, setActiveTab] = useState("webhooks");
   const [status, setStatus] = useState(null);
   const [webhooks, setWebhooks] = useState([]);
+  const [webhookTotal, setWebhookTotal] = useState(0);
   const [captures, setCaptures] = useState([]);
+  const [captureTotal, setCaptureTotal] = useState(0);
   const [scripts, setScripts] = useState([]);
-	const [composeRecipes, setComposeRecipes] = useState([]);
+  const [composeRecipes, setComposeRecipes] = useState([]);
   const [composerRequest, setComposerRequest] = useState(null);
 
   const [project, setProject] = useState("");
@@ -72,6 +105,8 @@ function App() {
   const [methodFilter, setMethodFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
+  // Only meaningful for traffic: extends the query to request/response bodies.
+  const [searchBodies, setSearchBodies] = useState(false);
 
   const [selection, setSelection] = useState(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -97,16 +132,31 @@ function App() {
       showToast("status: " + e);
     }
   };
+  // The search text, method and status travel to SQLite with each request. They
+  // are deliberately NOT applied again over the returned rows: the server
+  // matches more fields than any local pass would (status for captures, source
+  // IP for webhooks), so re-filtering locally would hide rows the query
+  // legitimately matched.
   const loadWebhooks = async () => {
     try {
-      setWebhooks((await api.listWebhooks(project)) || []);
+      const page = await api.listWebhooks({ project, query: search, method: methodFilter });
+      setWebhooks((page && page.webhooks) || []);
+      setWebhookTotal((page && page.total) || 0);
     } catch (e) {
       showToast("list webhooks: " + e);
     }
   };
   const loadCaptures = async () => {
     try {
-      setCaptures((await api.listCaptures(sessionFilter)) || []);
+      const page = await api.listCaptures({
+        session_id: sessionFilter,
+        query: search,
+        method: methodFilter,
+        status: statusFilter,
+        body: searchBodies,
+      });
+      setCaptures((page && page.captures) || []);
+      setCaptureTotal((page && page.total) || 0);
     } catch (e) {
       showToast("list captures: " + e);
     }
@@ -142,25 +192,30 @@ function App() {
       showToast("list scripts: " + e);
     }
   };
-	const loadComposeRecipes = async () => {
-		try {
-			setComposeRecipes((await api.listComposeRecipes()) || []);
-		} catch (e) {
-			showToast("list compose recipes: " + e);
-		}
-	};
+  const loadComposeRecipes = async () => {
+    try {
+      setComposeRecipes((await api.listComposeRecipes()) || []);
+    } catch (e) {
+      showToast("list compose recipes: " + e);
+    }
+  };
 
   // Status and transform metadata have their own slower refresh cadence.
   useEffect(() => {
     loadStatus();
     loadScripts();
-		loadComposeRecipes();
+    loadComposeRecipes();
     const s = setInterval(loadStatus, 5000);
     return () => clearInterval(s);
   }, []);
 
   // Keep both stream counts warm so switching tabs never starts from an empty
   // count. Settings pauses the stream polling because it has no live rows.
+  //
+  // Every query input is a dependency, so changing the search or a lens re-runs
+  // the effect instead of leaving the interval calling a stale closure. The
+  // first run is debounced so a burst of keystrokes issues one query after the
+  // last one rather than one per character.
   useEffect(() => {
     if (activeTab === "settings" || activeTab === "composer") return undefined;
     const tick = () => {
@@ -168,10 +223,13 @@ function App() {
       loadCaptures();
       loadSessions();
     };
-    tick();
+    const first = setTimeout(tick, 200);
     const t = setInterval(tick, 2000);
-    return () => clearInterval(t);
-  }, [activeTab, project, sessionFilter]);
+    return () => {
+      clearTimeout(first);
+      clearInterval(t);
+    };
+  }, [activeTab, project, sessionFilter, search, methodFilter, statusFilter, searchBodies]);
 
   useEffect(() => {
     if (!selection) return undefined;
@@ -246,7 +304,15 @@ function App() {
     selectionRequest.current += 1;
     setSelection({
       kind: "script",
-      data: { id: 0, name: "", trigger: "on_request", body: "", priority: 0, enabled: true, editor_key: Date.now() },
+      data: {
+        id: 0,
+        name: "",
+        trigger: "on_request",
+        body: "",
+        priority: 0,
+        enabled: true,
+        editor_key: Date.now(),
+      },
     });
   };
 
@@ -254,7 +320,10 @@ function App() {
     try {
       const draft = await api.parseTransformFile(await file.text());
       selectionRequest.current += 1;
-      setSelection({ kind: "script", data: { ...draft, id: 0, editor_key: Date.now(), imported_from: file.name } });
+      setSelection({
+        kind: "script",
+        data: { ...draft, id: 0, editor_key: Date.now(), imported_from: file.name },
+      });
       showToast(`Loaded ${file.name}. Review and save to import.`, 5000);
     } catch (e) {
       showToast(`Import failed: ${String(e)}`, 6000);
@@ -263,8 +332,12 @@ function App() {
 
   const exportScript = async (input) => {
     const contents = await api.formatTransformFile(input);
-    const slug = String(input.name || "transform").trim().toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "transform";
+    const slug =
+      String(input.name || "transform")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") || "transform";
     downloadText(`${slug}.wiretap-transform.json`, contents);
   };
 
@@ -302,7 +375,7 @@ function App() {
     try {
       await api.setScriptEnabled(id, enabled);
       loadScripts();
-			loadComposeRecipes();
+      loadComposeRecipes();
     } catch (e) {
       showToast("toggle script: " + e);
     }
@@ -314,40 +387,24 @@ function App() {
       return { kind: "script", data: { ...input, id, editor_key: current.data.editor_key } };
     });
     await loadScripts();
-		await loadComposeRecipes();
+    await loadComposeRecipes();
     showToast(input.id ? `Updated script ${id}` : `Created script ${id}`);
     return id;
   };
   const deleteScript = async (id) => {
     await api.deleteScript(id);
     await loadScripts();
-		await loadComposeRecipes();
+    await loadComposeRecipes();
     showToast(`Deleted script ${id}`);
   };
 
-  // --- client-side filtering --------------------------------------------
-  const matchesStatus = (code) => {
-    if (!statusFilter) return true;
-    if (!code) return false;
-    return String(code)[0] === statusFilter[0];
-  };
-  const matchesSearch = (fields) =>
-    !search || fields.some((f) => String(f || "").toLowerCase().includes(search.toLowerCase()));
-
-  const visibleWebhooks = webhooks.filter(
-    (w) =>
-      (!methodFilter || (w.method || "").toUpperCase() === methodFilter) &&
-      matchesSearch([w.project, w.method, w.path]),
-  );
-  const visibleCaptures = captures.filter(
-    (c) =>
-      (!methodFilter || (c.method || "").toUpperCase() === methodFilter) &&
-      matchesStatus(c.status) &&
-      matchesSearch([c.method, c.url]),
-  );
-
-  const displayedWebhooks = pausedRows ? pausedRows.webhooks : visibleWebhooks;
-  const displayedCaptures = pausedRows ? pausedRows.captures : visibleCaptures;
+  // --- display rows ------------------------------------------------------
+  // The rows are already the matching set: filtering happens in SQLite, so
+  // there is no local pass to apply. Staying out of the way here also keeps the
+  // method/status lens honest, since it now narrows the query rather than the
+  // newest page.
+  const displayedWebhooks = pausedRows ? pausedRows.webhooks : webhooks;
+  const displayedCaptures = pausedRows ? pausedRows.captures : captures;
 
   const closeDetail = () => {
     selectionRequest.current += 1;
@@ -361,13 +418,14 @@ function App() {
         webhook=${selection.data}
         defaultTarget=${(status && status.forward_url) || ""}
         onReplay=${api.replayWebhook}
-        onCompose=${() => openComposer({
-          method: selection.data.method || "POST",
-          url: (status && status.forward_url) || "",
-          headers: selection.data.headers || {},
-          body: selection.data.body || "",
-          apply_transforms: true,
-        })}
+        onCompose=${() =>
+          openComposer({
+            method: selection.data.method || "POST",
+            url: (status && status.forward_url) || "",
+            headers: selection.data.headers || {},
+            body: selection.data.body || "",
+            apply_transforms: true,
+          })}
         onExport=${(target, client) =>
           api.exportWebhook(selection.data.project, selection.data.seq, target, client)}
         onClose=${closeDetail}
@@ -375,15 +433,15 @@ function App() {
     if (selection.kind === "traffic")
       return html`<${TrafficDetail}
         capture=${selection.data}
-        onExport=${(target, client) =>
-          api.exportCapture(selection.data.id, target, client)}
-        onLoadBody=${(part, limit) =>
-          api.getCaptureBody(selection.data.id, part, limit)}
+        onExport=${(target, client) => api.exportCapture(selection.data.id, target, client)}
+        onLoadBody=${(part, limit) => api.getCaptureBody(selection.data.id, part, limit)}
         onCompose=${async () => {
           const body = await api.getCaptureBody(selection.data.id, "request", 0);
           openComposer({
-            method: selection.data.method || "GET", url: selection.data.url || "",
-            headers: selection.data.req_headers || {}, body: decodeBase64Text(body.body_base64),
+            method: selection.data.method || "GET",
+            url: selection.data.url || "",
+            headers: selection.data.req_headers || {},
+            body: decodeBase64Text(body.body_base64),
             apply_transforms: true,
           });
         }}
@@ -420,25 +478,58 @@ function App() {
     { id: "composer", label: "Compose request", glyph: "↗", run: () => openComposer() },
     { id: "settings", label: "Open settings", glyph: "⚙", run: toggleSettings },
     { id: "transform", label: "New transform", glyph: "+", run: newScript },
-    { id: "clear", label: "Clear filters", glyph: "×", run: () => { setSearch(""); setMethodFilter(""); setStatusFilter(""); setProject(""); setSessionFilter(0); } },
-    ...(selection?.kind === "traffic" ? [{ id: "copy-url", label: "Copy selected URL", glyph: "↗", run: () => copyText(selection.data.url).then(() => showToast("URL copied")) }] : []),
-    ...(selection?.kind === "webhook" ? [{ id: "replay", label: "Replay selected webhook", glyph: "↻", run: async () => {
-      const target = (status && status.forward_url) || "";
-      if (!target) {
-        showToast("Set a default forward URL in Settings first");
-        return;
-      }
-      try {
-        const result = await api.replayWebhook(selection.data.project, selection.data.seq, target);
-        showToast(`Replayed → HTTP ${result.status}`);
-      } catch (e) {
-        showToast("replay: " + e, 5000);
-      }
-    } }] : []),
+    {
+      id: "clear",
+      label: "Clear filters",
+      glyph: "×",
+      run: () => {
+        setSearch("");
+        setMethodFilter("");
+        setStatusFilter("");
+        setProject("");
+        setSessionFilter(0);
+      },
+    },
+    ...(selection?.kind === "traffic"
+      ? [
+          {
+            id: "copy-url",
+            label: "Copy selected URL",
+            glyph: "↗",
+            run: () => copyText(selection.data.url).then(() => showToast("URL copied")),
+          },
+        ]
+      : []),
+    ...(selection?.kind === "webhook"
+      ? [
+          {
+            id: "replay",
+            label: "Replay selected webhook",
+            glyph: "↻",
+            run: async () => {
+              const target = (status && status.forward_url) || "";
+              if (!target) {
+                showToast("Set a default forward URL in Settings first");
+                return;
+              }
+              try {
+                const result = await api.replayWebhook(
+                  selection.data.project,
+                  selection.data.seq,
+                  target,
+                );
+                showToast(`Replayed → HTTP ${result.status}`);
+              } catch (e) {
+                showToast("replay: " + e, 5000);
+              }
+            },
+          },
+        ]
+      : []),
   ];
 
   const followButton = html`<button class="follow-control ${follow ? "active" : ""}" onClick=${() => {
-    if (follow) setPausedRows({ webhooks: visibleWebhooks, captures: visibleCaptures });
+    if (follow) setPausedRows({ webhooks, captures });
     else setPausedRows(null);
     setFollow((v) => !v);
     setQueuedCount(0);
@@ -454,7 +545,7 @@ function App() {
       onRefresh=${() => {
         loadStatus();
         loadScripts();
-				loadComposeRecipes();
+        loadComposeRecipes();
         if (activeTab === "webhooks") loadWebhooks();
         else if (activeTab === "traffic") loadCaptures();
       }}
@@ -484,53 +575,70 @@ function App() {
         onStatusFilterChange=${setStatusFilter}
       />
       <div class="workspace">
-        ${activeTab === "settings"
-          ? html`<main class="workspace-main full">
+        ${
+          activeTab === "settings"
+            ? html`<main class="workspace-main full">
               <section class="event-stage">
                 <${Settings} onToast=${showToast} onSaved=${loadStatus} />
               </section>
             </main>`
-          : html`<${CommandDeck}
+            : html`<${CommandDeck}
                 activeTab=${activeTab}
                 onChange=${changeTab}
                 counts=${{ webhooks: displayedWebhooks.length, traffic: displayedCaptures.length, composer: null }}
                 onSearch=${setSearch}
                 project=${project}
                 filtered=${activeTab === "webhooks" ? displayedWebhooks.length : activeTab === "traffic" ? displayedCaptures.length : 0}
+                total=${activeTab === "webhooks" ? webhookTotal : activeTab === "traffic" ? captureTotal : 0}
+                bodySearch=${searchBodies}
+                onBodySearchChange=${setSearchBodies}
                 followControl=${html`<span class="follow-cluster">
                   ${followButton}
-                  ${queuedCount > 0 ? html`<button class="new-events-pill" onClick=${() => { setFollow(true); setPausedRows(null); setQueuedCount(0); }}>${queuedCount} new event${queuedCount === 1 ? "" : "s"}</button>` : null}
+                  ${
+                    queuedCount > 0
+                      ? html`<button class="new-events-pill" onClick=${() => {
+                          setFollow(true);
+                          setPausedRows(null);
+                          setQueuedCount(0);
+                        }}>${queuedCount} new event${queuedCount === 1 ? "" : "s"}</button>`
+                      : null
+                  }
                 </span>`}
               />
               <main class="workspace-main">
                 <section class="event-stage">
-                  ${activeTab === "composer"
-						? html`<${RequestComposer}
-							initialRequest=${composerRequest}
-							recipes=${composeRecipes}
-							onApplyRecipe=${api.applyComposeRecipe}
-							onSend=${api.sendComposedRequest}
-							onToast=${showToast}
-							compact=${selection?.kind === "script"}
-						/>`
-                    : activeTab === "webhooks"
-                    ? html`<${WebhookList}
+                  ${
+                    activeTab === "composer"
+                      ? html`<${RequestComposer}
+              initialRequest=${composerRequest}
+              recipes=${composeRecipes}
+              onApplyRecipe=${api.applyComposeRecipe}
+              onSend=${api.sendComposedRequest}
+              onToast=${showToast}
+              compact=${selection?.kind === "script"}
+            />`
+                      : activeTab === "webhooks"
+                        ? html`<${WebhookList}
                         webhooks=${displayedWebhooks}
                         onSelect=${openWebhook}
-                        selectedKey=${selection && selection.kind === "webhook"
-                          ? `${selection.data.project}-${selection.data.seq}`
-                          : null}
+                        selectedKey=${
+                          selection && selection.kind === "webhook"
+                            ? `${selection.data.project}-${selection.data.seq}`
+                            : null
+                        }
                       />`
-                    : html`<${TrafficList}
+                        : html`<${TrafficList}
                         captures=${displayedCaptures}
                         onSelect=${openCapture}
-                        selectedId=${selection && selection.kind === "traffic"
-                          ? selection.data.id
-                          : null}
-                      />`}
+                        selectedId=${
+                          selection && selection.kind === "traffic" ? selection.data.id : null
+                        }
+                      />`
+                  }
                 </section>
-				${detailPane()}
-              </main>`}
+        ${detailPane()}
+              </main>`
+        }
       </div>
     </div>
     <${Toast} message=${toast} />

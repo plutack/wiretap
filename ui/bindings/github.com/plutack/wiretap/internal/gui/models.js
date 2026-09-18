@@ -52,6 +52,138 @@ export class CaptureBodyView {
 }
 
 /**
+ * CapturePageView is one page of capture rows plus the size of the whole
+ * filtered set, so the deck can show "100 of 1,432 matches".
+ */
+export class CapturePageView {
+    /**
+     * Creates a new CapturePageView instance.
+     * @param {Partial<CapturePageView>} [$$source = {}] - The source object to create the CapturePageView.
+     */
+    constructor($$source = {}) {
+        if (!("captures" in $$source)) {
+            /**
+             * @member
+             * @type {CaptureView[]}
+             */
+            this["captures"] = [];
+        }
+        if (!("total" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["total"] = 0;
+        }
+        if (!("has_more" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["has_more"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CapturePageView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CapturePageView}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("captures" in $$parsedSource) {
+            $$parsedSource["captures"] = $$createField0_0($$parsedSource["captures"]);
+        }
+        return new CapturePageView(/** @type {Partial<CapturePageView>} */($$parsedSource));
+    }
+}
+
+/**
+ * CaptureQueryInput is the GUI's capture list request. The zero value lists the
+ * newest page with no filtering, which is what the dashboard shows by default.
+ * 
+ * The filter travels to SQLite rather than being applied in the frontend,
+ * because the frontend only ever holds one page: matching there could never find
+ * a capture older than that page.
+ */
+export class CaptureQueryInput {
+    /**
+     * Creates a new CaptureQueryInput instance.
+     * @param {Partial<CaptureQueryInput>} [$$source = {}] - The source object to create the CaptureQueryInput.
+     */
+    constructor($$source = {}) {
+        if (!("session_id" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["session_id"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["query"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["method"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["status"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Body extends Query matching to request/response bodies. Opt-in: no index
+             * can serve a substring match, so it reads every body it scans.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["body"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * BeforeID pages backwards from a previous page's last row.
+             * @member
+             * @type {number | undefined}
+             */
+            this["before_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Limit caps the page; 0 uses the GUI list cap.
+             * @member
+             * @type {number | undefined}
+             */
+            this["limit"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CaptureQueryInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CaptureQueryInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CaptureQueryInput(/** @type {Partial<CaptureQueryInput>} */($$parsedSource));
+    }
+}
+
+/**
  * CaptureView is the GUI DTO for a traffic capture. Bodies are omitted in list
  * responses; GetCapture fills bounded Base64 previews for the detail pane.
  */
@@ -170,8 +302,8 @@ export class CaptureView {
      * @returns {CaptureView}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType1;
-        const $$createField10_0 = $$createType1;
+        const $$createField6_0 = $$createType3;
+        const $$createField10_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("req_headers" in $$parsedSource) {
             $$parsedSource["req_headers"] = $$createField6_0($$parsedSource["req_headers"]);
@@ -284,8 +416,8 @@ export class ComposeRecipeDraftView {
      * @returns {ComposeRecipeDraftView}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType1;
-        const $$createField5_0 = $$createType0;
+        const $$createField2_0 = $$createType3;
+        const $$createField5_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("headers" in $$parsedSource) {
             $$parsedSource["headers"] = $$createField2_0($$parsedSource["headers"]);
@@ -443,7 +575,7 @@ export class ComposeRequestInput {
      * @returns {ComposeRequestInput}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType1;
+        const $$createField2_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("headers" in $$parsedSource) {
             $$parsedSource["headers"] = $$createField2_0($$parsedSource["headers"]);
@@ -513,7 +645,7 @@ export class ComposeResponseView {
      * @returns {ComposeResponseView}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType1;
+        const $$createField1_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("headers" in $$parsedSource) {
             $$parsedSource["headers"] = $$createField1_0($$parsedSource["headers"]);
@@ -571,7 +703,7 @@ export class RegisterInput {
      * @returns {RegisterInput}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType0;
+        const $$createField2_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("projects" in $$parsedSource) {
             $$parsedSource["projects"] = $$createField2_0($$parsedSource["projects"]);
@@ -621,7 +753,7 @@ export class RegisterView {
      * @returns {RegisterView}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType0;
+        const $$createField1_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("projects" in $$parsedSource) {
             $$parsedSource["projects"] = $$createField1_0($$parsedSource["projects"]);
@@ -733,7 +865,7 @@ export class RelayAdminClientView {
      * @returns {RelayAdminClientView}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType0;
+        const $$createField4_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("projects" in $$parsedSource) {
             $$parsedSource["projects"] = $$createField4_0($$parsedSource["projects"]);
@@ -790,7 +922,7 @@ export class RelayAdminCreateClientInput {
      * @returns {RelayAdminCreateClientInput}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType0;
+        const $$createField3_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("projects" in $$parsedSource) {
             $$parsedSource["projects"] = $$createField3_0($$parsedSource["projects"]);
@@ -801,7 +933,8 @@ export class RelayAdminCreateClientInput {
 
 /**
  * RelayAdminCredentialsView contains a newly-created client token. The relay
- * returns it once, so the GUI keeps it only in component memory for copying.
+ * returns it once, so the GUI keeps it only in component memory for copying or
+ * downloading as a portable handoff.
  */
 export class RelayAdminCredentialsView {
     /**
@@ -861,7 +994,7 @@ export class RelayAdminCredentialsView {
      * @returns {RelayAdminCredentialsView}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType0;
+        const $$createField5_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("projects" in $$parsedSource) {
             $$parsedSource["projects"] = $$createField5_0($$parsedSource["projects"]);
@@ -1019,7 +1152,7 @@ export class RelayAdminDeleteWebhooksInput {
      * @returns {RelayAdminDeleteWebhooksInput}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType2;
+        const $$createField3_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("seqs" in $$parsedSource) {
             $$parsedSource["seqs"] = $$createField3_0($$parsedSource["seqs"]);
@@ -1186,8 +1319,8 @@ export class RelayAdminOverviewView {
      * @returns {RelayAdminOverviewView}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType4;
-        const $$createField5_0 = $$createType6;
+        const $$createField4_0 = $$createType6;
+        const $$createField5_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("clients" in $$parsedSource) {
             $$parsedSource["clients"] = $$createField4_0($$parsedSource["clients"]);
@@ -1313,7 +1446,7 @@ export class RelayAdminProjectView {
      * @returns {RelayAdminProjectView}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType8;
+        const $$createField4_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("subscriptions" in $$parsedSource) {
             $$parsedSource["subscriptions"] = $$createField4_0($$parsedSource["subscriptions"]);
@@ -1565,7 +1698,7 @@ export class RelayAdminWebhookPageView {
      * @returns {RelayAdminWebhookPageView}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType10;
+        const $$createField0_0 = $$createType12;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("webhooks" in $$parsedSource) {
             $$parsedSource["webhooks"] = $$createField0_0($$parsedSource["webhooks"]);
@@ -1797,7 +1930,7 @@ export class ScriptTestRequest {
      * @returns {ScriptTestRequest}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType11;
+        const $$createField3_0 = $$createType13;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("headers" in $$parsedSource) {
             $$parsedSource["headers"] = $$createField3_0($$parsedSource["headers"]);
@@ -1904,9 +2037,9 @@ export class ScriptTestView {
      * @returns {ScriptTestView}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType1;
-        const $$createField5_0 = $$createType1;
-        const $$createField7_0 = $$createType0;
+        const $$createField2_0 = $$createType3;
+        const $$createField5_0 = $$createType3;
+        const $$createField7_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("req_headers" in $$parsedSource) {
             $$parsedSource["req_headers"] = $$createField2_0($$parsedSource["req_headers"]);
@@ -2039,7 +2172,7 @@ export class SessionPageView {
      * @returns {SessionPageView}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType13;
+        const $$createField0_0 = $$createType15;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
             $$parsedSource["sessions"] = $$createField0_0($$parsedSource["sessions"]);
@@ -2050,8 +2183,9 @@ export class SessionPageView {
 
 /**
  * SessionView is the GUI DTO for one interception session (a `wiretap
- * intercept start` run). EndedAt is empty while the session is running — or
- * when it crashed without cleanup.
+ * intercept start` run). EndedAt is empty only while the session is still
+ * running; Interrupted marks a session that ended without a clean shutdown,
+ * which startup closes out with a backfilled EndedAt.
  */
 export class SessionView {
     /**
@@ -2076,7 +2210,7 @@ export class SessionView {
         }
         if (/** @type {any} */(false)) {
             /**
-             * empty = running/crashed
+             * empty = still running
              * @member
              * @type {string | undefined}
              */
@@ -2354,7 +2488,7 @@ export class SettingsView {
      * @returns {SettingsView}
      */
     static createFrom($$source = {}) {
-        const $$createField12_0 = $$createType0;
+        const $$createField12_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("projects" in $$parsedSource) {
             $$parsedSource["projects"] = $$createField12_0($$parsedSource["projects"]);
@@ -2425,7 +2559,7 @@ export class StatusView {
      * @returns {StatusView}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType0;
+        const $$createField5_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("connected_projects" in $$parsedSource) {
             $$parsedSource["connected_projects"] = $$createField5_0($$parsedSource["connected_projects"]);
@@ -2482,7 +2616,7 @@ export class TargetView {
      * @returns {TargetView}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType15;
+        const $$createField3_0 = $$createType17;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("clients" in $$parsedSource) {
             $$parsedSource["clients"] = $$createField3_0($$parsedSource["clients"]);
@@ -2548,6 +2682,115 @@ export class TransformFileView {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new TransformFileView(/** @type {Partial<TransformFileView>} */($$parsedSource));
+    }
+}
+
+/**
+ * WebhookPageView is one page of webhook summaries plus the filtered-set size.
+ */
+export class WebhookPageView {
+    /**
+     * Creates a new WebhookPageView instance.
+     * @param {Partial<WebhookPageView>} [$$source = {}] - The source object to create the WebhookPageView.
+     */
+    constructor($$source = {}) {
+        if (!("webhooks" in $$source)) {
+            /**
+             * @member
+             * @type {WebhookView[]}
+             */
+            this["webhooks"] = [];
+        }
+        if (!("total" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["total"] = 0;
+        }
+        if (!("has_more" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["has_more"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new WebhookPageView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {WebhookPageView}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType19;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("webhooks" in $$parsedSource) {
+            $$parsedSource["webhooks"] = $$createField0_0($$parsedSource["webhooks"]);
+        }
+        return new WebhookPageView(/** @type {Partial<WebhookPageView>} */($$parsedSource));
+    }
+}
+
+/**
+ * WebhookQueryInput is the GUI's webhook list request; the counterpart of
+ * CaptureQueryInput.
+ */
+export class WebhookQueryInput {
+    /**
+     * Creates a new WebhookQueryInput instance.
+     * @param {Partial<WebhookQueryInput>} [$$source = {}] - The source object to create the WebhookQueryInput.
+     */
+    constructor($$source = {}) {
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["project"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["query"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["method"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["before_seq"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["limit"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new WebhookQueryInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {WebhookQueryInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new WebhookQueryInput(/** @type {Partial<WebhookQueryInput>} */($$parsedSource));
     }
 }
 
@@ -2636,7 +2879,7 @@ export class WebhookView {
      * @returns {WebhookView}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType1;
+        const $$createField6_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("headers" in $$parsedSource) {
             $$parsedSource["headers"] = $$createField6_0($$parsedSource["headers"]);
@@ -2646,19 +2889,23 @@ export class WebhookView {
 }
 
 // Private type creation functions
-const $$createType0 = $Create.Array($Create.Any);
-const $$createType1 = $Create.Map($Create.Any, $$createType0);
+const $$createType0 = CaptureView.createFrom;
+const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = $Create.Array($Create.Any);
-const $$createType3 = RelayAdminClientView.createFrom;
-const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = RelayAdminProjectView.createFrom;
+const $$createType3 = $Create.Map($Create.Any, $$createType2);
+const $$createType4 = $Create.Array($Create.Any);
+const $$createType5 = RelayAdminClientView.createFrom;
 const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = RelayAdminSubscriptionView.createFrom;
+const $$createType7 = RelayAdminProjectView.createFrom;
 const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = RelayAdminWebhookView.createFrom;
+const $$createType9 = RelayAdminSubscriptionView.createFrom;
 const $$createType10 = $Create.Array($$createType9);
-const $$createType11 = $Create.Map($Create.Any, $Create.Any);
-const $$createType12 = SessionView.createFrom;
-const $$createType13 = $Create.Array($$createType12);
-const $$createType14 = ClientView.createFrom;
+const $$createType11 = RelayAdminWebhookView.createFrom;
+const $$createType12 = $Create.Array($$createType11);
+const $$createType13 = $Create.Map($Create.Any, $Create.Any);
+const $$createType14 = SessionView.createFrom;
 const $$createType15 = $Create.Array($$createType14);
+const $$createType16 = ClientView.createFrom;
+const $$createType17 = $Create.Array($$createType16);
+const $$createType18 = WebhookView.createFrom;
+const $$createType19 = $Create.Array($$createType18);

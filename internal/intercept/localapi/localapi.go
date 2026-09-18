@@ -22,8 +22,8 @@ import (
 // Declared here (consumer-side) so the API stays decoupled from the store
 // package internals and tests can substitute an in-memory fake.
 type Querier interface {
-	Webhooks(ctx context.Context, project string, limit int) ([]store.WebhookRow, error)
-	TrafficCaptures(ctx context.Context, limit int) ([]store.TrafficCaptureRow, error)
+	SearchWebhooks(ctx context.Context, f store.WebhookFilter) (store.WebhookPage, error)
+	SearchCaptureSummaries(ctx context.Context, f store.CaptureFilter) (store.CaptureSummaryPage, error)
 }
 
 // Server answers the control API routes. Construct with New, serve Routes() in
@@ -67,34 +67,57 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 }
 
 // handleWebhooks lists webhooks the relay tunnel pushed to this PC, newest
-// first. Optional ?project=p and ?limit=N (default 100, capped 1000).
+// first. Optional ?project=p, ?q= (substring over project, method, path and
+// source IP), ?method=M, and ?limit=N (default 100, capped 1000).
 func (s *Server) handleWebhooks(w http.ResponseWriter, r *http.Request) {
-	project := r.URL.Query().Get("project")
-	limit := parseLimit(r, 100, 1000)
-	rows, err := s.q.Webhooks(r.Context(), project, limit)
+	query := r.URL.Query()
+	page, err := s.q.SearchWebhooks(r.Context(), store.WebhookFilter{
+		Project: query.Get("project"),
+		Query:   query.Get("q"),
+		Method:  query.Get("method"),
+		Limit:   parseLimit(r, 100, 1000),
+	})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, errBody("query webhooks: %v", err))
 		return
 	}
-	writeJSON(w, http.StatusOK, webhookListResponse{Webhooks: toWebhooks(rows)})
+	writeJSON(w, http.StatusOK, webhookListResponse{
+		Webhooks: toWebhooks(page.Rows),
+		Total:    page.Total,
+		HasMore:  page.HasMore,
+	})
 }
 
 // handleCaptures lists intercepted traffic captures, newest first. Optional
+// ?q= (substring over method, URL and status), ?method=M, ?status=404|4xx, and
 // ?limit=N (default 100, capped 1000).
 func (s *Server) handleCaptures(w http.ResponseWriter, r *http.Request) {
-	limit := parseLimit(r, 100, 1000)
-	rows, err := s.q.TrafficCaptures(r.Context(), limit)
+	query := r.URL.Query()
+	page, err := s.q.SearchCaptureSummaries(r.Context(), store.CaptureFilter{
+		Query:  query.Get("q"),
+		Method: query.Get("method"),
+		Status: query.Get("status"),
+		Limit:  parseLimit(r, 100, 1000),
+	})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, errBody("query captures: %v", err))
 		return
 	}
-	writeJSON(w, http.StatusOK, captureListResponse{Captures: toCaptures(rows)})
+	writeJSON(w, http.StatusOK, captureListResponse{
+		Captures: toCaptures(page.Rows),
+		Total:    page.Total,
+		HasMore:  page.HasMore,
+	})
 }
 
 // --- DTOs --------------------------------------------------------------
 
 type webhookListResponse struct {
 	Webhooks []webhookDTO `json:"webhooks"`
+	// Total is the size of the whole filtered set, so a caller can tell a full
+	// page apart from the end of the results.
+	Total   int64 `json:"total"`
+	HasMore bool  `json:"has_more"`
 }
 
 type webhookDTO struct {
@@ -125,6 +148,10 @@ func toWebhooks(rows []store.WebhookRow) []webhookDTO {
 
 type captureListResponse struct {
 	Captures []captureDTO `json:"captures"`
+	// Total is the size of the whole filtered set, so a caller can tell a full
+	// page apart from the end of the results.
+	Total   int64 `json:"total"`
+	HasMore bool  `json:"has_more"`
 }
 
 type captureDTO struct {
@@ -137,7 +164,7 @@ type captureDTO struct {
 	RespBodyLen int       `json:"resp_body_len"`
 }
 
-func toCaptures(rows []store.TrafficCaptureRow) []captureDTO {
+func toCaptures(rows []store.TrafficCaptureSummaryRow) []captureDTO {
 	out := make([]captureDTO, 0, len(rows))
 	for _, c := range rows {
 		out = append(out, captureDTO{
@@ -145,9 +172,9 @@ func toCaptures(rows []store.TrafficCaptureRow) []captureDTO {
 			At:          c.At,
 			Method:      c.Method,
 			URL:         c.URL,
-			ReqBodyLen:  len(c.ReqBody),
+			ReqBodyLen:  c.ReqBodyLen,
 			Status:      c.Status,
-			RespBodyLen: len(c.RespBody),
+			RespBodyLen: c.RespBodyLen,
 		})
 	}
 	return out

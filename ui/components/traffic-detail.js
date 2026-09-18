@@ -11,9 +11,7 @@ import { Button } from "./ui.js";
 
 // Pull a header value case-insensitively (header maps are {name:[values]}).
 function headerValue(headers, name) {
-  const entry = Object.entries(headers || {}).find(
-    ([k]) => k.toLowerCase() === name.toLowerCase(),
-  );
+  const entry = Object.entries(headers || {}).find(([k]) => k.toLowerCase() === name.toLowerCase());
   if (!entry) return "";
   const v = entry[1];
   return Array.isArray(v) ? v.join(", ") : String(v);
@@ -77,12 +75,14 @@ export function TrafficDetail({ capture, onExport, onLoadBody, onCompose, onClos
                 />
       </>
 
-      ${onExport
-        ? html`<${ExportSnippet}
+      ${
+        onExport
+          ? html`<${ExportSnippet}
             exportKey=${`capture-${capture.id}`}
             convert=${onExport}
           />`
-        : null}
+          : null
+      }
     </>
   </>`;
 }

@@ -29,35 +29,37 @@ const STATUS_OPTIONS = [
 function NavSection({ title, count, action, collapsed, onToggle, children }) {
   return html`<section class="nav-section">
     <div class="nav-heading">
-		${onToggle
-			? html`<button class="nav-heading-toggle" onClick=${onToggle} aria-expanded=${!collapsed}>
-				<span class="nav-chevron ${collapsed ? "" : "expanded"}">›</span>
-				<span>${title}</span>
-			</button>`
-			: html`<span>${title}</span>`}
-		<span class="nav-heading-actions">
-			${count != null ? html`<span class="nav-count">${count}</span>` : null}
-			${action}
-		</span>
+    ${
+      onToggle
+        ? html`<button class="nav-heading-toggle" onClick=${onToggle} aria-expanded=${!collapsed}>
+        <span class="nav-chevron ${collapsed ? "" : "expanded"}">›</span>
+        <span>${title}</span>
+      </button>`
+        : html`<span>${title}</span>`
+    }
+    <span class="nav-heading-actions">
+      ${count != null ? html`<span class="nav-count">${count}</span>` : null}
+      ${action}
+    </span>
     </div>
-		${collapsed ? null : children}
+    ${collapsed ? null : children}
   </section>`;
 }
 
 function MoreButton({ remaining, expanded, onClick }) {
-	if (remaining <= 0 && !expanded) return null;
-	return html`<button class="nav-more" onClick=${onClick}>
-		<span>${expanded && remaining <= 0 ? "Show less" : `Show ${remaining} more`}</span>
-		<span class="nav-more-chevron ${expanded && remaining <= 0 ? "expanded" : ""}">⌄</span>
-	</button>`;
+  if (remaining <= 0 && !expanded) return null;
+  return html`<button class="nav-more" onClick=${onClick}>
+    <span>${expanded && remaining <= 0 ? "Show less" : `Show ${remaining} more`}</span>
+    <span class="nav-more-chevron ${expanded && remaining <= 0 ? "expanded" : ""}">⌄</span>
+  </button>`;
 }
 
 function includePinned(items, visibleCount, isPinned) {
-	const visible = items.slice(0, visibleCount);
-	for (const item of items) {
-		if (isPinned(item) && !visible.includes(item)) visible.push(item);
-	}
-	return visible;
+  const visible = items.slice(0, visibleCount);
+  for (const item of items) {
+    if (isPinned(item) && !visible.includes(item)) visible.push(item);
+  }
+  return visible;
 }
 
 function ProjectItem({ label, active, onClick, all = false }) {
@@ -73,9 +75,9 @@ export function Sidebar({
   selectedProject,
   onSelectProject,
   sessions = [],
-	sessionTotal = sessions.length,
-	sessionsHaveMore = false,
-	onLoadMoreSessions,
+  sessionTotal = sessions.length,
+  sessionsHaveMore = false,
+  onLoadMoreSessions,
   selectedSession = 0,
   onSelectSession,
   scripts,
@@ -89,34 +91,39 @@ export function Sidebar({
   onStatusFilterChange,
 }) {
   const enabledScripts = scripts.filter((script) => script.enabled).length;
-	const [collapsed, setCollapsed] = useState({ sources: false, sessions: false, transforms: false });
-	const [sourceLimit, setSourceLimit] = useState(6);
-	const [sessionLimit, setSessionLimit] = useState(8);
-	const [scriptLimit, setScriptLimit] = useState(6);
-	const transformFileRef = useRef(null);
-	const toggle = (section) => setCollapsed((current) => ({ ...current, [section]: !current[section] }));
-	const visibleProjects = includePinned(projects, sourceLimit, (item) => item === selectedProject);
-	const visibleSessions = includePinned(
-		sessions,
-		sessionLimit,
-		(item) => item.id === selectedSession || item.running,
-	);
-	const visibleScripts = scripts.slice(0, scriptLimit);
-	const sourceRemaining = Math.max(0, projects.length - sourceLimit);
-	const sessionRemaining = Math.max(0, sessionTotal - sessionLimit);
-	const scriptRemaining = Math.max(0, scripts.length - scriptLimit);
-	const showMoreSessions = async () => {
-		const nextLimit = sessionLimit + 10;
-		if (nextLimit > sessions.length && sessionsHaveMore && onLoadMoreSessions) {
-			await onLoadMoreSessions();
-		}
-		setSessionLimit(nextLimit);
-	};
-	const importTransform = async (event) => {
-		const file = event.target.files?.[0];
-		if (file && onImportScript) await onImportScript(file);
-		event.target.value = "";
-	};
+  const [collapsed, setCollapsed] = useState({
+    sources: false,
+    sessions: false,
+    transforms: false,
+  });
+  const [sourceLimit, setSourceLimit] = useState(6);
+  const [sessionLimit, setSessionLimit] = useState(8);
+  const [scriptLimit, setScriptLimit] = useState(6);
+  const transformFileRef = useRef(null);
+  const toggle = (section) =>
+    setCollapsed((current) => ({ ...current, [section]: !current[section] }));
+  const visibleProjects = includePinned(projects, sourceLimit, (item) => item === selectedProject);
+  const visibleSessions = includePinned(
+    sessions,
+    sessionLimit,
+    (item) => item.id === selectedSession || item.running,
+  );
+  const visibleScripts = scripts.slice(0, scriptLimit);
+  const sourceRemaining = Math.max(0, projects.length - sourceLimit);
+  const sessionRemaining = Math.max(0, sessionTotal - sessionLimit);
+  const scriptRemaining = Math.max(0, scripts.length - scriptLimit);
+  const showMoreSessions = async () => {
+    const nextLimit = sessionLimit + 10;
+    if (nextLimit > sessions.length && sessionsHaveMore && onLoadMoreSessions) {
+      await onLoadMoreSessions();
+    }
+    setSessionLimit(nextLimit);
+  };
+  const importTransform = async (event) => {
+    const file = event.target.files?.[0];
+    if (file && onImportScript) await onImportScript(file);
+    event.target.value = "";
+  };
 
   return html`<aside class="navigator">
     <div class="navigator-scroll">
@@ -135,16 +142,18 @@ export function Sidebar({
             onClick=${() => onSelectProject(project)}
           />`,
         )}
-        ${projects.length === 0
-          ? html`<p class="px-2 py-2 text-xs leading-relaxed text-neutral-600">
+        ${
+          projects.length === 0
+            ? html`<p class="px-2 py-2 text-xs leading-relaxed text-neutral-600">
               Connect a relay to discover project sources.
             </p>`
-          : null}
-		<${MoreButton}
-			remaining=${sourceRemaining}
-			expanded=${sourceLimit >= projects.length && projects.length > 6}
-			onClick=${() => setSourceLimit(sourceRemaining > 0 ? projects.length : 6)}
-		/>
+            : null
+        }
+    <${MoreButton}
+      remaining=${sourceRemaining}
+      expanded=${sourceLimit >= projects.length && projects.length > 6}
+      onClick=${() => setSourceLimit(sourceRemaining > 0 ? projects.length : 6)}
+    />
       </>
 
       <${NavSection} title="Sessions" count=${sessionTotal} collapsed=${collapsed.sessions} onToggle=${() => toggle("sessions")}>
@@ -164,35 +173,40 @@ export function Sidebar({
           >
             <span class="nav-glyph">#${s.id}</span>
             <span class="nav-label">${fmtSessionLabel(s.started_at)}</span>
-            ${s.running
-              ? html`<span class="live-dot online" title="running"></span>`
-			  : s.interrupted
-				? html`<span class="session-interrupted" title="interrupted session">!</span>`
-				: html`<span class="nav-count">${s.captures}</span>`}
+            ${
+              s.running
+                ? html`<span class="live-dot online" title="running"></span>`
+                : s.interrupted
+                  ? html`<span class="session-interrupted" title="interrupted session">!</span>
+          <span class="nav-count nav-count-warn" title=${`${s.captures} captures`}>${s.captures}</span>`
+                  : html`<span class="nav-count">${s.captures}</span>`
+            }
           </button>`,
         )}
-        ${sessions.length === 0
-          ? html`<p class="px-2 py-2 text-xs leading-relaxed text-neutral-600">
+        ${
+          sessions.length === 0
+            ? html`<p class="px-2 py-2 text-xs leading-relaxed text-neutral-600">
               Run <code>wiretap intercept start</code> to record a session.
             </p>`
-          : null}
-		<${MoreButton}
-			remaining=${Math.min(10, sessionRemaining)}
-			expanded=${sessionLimit >= sessionTotal && sessionTotal > 8}
-			onClick=${sessionRemaining > 0 ? showMoreSessions : () => setSessionLimit(8)}
-		/>
+            : null
+        }
+    <${MoreButton}
+      remaining=${Math.min(10, sessionRemaining)}
+      expanded=${sessionLimit >= sessionTotal && sessionTotal > 8}
+      onClick=${sessionRemaining > 0 ? showMoreSessions : () => setSessionLimit(8)}
+    />
       </>
 
       <${NavSection}
         title="Transforms"
         count=${enabledScripts + "/" + scripts.length}
-		collapsed=${collapsed.transforms}
-		onToggle=${() => toggle("transforms")}
+    collapsed=${collapsed.transforms}
+    onToggle=${() => toggle("transforms")}
         action=${html`<span class="transform-heading-actions">
-			<input ref=${transformFileRef} class="hidden" type="file" accept="application/json,.json,.wiretap-transform" onChange=${importTransform} />
-			<button class="new-script-button" title="Import transform file" aria-label="Import transform file" onClick=${() => transformFileRef.current?.click()}>⇧</button>
-			<button class="new-script-button" title="New transform" aria-label="New transform" onClick=${onNewScript}>＋</button>
-		</span>`}
+      <input ref=${transformFileRef} class="hidden" type="file" accept="application/json,.json,.wiretap-transform" onChange=${importTransform} />
+      <button class="new-script-button" title="Import transform file" aria-label="Import transform file" onClick=${() => transformFileRef.current?.click()}>⇧</button>
+      <button class="new-script-button" title="New transform" aria-label="New transform" onClick=${onNewScript}>＋</button>
+    </span>`}
       >
         ${visibleScripts.map(
           (script) => html`<div key=${script.id} class="nav-item">
@@ -213,17 +227,19 @@ export function Sidebar({
             <span class="nav-count">${(script.trigger || "").replace("on_", "")}</span>
           </div>`,
         )}
-        ${scripts.length === 0
-          ? html`<button class="nav-item" onClick=${onNewScript}>
+        ${
+          scripts.length === 0
+            ? html`<button class="nav-item" onClick=${onNewScript}>
               <span class="nav-glyph">JS</span>
               <span class="nav-label">Create first transform</span>
             </button>`
-          : null}
-		<${MoreButton}
-			remaining=${Math.min(10, scriptRemaining)}
-			expanded=${scriptLimit >= scripts.length && scripts.length > 6}
-			onClick=${() => setScriptLimit(scriptRemaining > 0 ? scriptLimit + 10 : 6)}
-		/>
+            : null
+        }
+    <${MoreButton}
+      remaining=${Math.min(10, scriptRemaining)}
+      expanded=${scriptLimit >= scripts.length && scripts.length > 6}
+      onClick=${() => setScriptLimit(scriptRemaining > 0 ? scriptLimit + 10 : 6)}
+    />
       </>
 
       <${NavSection} title="Lens">
@@ -243,8 +259,9 @@ export function Sidebar({
             options=${STATUS_OPTIONS}
           />
         </div>
-        ${(methodFilter || statusFilter)
-          ? html`<button
+        ${
+          methodFilter || statusFilter
+            ? html`<button
               class="nav-item"
               onClick=${() => {
                 onMethodFilterChange("");
@@ -254,7 +271,8 @@ export function Sidebar({
               <span class="nav-glyph">×</span>
               <span class="nav-label">Clear lens</span>
             </button>`
-          : null}
+            : null
+        }
       </>
     </div>
 

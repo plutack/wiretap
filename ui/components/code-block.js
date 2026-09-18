@@ -11,7 +11,10 @@ const HIGHLIGHT_LIMIT = 100 * 1024;
 const PREVIEW_STEP = 256 * 1024;
 
 function mediaType(contentType) {
-  return String(contentType || "").split(";", 1)[0].trim().toLowerCase();
+  return String(contentType || "")
+    .split(";", 1)[0]
+    .trim()
+    .toLowerCase();
 }
 
 function autoMode(type) {
@@ -49,7 +52,9 @@ function hexDump(bytes) {
   for (let offset = 0; offset < bytes.length; offset += 16) {
     const chunk = bytes.slice(offset, offset + 16);
     const hex = Array.from(chunk, (b) => b.toString(16).padStart(2, "0")).join(" ");
-    const ascii = Array.from(chunk, (b) => b >= 32 && b <= 126 ? String.fromCharCode(b) : ".").join("");
+    const ascii = Array.from(chunk, (b) =>
+      b >= 32 && b <= 126 ? String.fromCharCode(b) : ".",
+    ).join("");
     lines.push(`${offset.toString(16).padStart(8, "0")}  ${hex.padEnd(47, " ")}  |${ascii}|`);
   }
   return lines.join("\n");
@@ -80,7 +85,7 @@ export function BodyViewer({
   }, [bodyBase64, truncated]);
 
   const bytes = useMemo(
-    () => previewBase64 ? decodeBase64(previewBase64) : new TextEncoder().encode(body || ""),
+    () => (previewBase64 ? decodeBase64(previewBase64) : new TextEncoder().encode(body || "")),
     [body, previewBase64],
   );
   const text = useMemo(() => bytesToText(bytes), [bytes]);
@@ -108,10 +113,16 @@ export function BodyViewer({
   }, [formatted.text, language, useMicrolighter]);
 
   const imageURL = useMemo(() => {
-    if (effectiveMode !== "image" || previewTruncated || !bytes.length || !/^image\//.test(type)) return "";
+    if (effectiveMode !== "image" || previewTruncated || !bytes.length || !/^image\//.test(type))
+      return "";
     return URL.createObjectURL(new Blob([bytes], { type: type || "application/octet-stream" }));
   }, [bytes, effectiveMode, previewTruncated, type]);
-  useEffect(() => () => { if (imageURL) URL.revokeObjectURL(imageURL); }, [imageURL]);
+  useEffect(
+    () => () => {
+      if (imageURL) URL.revokeObjectURL(imageURL);
+    },
+    [imageURL],
+  );
 
   if (!bytes.length && !previewTruncated) return html`<p class="body-empty">(empty)</p>`;
 
@@ -157,7 +168,9 @@ export function BodyViewer({
     const result = previewTruncated && loadBody ? await fetchBody(0, "save") : null;
     if (previewTruncated && loadBody && !result) return;
     const downloadBytes = result ? decodeBase64(result.body_base64) : bytes;
-    const url = URL.createObjectURL(new Blob([downloadBytes], { type: type || "application/octet-stream" }));
+    const url = URL.createObjectURL(
+      new Blob([downloadBytes], { type: type || "application/octet-stream" }),
+    );
     const a = document.createElement("a");
     a.href = url;
     a.download = `wiretap-body.${type.split("/")[1]?.split("+")[0] || "bin"}`;
@@ -165,9 +178,10 @@ export function BodyViewer({
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
-  const modeLabel = mode === "auto" && selectedMode !== effectiveMode
-    ? `Auto (${effectiveMode} preview)`
-    : `Auto (${effectiveMode})`;
+  const modeLabel =
+    mode === "auto" && selectedMode !== effectiveMode
+      ? `Auto (${effectiveMode} preview)`
+      : `Auto (${effectiveMode})`;
 
   return html`<div class="body-viewer">
     <div class="body-viewer-toolbar">
@@ -189,28 +203,44 @@ export function BodyViewer({
       <button class="body-action" disabled=${loadState !== "idle"} onClick=${download}>
         ${loadState === "save" ? "Loading…" : "Save"}
       </button>
-      ${effectiveMode !== "image" ? html`<button class="body-action" disabled=${loadState !== "idle"} onClick=${copy}>
+      ${
+        effectiveMode !== "image"
+          ? html`<button class="body-action" disabled=${loadState !== "idle"} onClick=${copy}>
         ${loadState === "copy" ? "Loading…" : copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : previewTruncated && loadBody ? "Copy all" : previewTruncated ? "Copy preview" : "Copy"}
-      </button>` : null}
+      </button>`
+          : null
+      }
     </div>
-    ${previewTruncated ? html`<div class="body-large-warning">
+    ${
+      previewTruncated
+        ? html`<div class="body-large-warning">
       Showing ${Math.round(bytes.length / 1024)} KB of ${Math.round(totalLength / 1024)} KB as plain text to keep the inspector responsive.
-      ${loadBody ? html`<button class="body-action" disabled=${loadState !== "idle"} onClick=${showMore}>
+      ${
+        loadBody
+          ? html`<button class="body-action" disabled=${loadState !== "idle"} onClick=${showMore}>
         ${loadState === "preview" ? "Loading…" : "Show more"}
-      </button>` : null}
+      </button>`
+          : null
+      }
       ${loadState === "failed" ? html`<span>Could not load more.</span>` : null}
-    </div>` : selectedMode === "pretty" && !canHighlight ? html`<div class="body-large-warning">
+    </div>`
+        : selectedMode === "pretty" && !canHighlight
+          ? html`<div class="body-large-warning">
       Syntax highlighting is disabled above ${Math.round(HIGHLIGHT_LIMIT / 1024)} KB; displaying one plain-text node.
-    </div>` : null}
-    ${effectiveMode === "image" && previewTruncated
-      ? html`<p class="body-empty">The image exceeds the automatic preview limit. Save it to inspect the complete file.</p>`
-      : effectiveMode === "image" && imageURL
-        ? html`<div class="body-image-wrap"><img class="body-image" src=${imageURL} alt="Captured ${type} body" /></div>`
-      : useMicrolighter
-        ? html`<pre class="${maxHeightClass} body-code"><code class="language-${language}" data-language=${language}>${formatted.text}</code></pre>`
-      : formatted.html
-        ? html`<pre class="${maxHeightClass} body-code" dangerouslySetInnerHTML=${{ __html: formatted.html }}></pre>`
-        : html`<pre class="${maxHeightClass} body-code">${formatted.text}</pre>`}
+    </div>`
+          : null
+    }
+    ${
+      effectiveMode === "image" && previewTruncated
+        ? html`<p class="body-empty">The image exceeds the automatic preview limit. Save it to inspect the complete file.</p>`
+        : effectiveMode === "image" && imageURL
+          ? html`<div class="body-image-wrap"><img class="body-image" src=${imageURL} alt="Captured ${type} body" /></div>`
+          : useMicrolighter
+            ? html`<pre class="${maxHeightClass} body-code"><code class="language-${language}" data-language=${language}>${formatted.text}</code></pre>`
+            : formatted.html
+              ? html`<pre class="${maxHeightClass} body-code" dangerouslySetInnerHTML=${{ __html: formatted.html }}></pre>`
+              : html`<pre class="${maxHeightClass} body-code">${formatted.text}</pre>`
+    }
   </div>`;
 }
 
