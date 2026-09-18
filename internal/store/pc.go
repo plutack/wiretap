@@ -59,45 +59,6 @@ func (s *PCStore) LastSeq(ctx context.Context, project string) (int64, error) {
 	return seq, nil
 }
 
-// Webhooks lists the most recent `limit` webhooks for `project` (or all
-// projects when project is empty), newest-first. Used by the TUI/GUI.
-func (s *PCStore) Webhooks(ctx context.Context, project string, limit int) ([]WebhookRow, error) {
-	q := `SELECT project, seq, received_at, COALESCE(source_ip, ''), method, COALESCE(path, ''), headers, COALESCE(raw_headers, ''), body
-		      FROM webhooks`
-	args := []any{}
-	if project != "" {
-		q += " WHERE project = ?"
-		args = append(args, project)
-	}
-	if limit > 0 {
-		q += " ORDER BY seq DESC LIMIT ?"
-		args = append(args, limit)
-	} else {
-		q += " ORDER BY seq DESC"
-	}
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, fmt.Errorf("PCStore.Webhooks %q: %w", project, err)
-	}
-	defer rows.Close()
-	var out []WebhookRow
-	for rows.Next() {
-		var w WebhookRow
-		var received int64
-		var rawHeaders []byte
-		if err := rows.Scan(&w.Project, &w.Seq, &received, &w.SourceIP, &w.Method, &w.Path, &w.HeadersJSON, &rawHeaders, &w.Body); err != nil {
-			return nil, fmt.Errorf("PCStore.Webhooks scan: %w", err)
-		}
-		w.RawHeaders = rawHeaders
-		w.ReceivedAt = time.Unix(received, 0).UTC()
-		out = append(out, w)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("PCStore.Webhooks rows: %w", err)
-	}
-	return out, nil
-}
-
 // WebhookBySeq returns a specific webhook by (project, seq). Useful for the
 // replay feature: load one row and re-POST it to a target URL.
 func (s *PCStore) WebhookBySeq(ctx context.Context, project string, seq int64) (*WebhookRow, error) {
@@ -143,91 +104,6 @@ func (s *PCStore) InsertTrafficCapture(ctx context.Context, c TrafficCaptureRow)
 	return id, nil
 }
 
-// TrafficCaptures lists the most recent traffic captures, newest-first.
-func (s *PCStore) TrafficCaptures(ctx context.Context, limit int) ([]TrafficCaptureRow, error) {
-	return s.TrafficCapturesBySession(ctx, 0, limit)
-}
-
-// TrafficCapturesBySession lists the most recent traffic captures,
-// newest-first, filtered to one intercept session. sessionID 0 means "all
-// sessions".
-func (s *PCStore) TrafficCapturesBySession(ctx context.Context, sessionID int64, limit int) ([]TrafficCaptureRow, error) {
-	q := `SELECT id, COALESCE(session_id, 0), at, COALESCE(method, ''), COALESCE(url, ''), COALESCE(req_headers, ''), COALESCE(req_body, ''), status, COALESCE(resp_headers, ''), COALESCE(resp_body, '') FROM traffic_captures`
-	args := []any{}
-	if sessionID != 0 {
-		q += " WHERE session_id = ?"
-		args = append(args, sessionID)
-	}
-	if limit > 0 {
-		q += " ORDER BY id DESC LIMIT ?"
-		args = append(args, limit)
-	} else {
-		q += " ORDER BY id DESC"
-	}
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, fmt.Errorf("PCStore.TrafficCaptures: %w", err)
-	}
-	defer rows.Close()
-	var out []TrafficCaptureRow
-	for rows.Next() {
-		var c TrafficCaptureRow
-		var at int64
-		var status sql.NullInt64
-		if err := rows.Scan(&c.ID, &c.SessionID, &at, &c.Method, &c.URL, &c.ReqHeadersJSON, &c.ReqBody, &status, &c.RespHeadersJSON, &c.RespBody); err != nil {
-			return nil, fmt.Errorf("PCStore.TrafficCaptures scan: %w", err)
-		}
-		c.At = time.Unix(at, 0).UTC()
-		if status.Valid {
-			c.Status = int(status.Int64)
-		}
-		out = append(out, c)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("PCStore.TrafficCaptures rows: %w", err)
-	}
-	return out, nil
-}
-
-// TrafficCaptureSummariesBySession lists capture metadata without selecting
-// request or response body blobs. sessionID 0 means "all sessions".
-func (s *PCStore) TrafficCaptureSummariesBySession(ctx context.Context, sessionID int64, limit int) ([]TrafficCaptureSummaryRow, error) {
-	q := `SELECT id, COALESCE(session_id, 0), at, COALESCE(method, ''), COALESCE(url, ''), status, length(COALESCE(req_body, '')), length(COALESCE(resp_body, '')) FROM traffic_captures`
-	args := []any{}
-	if sessionID != 0 {
-		q += " WHERE session_id = ?"
-		args = append(args, sessionID)
-	}
-	q += " ORDER BY id DESC"
-	if limit > 0 {
-		q += " LIMIT ?"
-		args = append(args, limit)
-	}
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, fmt.Errorf("PCStore.TrafficCaptureSummariesBySession: %w", err)
-	}
-	defer rows.Close()
-	var out []TrafficCaptureSummaryRow
-	for rows.Next() {
-		var c TrafficCaptureSummaryRow
-		var at int64
-		var status sql.NullInt64
-		if err := rows.Scan(&c.ID, &c.SessionID, &at, &c.Method, &c.URL, &status, &c.ReqBodyLen, &c.RespBodyLen); err != nil {
-			return nil, fmt.Errorf("PCStore.TrafficCaptureSummariesBySession scan: %w", err)
-		}
-		c.At = time.Unix(at, 0).UTC()
-		if status.Valid {
-			c.Status = int(status.Int64)
-		}
-		out = append(out, c)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("PCStore.TrafficCaptureSummariesBySession rows: %w", err)
-	}
-	return out, nil
-}
-
 // TrafficCapturePreviewByID returns capture metadata and at most bodyLimit
 // bytes from each body. bodyLimit must be positive.
 func (s *PCStore) TrafficCapturePreviewByID(ctx context.Context, id int64, bodyLimit int) (*TrafficCapturePreviewRow, error) {
@@ -235,7 +111,7 @@ func (s *PCStore) TrafficCapturePreviewByID(ctx context.Context, id int64, bodyL
 		return nil, fmt.Errorf("PCStore.TrafficCapturePreviewByID: body limit must be positive")
 	}
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, COALESCE(session_id, 0), at, COALESCE(method, ''), COALESCE(url, ''), COALESCE(req_headers, ''), substr(COALESCE(req_body, ''), 1, ?), length(COALESCE(req_body, '')), status, COALESCE(resp_headers, ''), substr(COALESCE(resp_body, ''), 1, ?), length(COALESCE(resp_body, ''))
+		`SELECT id, COALESCE(session_id, 0), at, COALESCE(method, ''), COALESCE(url, ''), COALESCE(req_headers, ''), substr(COALESCE(req_body, ''), 1, ?), COALESCE(length(req_body), 0), status, COALESCE(resp_headers, ''), substr(COALESCE(resp_body, ''), 1, ?), COALESCE(length(resp_body), 0)
 		 FROM traffic_captures WHERE id = ?`,
 		bodyLimit, bodyLimit, id,
 	)
@@ -270,7 +146,7 @@ func (s *PCStore) TrafficCaptureBody(ctx context.Context, id int64, response boo
 	}
 	args = append(args, id)
 	row := s.db.QueryRowContext(ctx,
-		"SELECT "+expr+", length(COALESCE("+column+", '')) FROM traffic_captures WHERE id = ?",
+		"SELECT "+expr+", COALESCE(length("+column+"), 0) FROM traffic_captures WHERE id = ?",
 		args...,
 	)
 	var body []byte
@@ -339,6 +215,39 @@ func (s *PCStore) EndInterceptSession(ctx context.Context, id int64, endedAt tim
 	return nil
 }
 
+// ReconcileInterceptSessions closes out sessions that never recorded an end
+// time, which is what a crashed or killed `wiretap intercept start` leaves
+// behind. Without this, such a row stays open forever and never shows a close
+// time.
+//
+// activeSessionID identifies the session owned by a process that is still
+// running (0 when none is); it is never touched. Sessions started within
+// gracePeriod are skipped too, because `intercept start` inserts its row
+// slightly before it publishes the PID file that identifies it as active, so a
+// session begun moments ago may not be identifiable yet.
+//
+// ended_at is backfilled with the session's last captured request, falling back
+// to started_at when the session captured nothing, and interrupted is set so
+// the run stays distinguishable from a clean shutdown. Returns the number of
+// sessions closed.
+func (s *PCStore) ReconcileInterceptSessions(ctx context.Context, activeSessionID int64, now time.Time, gracePeriod time.Duration) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE intercept_sessions
+		SET ended_at = COALESCE(
+				(SELECT MAX(c.at) FROM traffic_captures c WHERE c.session_id = intercept_sessions.id),
+				started_at
+			),
+			interrupted = 1
+		WHERE ended_at IS NULL AND id != ? AND started_at <= ?`,
+		activeSessionID, now.Add(-gracePeriod).Unix(),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("PCStore.ReconcileInterceptSessions: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // InterceptSessions lists sessions newest-first with their capture counts.
 // limit <= 0 returns all.
 func (s *PCStore) InterceptSessions(ctx context.Context, limit int) ([]InterceptSessionRow, error) {
@@ -356,6 +265,7 @@ func (s *PCStore) InterceptSessionsPage(ctx context.Context, beforeID int64, lim
 	}
 
 	q := `SELECT s.id, s.started_at, COALESCE(s.ended_at, 0), COALESCE(s.shell, ''), COALESCE(s.proxy_addr, ''),
+		COALESCE(s.interrupted, 0),
 		(SELECT COUNT(*) FROM traffic_captures c WHERE c.session_id = s.id)
 		FROM intercept_sessions s`
 	args := []any{}
@@ -378,13 +288,15 @@ func (s *PCStore) InterceptSessionsPage(ctx context.Context, beforeID int64, lim
 	for rows.Next() {
 		var r InterceptSessionRow
 		var started, ended int64
-		if err := rows.Scan(&r.ID, &started, &ended, &r.Shell, &r.ProxyAddr, &r.Captures); err != nil {
+		var interrupted int
+		if err := rows.Scan(&r.ID, &started, &ended, &r.Shell, &r.ProxyAddr, &interrupted, &r.Captures); err != nil {
 			return nil, 0, fmt.Errorf("PCStore.InterceptSessionsPage scan: %w", err)
 		}
 		r.StartedAt = time.Unix(started, 0).UTC()
 		if ended != 0 {
 			r.EndedAt = time.Unix(ended, 0).UTC()
 		}
+		r.Interrupted = interrupted != 0
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {

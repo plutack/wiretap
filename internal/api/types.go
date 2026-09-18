@@ -45,11 +45,12 @@ type HealthResponse struct {
 	TunnelCount int    `json:"tunnel_count,omitempty"`
 }
 
-// IngressResponse is returned on a successful POST /:project. seq is the
-// sequence number assigned to the webhook by the relay; useful for the
-// caller to reference later via /admin/projects/:p/webhooks/:seq/replay.
+// IngressResponse is returned on a successful POST /:project. It deliberately
+// carries no sequence number: that is a per-project counter, so echoing it
+// would disclose the project's lifetime webhook volume to anyone who can POST
+// to the path. The body exists purely as a receipt.
 type IngressResponse struct {
-	Seq int64 `json:"seq"`
+	Status string `json:"status"`
 }
 
 // Client is the public projection of a registered client. Used in

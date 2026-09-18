@@ -28,6 +28,44 @@ import (
 //go:embed migrations/relay/*.sql migrations/pc/*.sql
 var migrationFS embed.FS
 
+// connectionParams are applied by the driver to every connection it opens, so
+// pooled connections created later inherit them too. Running the same settings
+// once through db.Exec would configure only whichever pooled connection served
+// that call; busy_timeout and foreign_keys are per-connection in SQLite, so
+// every later connection would silently run with the defaults (no timeout, no
+// cascade enforcement).
+//
+//   - _pragma=busy_timeout(5000): wait for a contended lock instead of failing
+//     immediately with SQLITE_BUSY.
+//   - _pragma=foreign_keys(1): enforce ON DELETE CASCADE, which is OFF by
+//     default and is what DeleteProject/DeleteClient rely on.
+//   - _pragma=journal_mode(WAL): readers alongside the single writer. This one
+//     is persisted in the database header, so re-applying it per connection is
+//     a no-op after the first.
+//   - _txlock=immediate: begin transactions with BEGIN IMMEDIATE so they take
+//     the write lock up front. A deferred transaction that reads and then
+//     writes cannot be rescued by busy_timeout: when its read snapshot goes
+//     stale, SQLite returns SQLITE_BUSY / SQLITE_BUSY_SNAPSHOT without
+//     consulting the busy handler.
+var connectionParams = []string{
+	"_txlock=immediate",
+	"_pragma=busy_timeout(5000)",
+	"_pragma=foreign_keys(1)",
+	"_pragma=journal_mode(WAL)",
+}
+
+// withConnectionParams appends the driver query parameters to a path or URI.
+// modernc.org/sqlite keeps the query out of the filename unless the DSN starts
+// with "file:", so a plain filesystem path (Windows paths included) is passed
+// through to the OS untouched.
+func withConnectionParams(path string) string {
+	sep := "?"
+	if strings.ContainsRune(path, '?') {
+		sep = "&"
+	}
+	return path + sep + strings.Join(connectionParams, "&")
+}
+
 // Open opens (or creates) a SQLite database at path. The caller is
 // responsible for Close. For tests, prefer OpenInMemory.
 //
@@ -35,21 +73,15 @@ var migrationFS embed.FS
 // driver_register.go; this file keeps an indirect dependency rather than a
 // blank import here so the seam is visible to readers.
 func Open(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", withConnectionParams(path))
 	if err != nil {
 		return nil, fmt.Errorf("store: open %s: %w", path, err)
 	}
-	// Single writer is plenty for our load and avoids SQLITE_BUSY surprises;
-	// modernc.org/sqlite supports concurrent reads under WAL.
-	for _, pragma := range []string{
-		"PRAGMA journal_mode = WAL;",  // concurrent readers alongside the one writer
-		"PRAGMA foreign_keys = ON;",   // enforce FK cascades (OFF by default in SQLite)
-		"PRAGMA busy_timeout = 5000;", // wait 5s instead of immediate SQLITE_BUSY
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("store: set %q: %w", pragma, err)
-		}
+	// sql.Open is lazy. Connect once so an unusable path fails here rather than
+	// at first use, and so the per-connection parameters are actually applied.
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("store: open %s: %w", path, err)
 	}
 	return db, nil
 }

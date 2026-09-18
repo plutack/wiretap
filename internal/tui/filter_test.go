@@ -1,10 +1,15 @@
 package tui
 
 import (
+	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/plutack/wiretap/internal/store"
 )
 
 // runExecMsgs drives the model and executes returned commands a bounded
@@ -44,6 +49,51 @@ func runExecMsgs(t *testing.T, m Model, msgs ...tea.Msg) Model {
 		exec(cmd, 0)
 	}
 	return cur.(Model)
+}
+
+// TestTrafficFilterQueriesTheStore pins that "/" narrows the query rather than
+// the loaded page. The matching capture sits behind a row of newer traffic that
+// fills the list's page, so a frontend-side filter could never surface it.
+func TestTrafficFilterQueriesTheStore(t *testing.T) {
+	st := freshPCStore(t)
+	ctx := context.Background()
+	if _, err := st.InsertTrafficCapture(ctx, store.TrafficCaptureRow{
+		At: tuiFixedTime, Method: "POST", URL: "https://api.test/checkout", Status: 201,
+	}); err != nil {
+		t.Fatalf("InsertTrafficCapture: %v", err)
+	}
+	// Newer rows that match nothing, so the target is not the newest page.
+	for i := range rowLimit {
+		if _, err := st.InsertTrafficCapture(ctx, store.TrafficCaptureRow{
+			At:     tuiFixedTime.Add(time.Duration(i+1) * time.Second),
+			Method: "GET", URL: fmt.Sprintf("https://api.test/noise/%d", i), Status: 200,
+		}); err != nil {
+			t.Fatalf("InsertTrafficCapture noise %d: %v", i, err)
+		}
+	}
+
+	m := mustTick(t, New(storeDeps(st)))
+	m.tab = tabTraffic
+	if len(m.captureRows) != rowLimit {
+		t.Fatalf("unfiltered rows = %d, want a full page of %d", len(m.captureRows), rowLimit)
+	}
+
+	m.traffic.SetFilterText("checkout")
+	out := runExecMsgs(t, m, tickMsg{})
+
+	if len(out.captureRows) != 1 {
+		t.Fatalf("filtered rows = %d, want 1", len(out.captureRows))
+	}
+	if got := out.captureRows[0].URL; got != "https://api.test/checkout" {
+		t.Errorf("filtered row = %q, want the checkout capture", got)
+	}
+	// The status lens travels with it, so a lens that excludes the match empties
+	// the result rather than falling back to the loaded page.
+	out.methodLens = "GET"
+	out = runExecMsgs(t, out, tickMsg{})
+	if len(out.captureRows) != 0 {
+		t.Errorf("rows with method lens GET = %d, want 0", len(out.captureRows))
+	}
 }
 
 // TestTextFilterSurvivesRefresh pins the fix for the bug where every 500ms

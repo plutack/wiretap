@@ -45,10 +45,7 @@ export function ExportSnippet({ exportKey, convert }) {
     };
   }, []);
 
-  const active = useMemo(
-    () => targets.find((t) => t.key === target) || null,
-    [targets, target],
-  );
+  const active = useMemo(() => targets.find((t) => t.key === target) || null, [targets, target]);
 
   // Re-convert whenever the row or the language/client selection changes.
   useEffect(() => {
@@ -113,9 +110,10 @@ export function ExportSnippet({ exportKey, convert }) {
         options=${clientOptions}
       />
     </div>
-    ${error
-      ? html`<p class="mt-2 text-xs text-rose-400">${error}</p>`
-      : html`<div class="mt-2 overflow-hidden rounded-md border border-neutral-800 bg-neutral-950">
+    ${
+      error
+        ? html`<p class="mt-2 text-xs text-rose-400">${error}</p>`
+        : html`<div class="mt-2 overflow-hidden rounded-md border border-neutral-800 bg-neutral-950">
           <div class="flex items-center gap-2 border-b border-neutral-800 bg-neutral-900/60 px-2 py-1">
             <span class="chip bg-brand-500/15 text-brand-300">${target}${client ? "/" + client : ""}</span>
             <div class="ml-auto">
@@ -131,6 +129,7 @@ export function ExportSnippet({ exportKey, convert }) {
             class="max-h-72 overflow-auto p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words"
             dangerouslySetInnerHTML=${{ __html: escapeHTML(snippet) }}
           ></pre>
-        </div>`}
+        </div>`
+    }
   </section>`;
 }

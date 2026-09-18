@@ -59,18 +59,20 @@ export function WebhookList({ webhooks, onSelect, selectedKey }) {
       </tr>
     </thead>
     <tbody>
-      ${grouped
-        ? projects.map((project) => {
-            const rows = webhooks.filter((w) => w.project === project);
-            return html`<tr key=${"group-" + project} class="signal-group-row">
+      ${
+        grouped
+          ? projects.map((project) => {
+              const rows = webhooks.filter((w) => w.project === project);
+              return html`<tr key=${"group-" + project} class="signal-group-row">
                 <td colspan="5">
                   ${project}
                   <span class="signal-group-count">${rows.length} deliver${rows.length === 1 ? "y" : "ies"}</span>
                 </td>
               </tr>
               ${rows.map(row)}`;
-          })
-        : webhooks.map(row)}
+            })
+          : webhooks.map(row)
+      }
     </tbody>
   </table>`;
 }

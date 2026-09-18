@@ -107,6 +107,99 @@ func TestInterceptSessionsPage_CursorAndTotal(t *testing.T) {
 	}
 }
 
+func TestReconcileInterceptSessions_ClosesOnlyCrashedSessions(t *testing.T) {
+	t.Parallel()
+	s := newSessionTestStore(t)
+	ctx := context.Background()
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	old := now.Add(-2 * time.Hour)
+
+	// Crashed run that captured traffic: the last capture is when it stopped.
+	crashed, err := s.CreateInterceptSession(ctx, old, "bash", ":0")
+	if err != nil {
+		t.Fatalf("create crashed: %v", err)
+	}
+	lastCapture := old.Add(7 * time.Minute)
+	for _, at := range []time.Time{old.Add(time.Minute), lastCapture} {
+		if _, err := s.InsertTrafficCapture(ctx, TrafficCaptureRow{
+			SessionID: crashed, At: at, Method: "GET", URL: "https://x.test/",
+		}); err != nil {
+			t.Fatalf("insert capture: %v", err)
+		}
+	}
+
+	// Crashed run that captured nothing: fall back to started_at.
+	emptyStarted := old.Add(-time.Hour)
+	empty, err := s.CreateInterceptSession(ctx, emptyStarted, "fish", ":0")
+	if err != nil {
+		t.Fatalf("create empty: %v", err)
+	}
+
+	// Owned by a live process, so it must be left alone.
+	active, err := s.CreateInterceptSession(ctx, old.Add(-time.Hour), "bash", ":0")
+	if err != nil {
+		t.Fatalf("create active: %v", err)
+	}
+
+	// Started moments ago: inside the grace period, so left alone.
+	recent, err := s.CreateInterceptSession(ctx, now.Add(-time.Second), "bash", ":0")
+	if err != nil {
+		t.Fatalf("create recent: %v", err)
+	}
+
+	// Already closed cleanly.
+	closedCleanly, err := s.CreateInterceptSession(ctx, old.Add(-time.Hour), "bash", ":0")
+	if err != nil {
+		t.Fatalf("create closed: %v", err)
+	}
+	cleanEnd := old.Add(-30 * time.Minute)
+	if err := s.EndInterceptSession(ctx, closedCleanly, cleanEnd); err != nil {
+		t.Fatalf("EndInterceptSession: %v", err)
+	}
+
+	n, err := s.ReconcileInterceptSessions(ctx, active, now, time.Minute)
+	if err != nil {
+		t.Fatalf("ReconcileInterceptSessions: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("closed %d sessions, want 2", n)
+	}
+
+	rows, err := s.InterceptSessions(ctx, 10)
+	if err != nil {
+		t.Fatalf("InterceptSessions: %v", err)
+	}
+	byID := make(map[int64]InterceptSessionRow, len(rows))
+	for _, row := range rows {
+		byID[row.ID] = row
+	}
+
+	if got := byID[crashed]; !got.Interrupted || got.EndedAt.Unix() != lastCapture.Unix() {
+		t.Errorf("crashed = interrupted %v, ended %v; want true, %v", got.Interrupted, got.EndedAt, lastCapture)
+	}
+	if got := byID[empty]; !got.Interrupted || got.EndedAt.Unix() != emptyStarted.Unix() {
+		t.Errorf("empty = interrupted %v, ended %v; want true, %v", got.Interrupted, got.EndedAt, emptyStarted)
+	}
+	if got := byID[active]; got.Interrupted || !got.EndedAt.IsZero() {
+		t.Errorf("active = interrupted %v, ended %v; want false, zero", got.Interrupted, got.EndedAt)
+	}
+	if got := byID[recent]; got.Interrupted || !got.EndedAt.IsZero() {
+		t.Errorf("recent = interrupted %v, ended %v; want false, zero", got.Interrupted, got.EndedAt)
+	}
+	if got := byID[closedCleanly]; got.Interrupted || got.EndedAt.Unix() != cleanEnd.Unix() {
+		t.Errorf("closed = interrupted %v, ended %v; want false, %v", got.Interrupted, got.EndedAt, cleanEnd)
+	}
+
+	// Second run is a no-op: nothing is left open.
+	again, err := s.ReconcileInterceptSessions(ctx, active, now, time.Minute)
+	if err != nil {
+		t.Fatalf("second ReconcileInterceptSessions: %v", err)
+	}
+	if again != 0 {
+		t.Errorf("second run closed %d sessions, want 0", again)
+	}
+}
+
 func TestTrafficCapturesBySession_Filters(t *testing.T) {
 	t.Parallel()
 	s := newSessionTestStore(t)
@@ -124,18 +217,12 @@ func TestTrafficCapturesBySession_Filters(t *testing.T) {
 		t.Fatalf("insert unsessioned: %v", err)
 	}
 
-	all, err := s.TrafficCapturesBySession(ctx, 0, 10)
-	if err != nil {
-		t.Fatalf("all: %v", err)
-	}
+	all := listCaptures(t, s, 0, 10)
 	if len(all) != 2 {
 		t.Fatalf("all = %d rows, want 2", len(all))
 	}
 
-	in, err := s.TrafficCapturesBySession(ctx, sid, 10)
-	if err != nil {
-		t.Fatalf("filtered: %v", err)
-	}
+	in := listCaptures(t, s, sid, 10)
 	if len(in) != 1 || in[0].URL != "https://in.test/" || in[0].SessionID != sid {
 		t.Errorf("filtered rows = %+v", in)
 	}

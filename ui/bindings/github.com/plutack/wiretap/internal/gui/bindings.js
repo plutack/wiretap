@@ -173,14 +173,15 @@ export function ImportRelayClientFile(contents, force) {
 }
 
 /**
- * ListCaptures returns the most recent traffic captures, newest-first,
- * optionally filtered to one interception session (0 = all). Bodies and full
- * header maps are omitted (use GetCapture for the detail payload).
- * @param {number} sessionID
- * @returns {$CancellablePromise<$models.CaptureView[]>}
+ * ListCaptures returns one page of traffic captures matching in, newest-first.
+ * The predicate runs in SQLite, so a capture older than any page already held is
+ * still found. Bodies and full header maps are omitted (use GetCapture for the
+ * detail payload).
+ * @param {$models.CaptureQueryInput} $in
+ * @returns {$CancellablePromise<$models.CapturePageView>}
  */
-export function ListCaptures(sessionID) {
-    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListCaptures", sessionID).then(/** @type {($result: any) => any} */(($result) => {
+export function ListCaptures($in) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListCaptures", $in).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType8($result);
     }));
 }
@@ -220,14 +221,14 @@ export function ListSessions(beforeID, limit) {
 }
 
 /**
- * ListWebhooks returns the most recent webhooks, newest-first, optionally
- * filtered by project (empty string = all projects). Body/Headers are omitted
- * (use GetWebhook for the full payload).
- * @param {string} project
- * @returns {$CancellablePromise<$models.WebhookView[]>}
+ * ListWebhooks returns one page of webhooks matching in, newest-first. The
+ * predicate runs in SQLite, so a match older than any page already held is still
+ * found. Body/Headers are omitted (use GetWebhook for the full payload).
+ * @param {$models.WebhookQueryInput} $in
+ * @returns {$CancellablePromise<$models.WebhookPageView>}
  */
-export function ListWebhooks(project) {
-    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListWebhooks", project).then(/** @type {($result: any) => any} */(($result) => {
+export function ListWebhooks($in) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.ListWebhooks", $in).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType13($result);
     }));
 }
@@ -510,12 +511,12 @@ const $$createType4 = $models.CaptureView.createFrom;
 const $$createType5 = $models.CaptureBodyView.createFrom;
 const $$createType6 = $models.ScriptView.createFrom;
 const $$createType7 = $models.WebhookView.createFrom;
-const $$createType8 = $Create.Array($$createType4);
+const $$createType8 = $models.CapturePageView.createFrom;
 const $$createType9 = $models.ComposeRecipeView.createFrom;
 const $$createType10 = $Create.Array($$createType9);
 const $$createType11 = $Create.Array($$createType6);
 const $$createType12 = $models.SessionPageView.createFrom;
-const $$createType13 = $Create.Array($$createType7);
+const $$createType13 = $models.WebhookPageView.createFrom;
 const $$createType14 = $models.TransformFileView.createFrom;
 const $$createType15 = $models.RegisterView.createFrom;
 const $$createType16 = $models.RelayAdminProjectView.createFrom;

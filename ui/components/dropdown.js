@@ -8,9 +8,7 @@ import { html, render } from "../vendor/preact/index.js";
 import { useEffect, useRef, useState } from "../vendor/preact/index.js";
 
 function normalize(options) {
-  return options.map((o) =>
-    typeof o === "string" ? { value: o, label: o === "" ? "—" : o } : o,
-  );
+  return options.map((o) => (typeof o === "string" ? { value: o, label: o === "" ? "—" : o } : o));
 }
 
 export function Dropdown({
@@ -136,7 +134,8 @@ export function Dropdown({
 
   useEffect(() => {
     if (!open || !portalRef.current || !menuStyle) return;
-    render(html`<div class="dropdown-menu dropdown-menu-portal" role="listbox" aria-label=${ariaLabel} style=${menuStyle}>
+    render(
+      html`<div class="dropdown-menu dropdown-menu-portal" role="listbox" aria-label=${ariaLabel} style=${menuStyle}>
       ${items.map(
         (o, i) => html`<button
           type="button"
@@ -149,12 +148,16 @@ export function Dropdown({
           onClick=${() => pick(o.value)}
         >
           <span class="dropdown-value">${o.label}</span>
-          ${o.value === value
-            ? html`<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 10 3.5 3.5L15 7" /></svg>`
-            : null}
+          ${
+            o.value === value
+              ? html`<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 10 3.5 3.5L15 7" /></svg>`
+              : null
+          }
         </button>`,
       )}
-    </div>`, portalRef.current);
+    </div>`,
+      portalRef.current,
+    );
   });
 
   return html`<div class="dropdown ${open ? "open" : ""} ${unavailable ? "disabled" : ""} ${cls}" ref=${rootRef}>

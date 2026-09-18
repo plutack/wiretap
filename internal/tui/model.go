@@ -475,8 +475,12 @@ func (m Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.updateActiveList(msg)
 }
 
-// updateActiveList forwards a message to the focused tab's list.
+// updateActiveList forwards a message to the focused tab's list. When the text
+// filter changed, the query is re-run immediately: the filter is part of the SQL
+// predicate now, so waiting for the next tick would keep showing matches drawn
+// only from the rows already loaded.
 func (m Model) updateActiveList(msg tea.Msg) (tea.Model, tea.Cmd) {
+	before := m.activeList().FilterInput.Value()
 	var cmd tea.Cmd
 	switch m.tab {
 	case tabIngress:
@@ -485,6 +489,9 @@ func (m Model) updateActiveList(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.traffic, cmd = m.traffic.Update(msg)
 	case tabTransforms:
 		m.scripts, cmd = m.scripts.Update(msg)
+	}
+	if m.activeList().FilterInput.Value() != before {
+		return m, tea.Batch(cmd, m.refresh(context.Background()))
 	}
 	return m, cmd
 }
@@ -642,8 +649,13 @@ func (m *Model) refresh(ctx context.Context) tea.Cmd {
 	m.slowTicks++
 
 	if m.deps.Webhooks != nil {
-		if rows, err := m.deps.Webhooks(ctx, "", rowLimit); err == nil {
-			m.webhookRows = rows
+		page, err := m.deps.Webhooks(ctx, store.WebhookFilter{
+			Query:  m.ingress.FilterInput.Value(),
+			Method: m.methodLens,
+			Limit:  rowLimit,
+		})
+		if err == nil {
+			m.webhookRows = page.Rows
 			m.err = nil
 		} else {
 			m.err = err
@@ -669,16 +681,25 @@ func (m *Model) refresh(ctx context.Context) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// refreshCaptures reads the traffic rows matching the traffic tab's current
+// query. The text filter is part of the SQL predicate, so a match older than the
+// loaded page is still found.
 func (m *Model) refreshCaptures(ctx context.Context) {
-	if m.deps.CapturesBySession == nil {
+	if m.deps.Captures == nil {
 		return
 	}
-	rows, err := m.deps.CapturesBySession(ctx, m.sessionID(), rowLimit)
+	page, err := m.deps.Captures(ctx, store.CaptureFilter{
+		SessionID: m.sessionID(),
+		Query:     m.traffic.FilterInput.Value(),
+		Method:    m.methodLens,
+		Status:    m.statusLens,
+		Limit:     rowLimit,
+	})
 	if err != nil {
 		m.err = err
 		return
 	}
-	m.captureRows = rows
+	m.captureRows = page.Rows
 }
 
 func (m *Model) refreshScripts(ctx context.Context) tea.Cmd {

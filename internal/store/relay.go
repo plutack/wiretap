@@ -389,9 +389,10 @@ func (s *RelayStore) AckedSeqForClient(ctx context.Context, project, clientID st
 // each subscription's acked_seq delivery cursor. Conflating them would make
 // the relay think every freshly-ingressed webhook was already acknowledged.
 //
-// SQLite's single-writer model serialises transactions, so we do not need
-// an explicit advisory lock; BEGIN IMMEDIATE could be added later if a
-// highly contended relay ever shows SQLITE_BUSY under load.
+// The read-then-write shape requires BEGIN IMMEDIATE, which Open configures
+// through the driver's _txlock parameter. A deferred transaction that reads and
+// then upgrades to a write returns SQLITE_BUSY without consulting the busy
+// handler once its snapshot goes stale, so busy_timeout alone cannot save it.
 func (s *RelayStore) NextWebhookSeq(ctx context.Context, project string) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
