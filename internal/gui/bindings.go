@@ -128,12 +128,13 @@ type StatusView struct {
 }
 
 // SessionView is the GUI DTO for one interception session (a `wiretap
-// intercept start` run). EndedAt is empty while the session is running — or
-// when it crashed without cleanup.
+// intercept start` run). EndedAt is empty only while the session is still
+// running; Interrupted marks a session that ended without a clean shutdown,
+// which startup closes out with a backfilled EndedAt.
 type SessionView struct {
 	ID          int64  `json:"id"`
 	StartedAt   string `json:"started_at"`         // RFC3339 UTC
-	EndedAt     string `json:"ended_at,omitempty"` // empty = running/crashed
+	EndedAt     string `json:"ended_at,omitempty"` // empty = still running
 	Shell       string `json:"shell,omitempty"`
 	ProxyAddr   string `json:"proxy_addr,omitempty"`
 	Captures    int    `json:"captures"`
@@ -144,6 +145,51 @@ type SessionView struct {
 type SessionPageView struct {
 	Sessions []SessionView `json:"sessions"`
 	Total    int           `json:"total"`
+	HasMore  bool          `json:"has_more"`
+}
+
+// CaptureQueryInput is the GUI's capture list request. The zero value lists the
+// newest page with no filtering, which is what the dashboard shows by default.
+//
+// The filter travels to SQLite rather than being applied in the frontend,
+// because the frontend only ever holds one page: matching there could never find
+// a capture older than that page.
+type CaptureQueryInput struct {
+	SessionID int64  `json:"session_id"`
+	Query     string `json:"query,omitempty"`
+	Method    string `json:"method,omitempty"`
+	Status    string `json:"status,omitempty"`
+	// Body extends Query matching to request/response bodies. Opt-in: no index
+	// can serve a substring match, so it reads every body it scans.
+	Body bool `json:"body,omitempty"`
+	// BeforeID pages backwards from a previous page's last row.
+	BeforeID int64 `json:"before_id,omitempty"`
+	// Limit caps the page; 0 uses the GUI list cap.
+	Limit int `json:"limit,omitempty"`
+}
+
+// CapturePageView is one page of capture rows plus the size of the whole
+// filtered set, so the deck can show "100 of 1,432 matches".
+type CapturePageView struct {
+	Captures []CaptureView `json:"captures"`
+	Total    int64         `json:"total"`
+	HasMore  bool          `json:"has_more"`
+}
+
+// WebhookQueryInput is the GUI's webhook list request; the counterpart of
+// CaptureQueryInput.
+type WebhookQueryInput struct {
+	Project   string `json:"project,omitempty"`
+	Query     string `json:"query,omitempty"`
+	Method    string `json:"method,omitempty"`
+	BeforeSeq int64  `json:"before_seq,omitempty"`
+	Limit     int    `json:"limit,omitempty"`
+}
+
+// WebhookPageView is one page of webhook summaries plus the filtered-set size.
+type WebhookPageView struct {
+	Webhooks []WebhookView `json:"webhooks"`
+	Total    int64         `json:"total"`
 	HasMore  bool          `json:"has_more"`
 }
 
@@ -263,15 +309,33 @@ type ScriptTestView struct {
 
 // --- Bound methods -------------------------------------------------------
 
-// ListWebhooks returns the most recent webhooks, newest-first, optionally
-// filtered by project (empty string = all projects). Body/Headers are omitted
-// (use GetWebhook for the full payload).
-func (b *Bindings) ListWebhooks(project string) ([]WebhookView, error) {
-	rows, err := b.app.Webhooks(context.Background(), project, listLimit)
+// ListWebhooks returns one page of webhooks matching in, newest-first. The
+// predicate runs in SQLite, so a match older than any page already held is still
+// found. Body/Headers are omitted (use GetWebhook for the full payload).
+func (b *Bindings) ListWebhooks(in WebhookQueryInput) (WebhookPageView, error) {
+	page, err := b.app.Webhooks(context.Background(), store.WebhookFilter{
+		Project:   in.Project,
+		Query:     in.Query,
+		Method:    in.Method,
+		BeforeSeq: in.BeforeSeq,
+		Limit:     clampListLimit(in.Limit),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("list webhooks: %w", err)
+		return WebhookPageView{}, fmt.Errorf("list webhooks: %w", err)
 	}
-	return webhookSummary(rows), nil
+	return WebhookPageView{
+		Webhooks: webhookSummary(page.Rows),
+		Total:    page.Total,
+		HasMore:  page.HasMore,
+	}, nil
+}
+
+// clampListLimit keeps a caller-supplied page size within the GUI's list cap.
+func clampListLimit(limit int) int {
+	if limit <= 0 || limit > listLimit {
+		return listLimit
+	}
+	return limit
 }
 
 // SendComposedRequest validates and sends one arbitrary request from the GUI.
@@ -358,15 +422,28 @@ func (b *Bindings) GetCaptureBody(id int64, part string, limit int) (CaptureBody
 	}, nil
 }
 
-// ListCaptures returns the most recent traffic captures, newest-first,
-// optionally filtered to one interception session (0 = all). Bodies and full
-// header maps are omitted (use GetCapture for the detail payload).
-func (b *Bindings) ListCaptures(sessionID int64) ([]CaptureView, error) {
-	rows, err := b.app.CaptureSummariesBySession(context.Background(), sessionID, listLimit)
+// ListCaptures returns one page of traffic captures matching in, newest-first.
+// The predicate runs in SQLite, so a capture older than any page already held is
+// still found. Bodies and full header maps are omitted (use GetCapture for the
+// detail payload).
+func (b *Bindings) ListCaptures(in CaptureQueryInput) (CapturePageView, error) {
+	page, err := b.app.CaptureSummaries(context.Background(), store.CaptureFilter{
+		SessionID: in.SessionID,
+		Query:     in.Query,
+		Method:    in.Method,
+		Status:    in.Status,
+		Body:      in.Body,
+		BeforeID:  in.BeforeID,
+		Limit:     clampListLimit(in.Limit),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("list captures: %w", err)
+		return CapturePageView{}, fmt.Errorf("list captures: %w", err)
 	}
-	return captureSummary(rows), nil
+	return CapturePageView{
+		Captures: captureSummary(page.Rows),
+		Total:    page.Total,
+		HasMore:  page.HasMore,
+	}, nil
 }
 
 // ListSessions returns one cursor-paginated page of recorded interception
@@ -393,7 +470,7 @@ func (b *Bindings) ListSessions(beforeID int64, limit int) (SessionPageView, err
 			ProxyAddr:   r.ProxyAddr,
 			Captures:    r.Captures,
 			Running:     r.ID == activeSessionID,
-			Interrupted: r.EndedAt.IsZero() && r.ID != activeSessionID,
+			Interrupted: r.Interrupted,
 		}
 		if !r.EndedAt.IsZero() {
 			v.EndedAt = r.EndedAt.Format(time.RFC3339)

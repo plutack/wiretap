@@ -5,7 +5,7 @@
 // and gives one place to add error shaping later.
 import {
   AddRelayProject,
-	ApplyComposeRecipe,
+  ApplyComposeRecipe,
   DeleteScript,
   ExportCapture,
   ExportTargets,
@@ -17,12 +17,12 @@ import {
   GetWebhook,
   ImportRelayClientFile,
   ListCaptures,
-	ListComposeRecipes,
+  ListComposeRecipes,
   ListScripts,
   ListSessions,
   ListWebhooks,
-	FormatTransformFile,
-	ParseTransformFile,
+  FormatTransformFile,
+  ParseTransformFile,
   RegisterRelay,
   RelayAdminAddProject,
   RelayAdminAddSubscriber,
@@ -49,10 +49,10 @@ import {
 } from "../bindings/github.com/plutack/wiretap/internal/gui/bindings.js";
 
 export const api = {
-  listWebhooks: (project = "") => ListWebhooks(project),
+  listWebhooks: (filter = {}) => ListWebhooks(filter),
   getWebhook: (project, seq) => GetWebhook(project, seq),
   replayWebhook: (project, seq, targetURL) => ReplayWebhook(project, seq, targetURL),
-  listCaptures: (sessionId = 0) => ListCaptures(sessionId),
+  listCaptures: (filter = {}) => ListCaptures(filter),
   listSessions: (beforeID = 0, limit = 20) => ListSessions(beforeID, limit),
   getCapture: (id) => GetCapture(id),
   getCaptureBody: (id, part, limit) => GetCaptureBody(id, part, limit),
@@ -63,12 +63,11 @@ export const api = {
   setScriptEnabled: (id, enabled) => SetScriptEnabled(id, enabled),
   deleteScript: (id) => DeleteScript(id),
   testScript: (req) => TestScript(req),
-	formatTransformFile: (input) => FormatTransformFile(input),
-	parseTransformFile: (contents) => ParseTransformFile(contents),
+  formatTransformFile: (input) => FormatTransformFile(input),
+  parseTransformFile: (contents) => ParseTransformFile(contents),
   exportTargets: () => ExportTargets(),
   exportCapture: (id, target, client) => ExportCapture(id, target, client),
-  exportWebhook: (project, seq, target, client) =>
-    ExportWebhook(project, seq, target, client),
+  exportWebhook: (project, seq, target, client) => ExportWebhook(project, seq, target, client),
   getSettings: () => GetSettings(),
   importRelayClientFile: (contents, force = false) => ImportRelayClientFile(contents, force),
   saveSettings: (input) => SaveSettings(input),
@@ -90,6 +89,6 @@ export const api = {
   addRelayProject: (project) => AddRelayProject(project),
   removeRelayProject: (project) => RemoveRelayProject(project),
   sendComposedRequest: (input) => SendComposedRequest(input),
-	listComposeRecipes: () => ListComposeRecipes(),
-	applyComposeRecipe: (input) => ApplyComposeRecipe(input),
+  listComposeRecipes: () => ListComposeRecipes(),
+  applyComposeRecipe: (input) => ApplyComposeRecipe(input),
 };

@@ -126,15 +126,16 @@ type TrafficCapturePreviewRow struct {
 }
 
 // InterceptSessionRow is a row in the local PC's intercept_sessions table:
-// one per `wiretap intercept start` run. EndedAt is the zero time while the
-// session is running — or when it crashed without cleanup, which the UI can
-// render as "not closed cleanly". Captures is a derived count populated by
-// InterceptSessions listings, not a stored column.
+// one per `wiretap intercept start` run. EndedAt is the zero time only while the
+// session is still running; a session that crashed is closed out with a
+// backfilled EndedAt at startup and flagged with Interrupted. Captures is a
+// derived count populated by InterceptSessions listings, not a stored column.
 type InterceptSessionRow struct {
-	ID        int64
-	StartedAt time.Time
-	EndedAt   time.Time // zero while running
-	Shell     string
-	ProxyAddr string
-	Captures  int // derived: COUNT of traffic_captures with this session_id
+	ID          int64
+	StartedAt   time.Time
+	EndedAt     time.Time // zero while running
+	Shell       string
+	ProxyAddr   string
+	Interrupted bool // ended without a clean shutdown
+	Captures    int  // derived: COUNT of traffic_captures with this session_id
 }

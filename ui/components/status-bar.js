@@ -38,8 +38,9 @@ export function StatusBar({ status, onRefresh, onOpenSettings, settingsActive })
         label="store"
         value=${s.store_open ? "recording" : "unavailable"}
       />
-      ${s.relay_url
-        ? html`<${SystemPill}
+      ${
+        s.relay_url
+          ? html`<${SystemPill}
             online=${!!s.tunnel_running}
             label="relay"
             value=${s.tunnel_running ? "connected" : "idle"}
@@ -50,11 +51,12 @@ export function StatusBar({ status, onRefresh, onOpenSettings, settingsActive })
             value=${watching}
             optional=${true}
           />`
-        : html`<div class="system-pill optional">
+          : html`<div class="system-pill optional">
             <span class="live-dot"></span>
             <span>relay</span>
             <strong>not configured</strong>
-          </div>`}
+          </div>`
+      }
     </div>
 
     <div class="topbar-actions">

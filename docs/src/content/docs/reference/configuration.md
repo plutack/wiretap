@@ -120,7 +120,9 @@ The proxy is unauthenticated. Bound to a routable address, anyone who can reach 
 
 ### `intercept.local_api_addr`
 
-The address of the read-only control API that runs while `wiretap intercept start` is active. It serves `GET /local/health`, `GET /local/webhooks` (optional `?project=` and `?limit=`), and `GET /local/captures` (optional `?limit=`), newest first.
+The address of the read-only control API that runs while `wiretap intercept start` is active. It serves `GET /local/health`, `GET /local/webhooks` (optional `?project=`, `?q=`, `?method=`, and `?limit=`), and `GET /local/captures` (optional `?q=`, `?method=`, `?status=`, and `?limit=`), newest first.
+
+`?q=` is a case-insensitive substring match. For webhooks it matches project, method, path, and source IP; for captures it matches method, URL, and status. `?status=` takes a family (`2xx`–`5xx`) or an exact code such as `404`. Both responses carry `total` (the size of the whole filtered set) and `has_more`, so a caller can tell a full page apart from the end of the results.
 
 Keep it on loopback. The API requires no credentials and returns captured request URLs, source IPs, and byte counts — metadata that is sensitive even though response bodies are not included.
 

@@ -62,7 +62,12 @@ export function HeaderTable({ headers }) {
                   type="button"
                   title=${`Copy ${k}`}
                   aria-label=${`Copy ${k} header`}
-                  onClick=${() => copy(headerValues(vs).map((value) => `${k}: ${value}`).join("\n"))}
+                  onClick=${() =>
+                    copy(
+                      headerValues(vs)
+                        .map((value) => `${k}: ${value}`)
+                        .join("\n"),
+                    )}
                   class="shrink-0 rounded px-1 text-xs text-neutral-600 hover:bg-neutral-800 hover:text-neutral-300"
                 >
                   Copy
@@ -72,7 +77,8 @@ export function HeaderTable({ headers }) {
             <td class="px-2.5 py-2 font-mono text-neutral-200 break-words">
               <div class="space-y-1">
                 ${headerValues(vs).map(
-                  (value, index) => html`<div key=${`${k}-${index}`} class="header-value whitespace-pre-wrap">${value}</div>`,
+                  (value, index) =>
+                    html`<div key=${`${k}-${index}`} class="header-value whitespace-pre-wrap">${value}</div>`,
                 )}
               </div>
             </td>

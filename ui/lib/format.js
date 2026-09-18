@@ -9,15 +9,18 @@
  */
 export function methodBadgeClass(method) {
   const map = {
-    GET:     "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25",
-    POST:    "bg-brand-500/15 text-brand-300 ring-1 ring-brand-500/25",
-    PUT:     "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25",
-    PATCH:   "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25",
-    DELETE:  "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/25",
-    HEAD:    "bg-neutral-500/15 text-neutral-300 ring-1 ring-neutral-500/25",
+    GET: "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25",
+    POST: "bg-brand-500/15 text-brand-300 ring-1 ring-brand-500/25",
+    PUT: "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25",
+    PATCH: "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25",
+    DELETE: "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/25",
+    HEAD: "bg-neutral-500/15 text-neutral-300 ring-1 ring-neutral-500/25",
     OPTIONS: "bg-neutral-500/15 text-neutral-300 ring-1 ring-neutral-500/25",
   };
-  return map[(method || "").toUpperCase()] || "bg-neutral-700/40 text-neutral-300 ring-1 ring-neutral-600/40";
+  return (
+    map[(method || "").toUpperCase()] ||
+    "bg-neutral-700/40 text-neutral-300 ring-1 ring-neutral-600/40"
+  );
 }
 
 /**
@@ -85,10 +88,7 @@ export function prettyBody(body, contentType) {
  * @returns {string}
  */
 export function escapeHTML(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /**

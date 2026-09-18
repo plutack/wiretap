@@ -1,5 +1,62 @@
 # Changelog
 
+## v0.4.0 — 2026-09-18
+
+### Local history search
+
+- Moved traffic and webhook filtering out of the desktop frontend and into
+  SQLite, so search and the method and status lenses now match the whole local
+  history instead of only the newest page of rows.
+- Added case-insensitive substring matching across method, URL, and status for
+  traffic captures, and across source, method, route, and source IP for
+  webhooks.
+- Added optional request and response body matching on the traffic tab. It is
+  off by default, because body content is not indexed, and reads only a bounded
+  prefix of each body.
+- Added a match total so a filtered list reports how many results exist beyond
+  the page it is showing.
+- Added the same filters to the TUI search and to the interception control API
+  (`?q=`, `?method=`, `?status=`), which now also returns `total` and
+  `has_more`.
+- Stopped loading body payloads while listing captures, so a filtered scan no
+  longer reads every body in the database.
+
+### Interception session reconciliation
+
+- Closed out interception sessions left open by a crash or a forced kill on the
+  next app start, backfilling the end time from the session's last captured
+  request and falling back to its start time when it captured nothing.
+- Added an `interrupted` marker so a session that ended without a clean shutdown
+  stays distinguishable from one that was stopped normally.
+- Left the session owned by a live process untouched, with a short grace window
+  so a session that is still starting is never reconciled.
+- Showed the capture count for interrupted sessions in the sidebar, in the
+  warning color, instead of hiding it behind the interrupted marker.
+
+### Relay ingress reliability
+
+- Fixed concurrent webhooks failing with `SQLITE_BUSY` and returning `500` on
+  the relay. Sequence allocation and storage now wait for the write lock instead
+  of failing immediately, and every pooled connection carries the timeout and
+  foreign-key settings rather than only the first one.
+- Fixed foreign keys being unenforced on connections opened after startup, which
+  could leave orphaned subscriptions and webhooks behind a deleted project or
+  client.
+- Changed the ingress response to `200 OK` with `{"status":"received"}`. It no
+  longer echoes the allocated sequence number.
+
+### Development tooling
+
+- Added Prettier for the hand-written frontend, with `npm run format` and
+  `npm run format:check`.
+
+### Upgrade notes
+
+- Anything reading `seq` from the ingress response body must be updated: the
+  response is now `{"status":"received"}`. The `200 OK` status is unchanged.
+- Upgrade `wiretap-relay` to pick up the concurrency fix. No relay database
+  migration is required.
+
 ## v0.3.2 — 2026-09-16
 
 ### Portable relay client handoff

@@ -10,15 +10,20 @@ import { Button, Input } from "./ui.js";
 import { fmtBytes } from "../lib/format.js";
 
 function headerValue(headers, name) {
-  const entry = Object.entries(headers || {}).find(
-    ([k]) => k.toLowerCase() === name.toLowerCase(),
-  );
+  const entry = Object.entries(headers || {}).find(([k]) => k.toLowerCase() === name.toLowerCase());
   if (!entry) return "";
   const v = entry[1];
   return Array.isArray(v) ? v.join(", ") : String(v);
 }
 
-export function WebhookDetail({ webhook, onReplay, onCompose, onExport, onClose, defaultTarget = "" }) {
+export function WebhookDetail({
+  webhook,
+  onReplay,
+  onCompose,
+  onExport,
+  onClose,
+  defaultTarget = "",
+}) {
   // Prefill the replay target with the configured forward URL (settings →
   // relay.forward_url) so a manual re-delivery is one click.
   const [targetURL, setTargetURL] = useState(defaultTarget);
@@ -70,30 +75,38 @@ export function WebhookDetail({ webhook, onReplay, onCompose, onExport, onClose,
             Replay
           </>
         </div>
-        ${replayState &&
-        html`<p
-          class="mt-2 text-xs ${replayState.error
-            ? "text-rose-400"
-            : replayState.status === "sending"
-              ? "text-neutral-400"
-              : "text-emerald-400"}"
+        ${
+          replayState &&
+          html`<p
+          class="mt-2 text-xs ${
+            replayState.error
+              ? "text-rose-400"
+              : replayState.status === "sending"
+                ? "text-neutral-400"
+                : "text-emerald-400"
+          }"
         >
-          ${replayState.error
-            ? `error: ${replayState.error}`
-            : replayState.status === "sending"
-              ? "sending…"
-              : `replayed → HTTP ${replayState.status}`}
-        </p>`}
+          ${
+            replayState.error
+              ? `error: ${replayState.error}`
+              : replayState.status === "sending"
+                ? "sending…"
+                : `replayed → HTTP ${replayState.status}`
+          }
+        </p>`
+        }
       </section>
 
       ${onCompose ? html`<section class="inspector-section"><${Button} onClick=${onCompose}>Open in composer</></section>` : null}
 
-      ${onExport
-        ? html`<${ExportSnippet}
+      ${
+        onExport
+          ? html`<${ExportSnippet}
             exportKey=${`webhook-${webhook.project}-${webhook.seq}`}
             convert=${onExport}
           />`
-        : null}
+          : null
+      }
     </>
   </>`;
 }
