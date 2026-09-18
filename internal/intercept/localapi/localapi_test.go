@@ -13,32 +13,31 @@ import (
 )
 
 // fakeQuerier is an in-memory Querier for tests: it returns canned rows and
-// records the args passed so handlers can assert what was forwarded.
+// records the filter it was handed so handlers can assert what was forwarded.
 type fakeQuerier struct {
 	webhooks   []store.WebhookRow
-	captures   []store.TrafficCaptureRow
+	captures   []store.TrafficCaptureSummaryRow
 	webhookErr error
 	captureErr error
 
-	gotProject string
-	gotLimit   int
+	gotWebhookFilter store.WebhookFilter
+	gotCaptureFilter store.CaptureFilter
 }
 
-func (f *fakeQuerier) Webhooks(_ context.Context, project string, limit int) ([]store.WebhookRow, error) {
-	f.gotProject = project
-	f.gotLimit = limit
+func (f *fakeQuerier) SearchWebhooks(_ context.Context, filter store.WebhookFilter) (store.WebhookPage, error) {
+	f.gotWebhookFilter = filter
 	if f.webhookErr != nil {
-		return nil, f.webhookErr
+		return store.WebhookPage{}, f.webhookErr
 	}
-	return f.webhooks, nil
+	return store.WebhookPage{Rows: f.webhooks, Total: int64(len(f.webhooks))}, nil
 }
 
-func (f *fakeQuerier) TrafficCaptures(_ context.Context, limit int) ([]store.TrafficCaptureRow, error) {
-	f.gotLimit = limit
+func (f *fakeQuerier) SearchCaptureSummaries(_ context.Context, filter store.CaptureFilter) (store.CaptureSummaryPage, error) {
+	f.gotCaptureFilter = filter
 	if f.captureErr != nil {
-		return nil, f.captureErr
+		return store.CaptureSummaryPage{}, f.captureErr
 	}
-	return f.captures, nil
+	return store.CaptureSummaryPage{Rows: f.captures, Total: int64(len(f.captures))}, nil
 }
 
 func mustGet(t *testing.T, h http.Handler, target string) (int, map[string]any) {
@@ -76,19 +75,28 @@ func TestWebhooks(t *testing.T) {
 	}
 	s := New(fq)
 
-	code, body := mustGet(t, s.Routes(), "/local/webhooks?project=project-a&limit=5")
+	code, body := mustGet(t, s.Routes(), "/local/webhooks?project=project-a&q=hook&method=POST&limit=5")
 	if code != http.StatusOK {
 		t.Fatalf("code = %d, want 200", code)
 	}
-	if fq.gotProject != "project-a" {
-		t.Errorf("project forwarded = %q, want project-a", fq.gotProject)
+	if fq.gotWebhookFilter.Project != "project-a" {
+		t.Errorf("project forwarded = %q, want project-a", fq.gotWebhookFilter.Project)
 	}
-	if fq.gotLimit != 5 {
-		t.Errorf("limit forwarded = %d, want 5", fq.gotLimit)
+	if fq.gotWebhookFilter.Query != "hook" {
+		t.Errorf("q forwarded = %q, want hook", fq.gotWebhookFilter.Query)
+	}
+	if fq.gotWebhookFilter.Method != "POST" {
+		t.Errorf("method forwarded = %q, want POST", fq.gotWebhookFilter.Method)
+	}
+	if fq.gotWebhookFilter.Limit != 5 {
+		t.Errorf("limit forwarded = %d, want 5", fq.gotWebhookFilter.Limit)
 	}
 	whs, _ := body["webhooks"].([]any)
 	if len(whs) != 2 {
 		t.Fatalf("webhooks = %d, want 2", len(whs))
+	}
+	if body["total"] != float64(2) {
+		t.Errorf("total = %v, want 2", body["total"])
 	}
 	first, _ := whs[0].(map[string]any)
 	if first["project"] != "project-a" {
@@ -102,18 +110,28 @@ func TestWebhooks(t *testing.T) {
 func TestCaptures(t *testing.T) {
 	t.Parallel()
 	fq := &fakeQuerier{
-		captures: []store.TrafficCaptureRow{
-			{ID: 42, At: time.Unix(200, 0).UTC(), Method: "POST", URL: "https://x/y", Status: 200, ReqBody: []byte("rq"), RespBody: []byte("rs")},
+		captures: []store.TrafficCaptureSummaryRow{
+			{ID: 42, At: time.Unix(200, 0).UTC(), Method: "POST", URL: "https://x/y", Status: 200, ReqBodyLen: 2, RespBodyLen: 2},
 		},
 	}
 	s := New(fq)
 
-	code, body := mustGet(t, s.Routes(), "/local/captures?limit=50")
+	// The unrecognised parameter must be ignored rather than rejected.
+	code, body := mustGet(t, s.Routes(), "/local/captures?q=x%2Fy&method=POST&status=2xx&limit=50&nonsense=1")
 	if code != http.StatusOK {
 		t.Fatalf("code = %d, want 200", code)
 	}
-	if fq.gotLimit != 50 {
-		t.Errorf("limit forwarded = %d, want 50", fq.gotLimit)
+	if fq.gotCaptureFilter.Query != "x/y" {
+		t.Errorf("q forwarded = %q, want x/y", fq.gotCaptureFilter.Query)
+	}
+	if fq.gotCaptureFilter.Method != "POST" {
+		t.Errorf("method forwarded = %q, want POST", fq.gotCaptureFilter.Method)
+	}
+	if fq.gotCaptureFilter.Status != "2xx" {
+		t.Errorf("status forwarded = %q, want 2xx", fq.gotCaptureFilter.Status)
+	}
+	if fq.gotCaptureFilter.Limit != 50 {
+		t.Errorf("limit forwarded = %d, want 50", fq.gotCaptureFilter.Limit)
 	}
 	caps, _ := body["captures"].([]any)
 	if len(caps) != 1 {
@@ -151,8 +169,8 @@ func TestLimitClamping(t *testing.T) {
 			fq := &fakeQuerier{captures: nil}
 			s := New(fq)
 			_, _ = mustGet(t, s.Routes(), tc.target)
-			if fq.gotLimit != tc.want {
-				t.Errorf("limit = %d, want %d", fq.gotLimit, tc.want)
+			if fq.gotCaptureFilter.Limit != tc.want {
+				t.Errorf("limit = %d, want %d", fq.gotCaptureFilter.Limit, tc.want)
 			}
 		})
 	}

@@ -93,9 +93,7 @@ export function CommandPalette({ actions, onClose }) {
             ${a.hint ? html`<span class="palette-hint">${a.hint}</span>` : null}
           </button>`,
         )}
-        ${visible.length === 0
-          ? html`<div class="palette-empty">No matching command</div>`
-          : null}
+        ${visible.length === 0 ? html`<div class="palette-empty">No matching command</div>` : null}
       </div>
     </div>
   </div>`;

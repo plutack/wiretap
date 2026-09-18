@@ -9,6 +9,8 @@ export {
 
 export {
     CaptureBodyView,
+    CapturePageView,
+    CaptureQueryInput,
     CaptureView,
     ClientView,
     ComposeRecipeDraftView,
@@ -48,5 +50,7 @@ export {
     StatusView,
     TargetView,
     TransformFileView,
+    WebhookPageView,
+    WebhookQueryInput,
     WebhookView
 } from "./models.js";

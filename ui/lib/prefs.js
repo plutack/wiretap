@@ -92,9 +92,11 @@ export function applyDisplayPrefs(prefs) {
   document.documentElement.style.colorScheme = appearance;
   document.documentElement.style.setProperty("--ui-font-scale", prefs.fontScale || "1");
   document.body.classList.toggle("density-compact", prefs.density === "compact");
-  document.dispatchEvent(new CustomEvent("wiretap-theme-change", {
-    detail: { theme: activePrefs.theme, appearance },
-  }));
+  document.dispatchEvent(
+    new CustomEvent("wiretap-theme-change", {
+      detail: { theme: activePrefs.theme, appearance },
+    }),
+  );
 }
 
 export function saveDisplayPrefs(prefs) {
@@ -109,5 +111,6 @@ export function saveDisplayPrefs(prefs) {
 const reapplySystemTheme = () => {
   if (activePrefs?.theme === "system") applyDisplayPrefs(activePrefs);
 };
-if (systemAppearance.addEventListener) systemAppearance.addEventListener("change", reapplySystemTheme);
+if (systemAppearance.addEventListener)
+  systemAppearance.addEventListener("change", reapplySystemTheme);
 else systemAppearance.addListener(reapplySystemTheme);

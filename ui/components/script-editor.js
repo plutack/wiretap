@@ -89,8 +89,7 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onExport, onDup
     setSampleStatus(nextSample.status);
   }, [script.id, script.editor_key]);
 
-  const currentBody = () =>
-    cmRef.current ? cmRef.current.getValue() : taRef.current?.value || "";
+  const currentBody = () => (cmRef.current ? cmRef.current.getValue() : taRef.current?.value || "");
 
   const handleCopyBody = async () => {
     try {
@@ -187,8 +186,14 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onExport, onDup
     let headers;
     try {
       const parsed = JSON.parse(sampleHeaders || "{}");
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("expected a JSON object");
-      headers = Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, Array.isArray(value) ? value.join(", ") : String(value)]));
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+        throw new Error("expected a JSON object");
+      headers = Object.fromEntries(
+        Object.entries(parsed).map(([key, value]) => [
+          key,
+          Array.isArray(value) ? value.join(", ") : String(value),
+        ]),
+      );
     } catch (e) {
       setTestResult({ error: `sample headers: ${String(e)}` });
       return;
@@ -301,14 +306,14 @@ export function ScriptEditor({ script, onSave, onDelete, onTest, onExport, onDup
         </button>
       </div>
 
-      ${saveState &&
-      html`<p
-        class="mb-3 text-xs ${saveState.error
-          ? "text-rose-400"
-          : "text-emerald-400"}"
+      ${
+        saveState &&
+        html`<p
+        class="mb-3 text-xs ${saveState.error ? "text-rose-400" : "text-emerald-400"}"
       >
         ${saveState.error || saveState.msg}
-      </p>`}
+      </p>`
+      }
 
       <section class="transform-testbench">
         <div class="transform-testbench-head">
@@ -344,12 +349,13 @@ function TestPanel({ result }) {
     class="rounded border border-neutral-800 bg-neutral-950 p-2 text-xs"
   >
     <div class="inspector-label mb-3">Test result</div>
-    ${result.rejected &&
-    html`<p class="mb-2 text-rose-400">
+    ${
+      result.rejected &&
+      html`<p class="mb-2 text-rose-400">
       rejected${result.reject_reason ? `: ${result.reject_reason}` : ""}
-    </p>`}
-    ${result.error &&
-    html`<p class="mb-2 text-rose-400">script error: ${result.error}</p>`}
+    </p>`
+    }
+    ${result.error && html`<p class="mb-2 text-rose-400">script error: ${result.error}</p>`}
     <dl class="mb-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono">
       <dt class="text-neutral-500">method</dt>
       <dd class="text-neutral-300">${result.method}</dd>
@@ -363,31 +369,37 @@ function TestPanel({ result }) {
       <pre class="mt-1 max-h-32 overflow-auto rounded bg-neutral-900 p-1.5 font-mono whitespace-pre-wrap">${JSON.stringify(result.req_headers || {}, null, 2)}</pre>
     </div>
     <${BodyDiff} before=${result.input_body} after=${result.req_body} />
-    ${result.req_body &&
-    html`<div class="mb-2">
+    ${
+      result.req_body &&
+      html`<div class="mb-2">
       <span class="text-neutral-500">req body</span>
       <pre
         class="mt-1 max-h-32 overflow-auto rounded bg-neutral-900 p-1.5 font-mono break-all whitespace-pre-wrap"
         >${result.req_body}</pre
       >
-    </div>`}
-    ${result.resp_body &&
-    html`<div class="mb-2">
+    </div>`
+    }
+    ${
+      result.resp_body &&
+      html`<div class="mb-2">
       <span class="text-neutral-500">resp body</span>
       <pre
         class="mt-1 max-h-32 overflow-auto rounded bg-neutral-900 p-1.5 font-mono break-all whitespace-pre-wrap"
         >${result.resp_body}</pre
       >
-    </div>`}
-    ${result.logs &&
-    result.logs.length > 0 &&
-    html`<div>
+    </div>`
+    }
+    ${
+      result.logs &&
+      result.logs.length > 0 &&
+      html`<div>
       <span class="text-neutral-500">console</span>
       <pre
         class="mt-1 max-h-32 overflow-auto rounded bg-neutral-900 p-1.5 font-mono whitespace-pre-wrap"
         >${result.logs.join("\n")}</pre
       >
-    </div>`}
+    </div>`
+    }
   </section>`;
 }
 
@@ -409,11 +421,11 @@ function BodyDiff({ before, after }) {
     <span class="text-neutral-500">body changes</span>
     <pre class="mt-1 max-h-32 overflow-auto rounded bg-neutral-900 p-1.5 font-mono">
 ${diff.map(
-        (l) =>
-          html`<span class="diff-line ${l.type === "add" ? "add" : l.type === "del" ? "del" : ""}"
+  (l) =>
+    html`<span class="diff-line ${l.type === "add" ? "add" : l.type === "del" ? "del" : ""}"
             >${(l.type === "add" ? "+ " : l.type === "del" ? "- " : "  ") + l.text}</span
           >`,
-      )}</pre
+)}</pre
     >
   </div>`;
 }

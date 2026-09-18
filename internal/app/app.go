@@ -210,6 +210,7 @@ func (a *App) Open(ctx context.Context) error {
 	}
 	a.db = db
 	a.store = store.NewPCStore(db)
+	a.reconcileInterceptSessions(ctx)
 	return nil
 }
 
@@ -330,36 +331,32 @@ func (a *App) StopTunnel() {
 
 // --- Querier surface (TUI / GUI / local API) ----------------------------
 
-// Webhooks lists the most recent webhooks (newest-first), optionally filtered
-// by project. Delegates to PCStore.
-func (a *App) Webhooks(ctx context.Context, project string, limit int) ([]store.WebhookRow, error) {
+// Webhooks lists webhooks matching f, newest-first. Delegates to PCStore; the
+// predicate runs in SQLite so a match older than the newest page is still found.
+func (a *App) Webhooks(ctx context.Context, f store.WebhookFilter) (store.WebhookPage, error) {
 	if a.store == nil {
-		return nil, errors.New("app: store not open")
+		return store.WebhookPage{}, errors.New("app: store not open")
 	}
-	return a.store.Webhooks(ctx, project, limit)
+	return a.store.SearchWebhooks(ctx, f)
 }
 
-// Captures lists the most recent traffic captures (newest-first).
-func (a *App) Captures(ctx context.Context, limit int) ([]store.TrafficCaptureRow, error) {
-	return a.CapturesBySession(ctx, 0, limit)
+// Captures lists traffic captures matching f, newest-first, with body payloads.
+// The TUI uses this shape because its detail pane renders from the row without a
+// refetch.
+func (a *App) Captures(ctx context.Context, f store.CaptureFilter) (store.CapturePage, error) {
+	if a.store == nil {
+		return store.CapturePage{}, errors.New("app: store not open")
+	}
+	return a.store.SearchCaptures(ctx, f)
 }
 
-// CapturesBySession lists the most recent traffic captures (newest-first)
-// for one intercept session; sessionID 0 means all sessions.
-func (a *App) CapturesBySession(ctx context.Context, sessionID int64, limit int) ([]store.TrafficCaptureRow, error) {
+// CaptureSummaries lists capture metadata and body lengths matching f, without
+// loading body blobs. It backs the GUI's frequent polling path.
+func (a *App) CaptureSummaries(ctx context.Context, f store.CaptureFilter) (store.CaptureSummaryPage, error) {
 	if a.store == nil {
-		return nil, errors.New("app: store not open")
+		return store.CaptureSummaryPage{}, errors.New("app: store not open")
 	}
-	return a.store.TrafficCapturesBySession(ctx, sessionID, limit)
-}
-
-// CaptureSummariesBySession lists capture metadata and body lengths without
-// loading body blobs. It is used by the GUI's frequent polling path.
-func (a *App) CaptureSummariesBySession(ctx context.Context, sessionID int64, limit int) ([]store.TrafficCaptureSummaryRow, error) {
-	if a.store == nil {
-		return nil, errors.New("app: store not open")
-	}
-	return a.store.TrafficCaptureSummariesBySession(ctx, sessionID, limit)
+	return a.store.SearchCaptureSummaries(ctx, f)
 }
 
 // InterceptSessions lists recorded interception sessions, newest-first, with

@@ -1,11 +1,13 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type interceptPIDRecord struct {
@@ -38,4 +40,21 @@ func (a *App) ActiveInterceptSessionID() int64 {
 		return 0
 	}
 	return record.SessionID
+}
+
+// interceptReconcileGrace protects a session that is starting up right now:
+// `intercept start` inserts its session row shortly before it publishes the PID
+// file, so a session younger than this may not yet be identifiable as active.
+const interceptReconcileGrace = time.Minute
+
+// reconcileInterceptSessions closes out sessions left open by a crash, so their
+// rows carry a real end time by the time anything lists them. The session owned
+// by a live process is left alone.
+//
+// Best-effort by design: a store that cannot be written still serves historical
+// traffic, so this must never prevent the app from opening.
+func (a *App) reconcileInterceptSessions(ctx context.Context) {
+	_, _ = a.store.ReconcileInterceptSessions(
+		ctx, a.ActiveInterceptSessionID(), time.Now(), interceptReconcileGrace,
+	)
 }

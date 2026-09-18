@@ -23,6 +23,36 @@ func freshPCStore(t *testing.T) *PCStore {
 	return NewPCStore(db)
 }
 
+// The three helpers below keep these row-level tests readable over the search
+// API. Search semantics themselves (matching, cursors, totals, the body toggle)
+// are covered in pc_search_test.go; limit 0 here means "the default page".
+func listWebhooks(t *testing.T, s *PCStore, project string, limit int) []WebhookRow {
+	t.Helper()
+	page, err := s.SearchWebhooks(context.Background(), WebhookFilter{Project: project, Limit: limit})
+	if err != nil {
+		t.Fatalf("SearchWebhooks: %v", err)
+	}
+	return page.Rows
+}
+
+func listCaptures(t *testing.T, s *PCStore, sessionID int64, limit int) []TrafficCaptureRow {
+	t.Helper()
+	page, err := s.SearchCaptures(context.Background(), CaptureFilter{SessionID: sessionID, Limit: limit})
+	if err != nil {
+		t.Fatalf("SearchCaptures: %v", err)
+	}
+	return page.Rows
+}
+
+func listCaptureSummaries(t *testing.T, s *PCStore, sessionID int64, limit int) []TrafficCaptureSummaryRow {
+	t.Helper()
+	page, err := s.SearchCaptureSummaries(context.Background(), CaptureFilter{SessionID: sessionID, Limit: limit})
+	if err != nil {
+		t.Fatalf("SearchCaptureSummaries: %v", err)
+	}
+	return page.Rows
+}
+
 func TestPCStore_StoreWebhook_RawHeadersAndBodyPreserved(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -48,10 +78,7 @@ func TestPCStore_StoreWebhook_RawHeadersAndBodyPreserved(t *testing.T) {
 		t.Errorf("Body mismatch\n want %x\n  got %x", body, row.Body)
 	}
 	// Also confirm the list query surfaces raw_headers.
-	rows, err := s.Webhooks(ctx, "project-a", 0)
-	if err != nil {
-		t.Fatalf("Webhooks: %v", err)
-	}
+	rows := listWebhooks(t, s, "project-a", 0)
 	if len(rows) != 1 {
 		t.Fatalf("got %d rows, want 1", len(rows))
 	}
@@ -120,25 +147,16 @@ func TestPCStore_Webhooks_ListAndFilter(t *testing.T) {
 		seq++
 		_, _ = s.StoreWebhook(ctx, WebhookRow{Project: p, Seq: seq, ReceivedAt: fixedTime, Method: "POST", HeadersJSON: "{}"}, fixedTime)
 	}
-	got, err := s.Webhooks(ctx, "alpha", 0)
-	if err != nil {
-		t.Fatalf("Webhooks alpha: %v", err)
-	}
+	got := listWebhooks(t, s, "alpha", 0)
 	if len(got) != 2 {
 		t.Errorf("alpha count = %d, want 2", len(got))
 	}
-	all, err := s.Webhooks(ctx, "", 0)
-	if err != nil {
-		t.Fatalf("Webhooks all: %v", err)
-	}
+	all := listWebhooks(t, s, "", 0)
 	if len(all) != 3 {
 		t.Errorf("all count = %d, want 3", len(all))
 	}
 	// limit is honoured
-	lim, err := s.Webhooks(ctx, "", 2)
-	if err != nil {
-		t.Fatalf("Webhooks limit: %v", err)
-	}
+	lim := listWebhooks(t, s, "", 2)
 	if len(lim) != 2 {
 		t.Errorf("limit count = %d, want 2", len(lim))
 	}
@@ -180,10 +198,7 @@ func TestPCStore_InsertTrafficCapture_RoundTrip(t *testing.T) {
 	if id <= 0 {
 		t.Errorf("id = %d, want > 0", id)
 	}
-	got, err := s.TrafficCaptures(ctx, 0)
-	if err != nil {
-		t.Fatalf("TrafficCaptures: %v", err)
-	}
+	got := listCaptures(t, s, 0, 0)
 	if len(got) != 1 {
 		t.Fatalf("count = %d, want 1", len(got))
 	}
@@ -205,7 +220,7 @@ func TestPCStore_TrafficCaptures_OrderAndLimit(t *testing.T) {
 			Method: "GET", URL: "https://example.com",
 		})
 	}
-	got, _ := s.TrafficCaptures(ctx, 3)
+	got := listCaptures(t, s, 0, 3)
 	if len(got) != 3 {
 		t.Fatalf("limit=3 got %d rows", len(got))
 	}
@@ -229,10 +244,7 @@ func TestPCStore_TrafficCaptureSummariesAndPreview(t *testing.T) {
 		t.Fatalf("InsertTrafficCapture: %v", err)
 	}
 
-	summaries, err := s.TrafficCaptureSummariesBySession(ctx, 0, 10)
-	if err != nil {
-		t.Fatalf("TrafficCaptureSummariesBySession: %v", err)
-	}
+	summaries := listCaptureSummaries(t, s, 0, 10)
 	if len(summaries) != 1 || summaries[0].ReqBodyLen != len(req) || summaries[0].RespBodyLen != len(resp) {
 		t.Fatalf("summaries = %+v", summaries)
 	}

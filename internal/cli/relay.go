@@ -270,7 +270,7 @@ func newRelaySelfClient(cmd *cobra.Command) (*api.HTTPClient, *config.Credential
 func newRelayProjectsAddCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "add <path>",
-		Short: "Add a project to this registered client without rotating credentials",
+		Short: "Add a project to this registered client with existing credentials",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, creds, err := newRelaySelfClient(cmd)

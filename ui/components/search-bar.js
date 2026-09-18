@@ -42,12 +42,14 @@ export function SearchBar({ onSearch, placeholder = "Filter the current signal s
       onInput=${(event) => setValue(event.target.value)}
       aria-label="Filter signal stream"
     />
-    ${value
-      ? html`<button
+    ${
+      value
+        ? html`<button
           class="search-clear"
           onClick=${() => setValue("")}
           aria-label="Clear filter"
         >×</button>`
-      : html`<span class="search-key">Ctrl K</span>`}
+        : html`<span class="search-key">Ctrl K</span>`
+    }
   </div>`;
 }

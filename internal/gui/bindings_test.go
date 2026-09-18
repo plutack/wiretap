@@ -139,16 +139,17 @@ func TestBindings_ListWebhooks_All(t *testing.T) {
 	seedWebhook(t, a, "project-b", 7, "GET", "/info", `{"k":"v"}`)
 	seedWebhook(t, a, "project-a", 3, "PUT", "/hook/3", `{}`)
 
-	got, err := b.ListWebhooks("")
+	got, err := b.ListWebhooks(WebhookQueryInput{})
 	if err != nil {
 		t.Fatalf("ListWebhooks: %v", err)
 	}
-	if len(got) != 3 {
-		t.Fatalf("len = %d, want 3", len(got))
+	if len(got.Webhooks) != 3 || got.Total != 3 || got.HasMore {
+		t.Fatalf("page = %d rows, total %d, hasMore %v; want 3/3/false",
+			len(got.Webhooks), got.Total, got.HasMore)
 	}
 	// Summary shape: no body string, but BodyLen set; no headers map.
 	var sawA, sawB bool
-	for _, w := range got {
+	for _, w := range got.Webhooks {
 		if w.Body != "" {
 			t.Errorf("body leaked into summary for %s/%d", w.Project, w.Seq)
 		}
@@ -178,12 +179,12 @@ func TestBindings_ListWebhooks_FilteredByProject(t *testing.T) {
 	b, a := newBindings(t)
 	seedWebhook(t, a, "project-a", 1, "POST", "/hook", `x`)
 	seedWebhook(t, a, "project-b", 2, "POST", "/hook", `y`)
-	got, err := b.ListWebhooks("project-a")
+	got, err := b.ListWebhooks(WebhookQueryInput{Project: "project-a"})
 	if err != nil {
 		t.Fatalf("ListWebhooks: %v", err)
 	}
-	if len(got) != 1 || got[0].Project != "project-a" {
-		t.Errorf("got = %+v", got)
+	if len(got.Webhooks) != 1 || got.Webhooks[0].Project != "project-a" {
+		t.Errorf("got = %+v", got.Webhooks)
 	}
 }
 
@@ -239,15 +240,16 @@ func TestBindings_ListCaptures(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("InsertTrafficCapture: %v", err)
 	}
-	got, err := b.ListCaptures(0)
+	got, err := b.ListCaptures(CaptureQueryInput{})
 	if err != nil {
 		t.Fatalf("ListCaptures: %v", err)
 	}
-	if len(got) != 2 {
-		t.Fatalf("len = %d, want 2", len(got))
+	if len(got.Captures) != 2 || got.Total != 2 || got.HasMore {
+		t.Fatalf("page = %d rows, total %d, hasMore %v; want 2/2/false",
+			len(got.Captures), got.Total, got.HasMore)
 	}
 	// Summary: no bodies, but lengths set; newest-first (id DESC).
-	first := got[0]
+	first := got.Captures[0]
 	if first.ReqBodyBase64 != "" || first.RespBodyBase64 != "" {
 		t.Errorf("body leaked into summary: %+v", first)
 	}
@@ -262,7 +264,7 @@ func TestBindings_ListCaptures(t *testing.T) {
 		t.Error("At empty")
 	}
 	// The older capture (GET) is second and carries the response body.
-	second := got[1]
+	second := got.Captures[1]
 	if second.Method != "GET" || second.Status != 200 ||
 		second.ReqBodyLen != 3 || second.RespBodyLen != 5 {
 		t.Errorf("second capture = %+v, want GET 200 with 3/5 body lengths", second)
