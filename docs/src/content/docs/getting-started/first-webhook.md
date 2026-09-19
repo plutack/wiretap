@@ -47,6 +47,8 @@ Start the desktop or terminal UI:
 wiretap gui
 ```
 
+![The Settings Relay connection pane, showing a configured tunnel URL, the registered client identity, and where the client token is stored.](/screenshots/06-settings.png)
+
 The status area should show a connected relay and `new-project`. The desktop dials outward, so it needs no public IP or inbound firewall rule.
 
 ## 5. Send a webhook
@@ -62,9 +64,13 @@ curl -X POST https://relay.example.com/new-project/orders/created \
 
 Open **Webhooks** and select the delivery. Wiretap preserves everything after the project segment, so the recorded path is `/orders/created`.
 
+![The Ingress tab listing delivered webhooks newest first, with the subscribed project sources and recording sessions in the sidebar.](/screenshots/01-ingress.png)
+
 ## 6. Replay it locally
 
 In the webhook detail, choose **Replay**, enter your local endpoint such as `http://127.0.0.1:8080/webhooks`, and send it again. You can set `relay.forward_url` to forward every arriving webhook automatically.
+
+![A webhook detail pane showing the recorded method, route, headers, and request body, with the replay target field below.](/screenshots/02-webhook-detail.png)
 
 :::tip[Try the offline queue]
 Close the desktop, send another webhook, then reconnect. The relay keeps the delivery in SQLite until the desktop acknowledges it.
