@@ -47,6 +47,8 @@ Open **Traffic** in the dashboard. Select the new row to inspect its request and
 
 Use **Open in composer** to load the request into an editable draft, or **Export as code** to generate curl, fetch, Python, Go, and other client snippets.
 
+![A capture detail pane showing the request and response headers for one exchange, with the composer and export actions beneath it.](/screenshots/04-capture-detail.png)
+
 ## 5. Stop interception
 
 Exit the child shell:
