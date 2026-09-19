@@ -1,0 +1,38 @@
+# docker compose for the wiretap relay.
+#
+#   1. Put a strong admin token in a .env file beside this one:
+#        WIRETAP_ADMIN_TOKEN=$(openssl rand -hex 32)
+#   2. docker compose up -d
+#
+# The relay serves plain HTTP; terminate TLS with a reverse proxy in front of it
+# (Caddy, nginx, Coolify) and point desktops at the resulting wss:// URL. See the
+# hosting guide: https://wiretap.talut.xyz/guides/host-relay/
+
+services:
+  relay:
+    image: ghcr.io/plutack/wiretap-relay:0.4.0
+    # To build from this checkout instead of pulling the published image,
+    # comment out the line above and uncomment this one:
+    # build: .
+    restart: unless-stopped
+    environment:
+      # Required. The relay refuses to start without an admin token, so fail
+      # loudly here rather than starting a relay nobody can administer.
+      WIRETAP_ADMIN_TOKEN: ${WIRETAP_ADMIN_TOKEN:?set WIRETAP_ADMIN_TOKEN in .env or the environment}
+      # Keep the database on the mounted volume. The image's WORKDIR is /data,
+      # so this is the path the built-in default resolves to anyway; setting it
+      # explicitly documents where the data lives.
+      WIRETAP_RELAY_DB: /data/relay.db
+    ports:
+      # Loopback only: the reverse proxy on this host owns the public ports.
+      # Use "8443:8443" instead when the proxy runs in another container.
+      - "127.0.0.1:8443:8443"
+    volumes:
+      # Named volume: projects, subscriptions, delivery cursors, and queued
+      # webhooks survive recreating the container. Swap for a host path such as
+      # ./relay-data:/data if you would rather back the file up directly.
+      - relay-data:/data
+    # The image sets its own HEALTHCHECK against /health, so no override here.
+
+volumes:
+  relay-data:

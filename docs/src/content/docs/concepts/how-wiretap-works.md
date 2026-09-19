@@ -23,18 +23,9 @@ local MITM proxy ── transforms ──► destination server
 
 ## Inbound webhooks
 
-```text
-webhook sender ──HTTPS──► public relay ──outbound WSS──► desktop A
-                              │       └──outbound WSS──► desktop B
-                              ▼                              │
-                         queued SQLite                  transforms
-                                                            │
-                                                            ▼
-                                                       local SQLite
-                                                            │
-                                                            ▼
-                                                      replay locally
-```
+![Two senders — a third-party webhook provider and a direct HTTP POST to a project path — reach wiretap-relay, which stores each delivery once and fans it out over outbound WSS tunnels to two clients. Client A is offline and catches up on reconnect; every client keeps its own local database.](/images/wiretap-architecture.png)
+
+*The relay stores each delivery once and fans it out to every subscribed desktop. An offline client simply catches up when its tunnel reconnects.*
 
 Webhook traffic reaches the public HTTPS endpoint of your hosted `wiretap-relay` deployment. The relay stores each webhook once and forwards it to every client subscribed to the project. Each subscriber advances an independent acknowledgement cursor and catches up after reconnecting. Because every desktop initiates its own WSS tunnel, no inbound desktop port is exposed to the internet.
 
