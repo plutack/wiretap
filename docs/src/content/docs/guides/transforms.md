@@ -13,6 +13,8 @@ Open **Transforms** in the GUI and create:
 - **Trigger:** `on_request`
 - **Priority:** `10`
 
+![The transform editor with the name, trigger, priority, enabled switch, and the sandboxed program body.](/screenshots/08-transform.png)
+
 Use this program:
 
 ```js
