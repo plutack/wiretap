@@ -65,6 +65,19 @@ In both commands, replace `<secure-token>` with the admin token you generated ab
 The `wiretap-relay-data` volume holds the SQLite database, so your registrations and queued webhooks survive a restart.
 :::
 
+### Docker Compose
+
+The repository ships a `docker-compose.yml` with the persistent volume already wired up. Generate an admin token once, keep it in a `.env` file beside the compose file (it is gitignored), and start the service:
+
+```sh
+printf 'WIRETAP_ADMIN_TOKEN=%s\n' "$(openssl rand -hex 32)" > .env
+docker compose up -d
+```
+
+The named `relay-data` volume is mounted at `/data`, which is where the relay keeps its SQLite database. Stopping, recreating, or upgrading the container leaves your registrations, subscriptions, delivery cursors, and any webhooks still queued for an offline desktop intact. Remove the volume only when you intend to discard the relay's history.
+
+The compose file pins the image to a release and binds `127.0.0.1:8443`, matching the reverse-proxy setup below. Change the port mapping to `8443:8443` when the proxy runs in a different container or host.
+
 Keep the relay bound to loopback and let the reverse proxy own public ports 80 and 443.
 
 ## Add TLS with Caddy
