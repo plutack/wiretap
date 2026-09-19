@@ -27,6 +27,10 @@ Client credentials cannot join a project that another client already subscribes 
 
 Open **Settings → Relay server**, enter the relay's HTTPS base URL and admin token, then connect. The workspace shows relay health, live desktop tunnel sessions, registered clients, projects, subscriber cursors, pending counts, and retained webhook totals.
 
+![The Relay server workspace after connecting: relay health and version, live tunnel count, registered clients, and each project with its subscribers, acknowledgement cursors, and retained webhook totals.](/screenshots/07-relay-admin.png)
+
+Saved relays reconnect without retyping the token: the profile keeps the URL and the operating-system credential store keeps the token.
+
 Enable **Remember this relay** to save a named profile. Wiretap stores its admin token in the operating-system credential store and keeps only profile metadata locally. If secure storage is unavailable, the connection remains temporary; there is no plaintext admin-token fallback.
 
 From this workspace, an operator can:
