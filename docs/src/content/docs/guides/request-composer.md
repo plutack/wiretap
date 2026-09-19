@@ -9,6 +9,8 @@ Open **Compose** in the desktop GUI to send an ad-hoc HTTP request. The request 
 
 Choose a method, enter an absolute `http://` or `https://` URL, edit headers, and add a body. Header values may be strings or arrays.
 
+![The Compose workbench with an empty request draft, offering manual entry, a source recipe, file import, and body examples.](/screenshots/05-compose.png)
+
 Enable **Apply on_replay transforms** when the request should pass through the same enabled transform chain used by webhook replay. A transform can change or reject the request, but the final destination must still be an absolute HTTP(S) URL.
 
 Requests have a 30-second timeout and use a direct local transport rather than the interception proxy.

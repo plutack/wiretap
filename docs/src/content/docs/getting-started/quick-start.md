@@ -41,9 +41,13 @@ curl https://httpbin.org/anything \
 
 Open **Traffic** in the dashboard. Select the new row to inspect its request and response headers, body, size, and timing.
 
+![The Traffic tab listing captured exchanges, with each interception session in the sidebar.](/screenshots/03-traffic.png)
+
 ## 4. Continue from the capture
 
 Use **Open in composer** to load the request into an editable draft, or **Export as code** to generate curl, fetch, Python, Go, and other client snippets.
+
+![A capture detail pane showing the request and response headers for one exchange, with the composer and export actions beneath it.](/screenshots/04-capture-detail.png)
 
 ## 5. Stop interception
 
