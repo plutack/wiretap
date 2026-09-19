@@ -51,3 +51,5 @@ node_modules/
 *.db-wal
 *.db-shm
 relay-credentials.json
+# Secrets for `docker compose up` (holds WIRETAP_ADMIN_TOKEN).
+.env
