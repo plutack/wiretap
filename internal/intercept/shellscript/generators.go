@@ -16,6 +16,11 @@ func bashSnapshot(env Env) string {
 	b.WriteString("    __WIRETAP_OLD_HTTP_PROXY=\"${HTTP_PROXY:-}\"\n")
 	b.WriteString("    __WIRETAP_OLD_HTTPS_PROXY=\"${HTTPS_PROXY:-}\"\n")
 	b.WriteString("    __WIRETAP_OLD_NO_PROXY=\"${NO_PROXY:-}\"\n")
+	// The lowercase spelling is snapshotted separately: both cases are in use
+	// in the wild and the user may have set only one of them.
+	b.WriteString("    __WIRETAP_OLD_http_proxy=\"${http_proxy:-}\"\n")
+	b.WriteString("    __WIRETAP_OLD_https_proxy=\"${https_proxy:-}\"\n")
+	b.WriteString("    __WIRETAP_OLD_no_proxy=\"${no_proxy:-}\"\n")
 	if env.CACertPath != "" {
 		b.WriteString("    __WIRETAP_OLD_SSL_CERT_FILE=\"${SSL_CERT_FILE:-}\"\n")
 		b.WriteString("    __WIRETAP_OLD_NODE_EXTRA_CA_CERTS=\"${NODE_EXTRA_CA_CERTS:-}\"\n")
@@ -28,10 +33,21 @@ func bashSnapshot(env Env) string {
 // and backslashes need escaping inside double-quoted context in POSIX sh.
 func bashExports(env Env) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "    export HTTP_PROXY=%q\n", "http://"+env.ProxyAddr)
-	fmt.Fprintf(&b, "    export HTTPS_PROXY=%q\n", "http://"+env.ProxyAddr)
-	// Allow the proxy itself (and localhost) to bypass the proxy.
-	fmt.Fprintf(&b, "    export NO_PROXY=%q\n", "localhost,127.0.0.1")
+	proxyURL := "http://" + env.ProxyAddr
+	noProxy := noProxyValue(env)
+	fmt.Fprintf(&b, "    export HTTP_PROXY=%q\n", proxyURL)
+	fmt.Fprintf(&b, "    export HTTPS_PROXY=%q\n", proxyURL)
+	// The lowercase spelling is not optional: curl refuses the uppercase
+	// HTTP_PROXY for plain-HTTP requests (a deliberate injection guard), so
+	// exporting only the uppercase form leaves http:// traffic unproxied for
+	// every client that is not one of our shims.
+	fmt.Fprintf(&b, "    export http_proxy=%q\n", proxyURL)
+	fmt.Fprintf(&b, "    export https_proxy=%q\n", proxyURL)
+	// Exclude wiretap's own listeners, derived from the addresses this session
+	// actually bound, so the proxy is never asked to dial the proxy. Loopback
+	// services other than wiretap's stay interceptable.
+	fmt.Fprintf(&b, "    export NO_PROXY=%q\n", noProxy)
+	fmt.Fprintf(&b, "    export no_proxy=%q\n", noProxy)
 	if env.CACertPath != "" {
 		fmt.Fprintf(&b, "    export SSL_CERT_FILE=%q\n", env.CACertPath)
 		fmt.Fprintf(&b, "    export NODE_EXTRA_CA_CERTS=%q\n", env.CACertPath)
@@ -59,8 +75,11 @@ func bashStopFn(env Env) string {
         export PATH="$__WIRETAP_OLD_PATH"
         export HTTP_PROXY="$__WIRETAP_OLD_HTTP_PROXY"
         export HTTPS_PROXY="$__WIRETAP_OLD_HTTPS_PROXY"
-        export NO_PROXY="$__WIRETAP_OLD_NO_PROXY"` + restore + `
-        unset __WIRETAP_OLD_PATH __WIRETAP_OLD_HTTP_PROXY __WIRETAP_OLD_HTTPS_PROXY __WIRETAP_OLD_NO_PROXY` + stopOldExtrasUnset(env) + `
+        export NO_PROXY="$__WIRETAP_OLD_NO_PROXY"
+        export http_proxy="$__WIRETAP_OLD_http_proxy"
+        export https_proxy="$__WIRETAP_OLD_https_proxy"
+        export no_proxy="$__WIRETAP_OLD_no_proxy"` + restore + `
+        unset __WIRETAP_OLD_PATH __WIRETAP_OLD_HTTP_PROXY __WIRETAP_OLD_HTTPS_PROXY __WIRETAP_OLD_NO_PROXY __WIRETAP_OLD_http_proxy __WIRETAP_OLD_https_proxy __WIRETAP_OLD_no_proxy` + stopOldExtrasUnset(env) + `
         unset WIRETAP_ACTIVE
         echo 'wiretap: interception disabled in this shell'
     }`
@@ -135,13 +154,27 @@ func Fish(env Env) string {
 	b.WriteString("    set -g __WIRETAP_OLD_HTTP_PROXY $HTTP_PROXY\n")
 	b.WriteString("    set -g __WIRETAP_OLD_HTTPS_PROXY $HTTPS_PROXY\n")
 	b.WriteString("    set -g __WIRETAP_OLD_NO_PROXY $NO_PROXY\n")
+	// The lowercase spelling is snapshotted separately: both cases are in use
+	// in the wild and the user may have set only one of them.
+	b.WriteString("    set -g __WIRETAP_OLD_http_proxy $http_proxy\n")
+	b.WriteString("    set -g __WIRETAP_OLD_https_proxy $https_proxy\n")
+	b.WriteString("    set -g __WIRETAP_OLD_no_proxy $no_proxy\n")
 	if env.CACertPath != "" {
 		b.WriteString("    set -g __WIRETAP_OLD_SSL_CERT_FILE $SSL_CERT_FILE\n")
 		b.WriteString("    set -g __WIRETAP_OLD_NODE_EXTRA_CA_CERTS $NODE_EXTRA_CA_CERTS\n")
 	}
-	fmt.Fprintf(&b, "    set -x HTTP_PROXY %q\n", "http://"+env.ProxyAddr)
-	fmt.Fprintf(&b, "    set -x HTTPS_PROXY %q\n", "http://"+env.ProxyAddr)
-	fmt.Fprintf(&b, "    set -x NO_PROXY %q\n", "localhost,127.0.0.1")
+	proxyURL := "http://" + env.ProxyAddr
+	noProxy := noProxyValue(env)
+	fmt.Fprintf(&b, "    set -x HTTP_PROXY %q\n", proxyURL)
+	fmt.Fprintf(&b, "    set -x HTTPS_PROXY %q\n", proxyURL)
+	// The lowercase spelling is not optional: curl refuses the uppercase
+	// HTTP_PROXY for plain-HTTP requests, so exporting only the uppercase form
+	// leaves http:// traffic unproxied for every client that is not one of our
+	// shims. NO_PROXY excludes wiretap's own listeners as actually bound.
+	fmt.Fprintf(&b, "    set -x http_proxy %q\n", proxyURL)
+	fmt.Fprintf(&b, "    set -x https_proxy %q\n", proxyURL)
+	fmt.Fprintf(&b, "    set -x NO_PROXY %q\n", noProxy)
+	fmt.Fprintf(&b, "    set -x no_proxy %q\n", noProxy)
 	if env.CACertPath != "" {
 		fmt.Fprintf(&b, "    set -x SSL_CERT_FILE %q\n", env.CACertPath)
 		fmt.Fprintf(&b, "    set -x NODE_EXTRA_CA_CERTS %q\n", env.CACertPath)
@@ -160,6 +193,9 @@ func Fish(env Env) string {
 	b.WriteString(fishRestoreOrErase("HTTP_PROXY"))
 	b.WriteString(fishRestoreOrErase("HTTPS_PROXY"))
 	b.WriteString(fishRestoreOrErase("NO_PROXY"))
+	b.WriteString(fishRestoreOrErase("http_proxy"))
+	b.WriteString(fishRestoreOrErase("https_proxy"))
+	b.WriteString(fishRestoreOrErase("no_proxy"))
 	if env.CACertPath != "" {
 		b.WriteString(fishRestoreOrErase("SSL_CERT_FILE"))
 		b.WriteString(fishRestoreOrErase("NODE_EXTRA_CA_CERTS"))
@@ -167,6 +203,7 @@ func Fish(env Env) string {
 		b.WriteString("        set -e __WIRETAP_OLD_NODE_EXTRA_CA_CERTS\n")
 	}
 	b.WriteString("        set -e __WIRETAP_OLD_PATH __WIRETAP_OLD_HTTP_PROXY __WIRETAP_OLD_HTTPS_PROXY __WIRETAP_OLD_NO_PROXY\n")
+	b.WriteString("        set -e __WIRETAP_OLD_http_proxy __WIRETAP_OLD_https_proxy __WIRETAP_OLD_no_proxy\n")
 	b.WriteString("        set -e WIRETAP_ACTIVE\n")
 	b.WriteString("        echo 'wiretap: interception disabled in this shell'\n")
 	b.WriteString("        functions -e wiretap_stop_interception\n")
@@ -189,9 +226,18 @@ func PowerShell(env Env) string {
 	// WIRETAP_ACTIVE behind.
 	b.WriteString("    $__WIRETAP_OLD_ENV = Get-ChildItem Env:\n")
 	b.WriteString("    $Env:WIRETAP_ACTIVE = \"1\"\n")
-	fmt.Fprintf(&b, "    $Env:HTTP_PROXY = %q\n", "http://"+env.ProxyAddr)
-	fmt.Fprintf(&b, "    $Env:HTTPS_PROXY = %q\n", "http://"+env.ProxyAddr)
-	fmt.Fprintf(&b, "    $Env:NO_PROXY = %q\n", "localhost,127.0.0.1")
+	proxyURL := "http://" + env.ProxyAddr
+	noProxy := noProxyValue(env)
+	fmt.Fprintf(&b, "    $Env:HTTP_PROXY = %q\n", proxyURL)
+	fmt.Fprintf(&b, "    $Env:HTTPS_PROXY = %q\n", proxyURL)
+	// Both cases are set: tools differ in which spelling they read, and curl
+	// refuses the uppercase HTTP_PROXY for plain-HTTP requests outright.
+	fmt.Fprintf(&b, "    $Env:http_proxy = %q\n", proxyURL)
+	fmt.Fprintf(&b, "    $Env:https_proxy = %q\n", proxyURL)
+	// Exclude wiretap's own listeners as actually bound, so the proxy is never
+	// asked to dial the proxy.
+	fmt.Fprintf(&b, "    $Env:NO_PROXY = %q\n", noProxy)
+	fmt.Fprintf(&b, "    $Env:no_proxy = %q\n", noProxy)
 	if env.CACertPath != "" {
 		fmt.Fprintf(&b, "    $Env:SSL_CERT_FILE = %q\n", env.CACertPath)
 		fmt.Fprintf(&b, "    $Env:NODE_EXTRA_CA_CERTS = %q\n", env.CACertPath)

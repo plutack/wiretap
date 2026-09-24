@@ -149,31 +149,41 @@ func Start(ctx context.Context, deps Deps) (*Session, error) {
 		}
 		_ = os.RemoveAll(overrideDir)
 	}
+
+	// Bind the control API before generating shell configuration: both
+	// listeners must be excluded from proxying by their real addresses, so the
+	// client never asks the proxy to dial the proxy. Neither port is assumed —
+	// both are taken from what was actually bound.
+	apiLn, err := net.Listen("tcp", deps.LocalAPIAddr)
+	if err != nil {
+		_ = prox.Stop(ctx)
+		return nil, fmt.Errorf("intercept: listen local API: %w", err)
+	}
+	selfAddrs := []string{proxyAddr, apiLn.Addr().String()}
+
 	shellEnv := shellscript.Env{
 		ProxyAddr:       proxyAddr,
 		OverrideBinPath: overrideDir,
 		CACertPath:      caCertPath,
+		SelfAddrs:       selfAddrs,
 	}
 	if err := overridebin.Write(overrideDir, overridebin.Env{
 		ProxyAddr:       proxyAddr,
 		CACertPath:      caCertPath,
 		OverrideBinPath: overrideDir,
+		NoProxy:         selfAddrs,
 	}); err != nil {
+		_ = apiLn.Close()
 		_ = prox.Stop(ctx)
 		return nil, fmt.Errorf("intercept: write override bin: %w", err)
 	}
 	if err := injectIntoFiles(startupFiles, deps.ShellKind, shellEnv); err != nil {
+		_ = apiLn.Close()
 		cleanPersistentState()
 		_ = prox.Stop(ctx)
 		return nil, fmt.Errorf("intercept: patch startup files: %w", err)
 	}
 
-	apiLn, err := net.Listen("tcp", deps.LocalAPIAddr)
-	if err != nil {
-		cleanPersistentState()
-		_ = prox.Stop(ctx)
-		return nil, fmt.Errorf("intercept: listen local API: %w", err)
-	}
 	api := localapi.New(deps.PCStore, localapi.WithVersion(deps.Version))
 	httpSrv := &http.Server{Handler: api.Routes()}
 	go func() { _ = prox.Start() }()

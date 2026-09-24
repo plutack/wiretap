@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.4.1 — 2026-09-24
+
+### Interception coverage
+
+- Fixed plain-HTTP traffic bypassing the interception proxy. curl refuses the
+  uppercase `HTTP_PROXY` for `http://` URLs (a deliberate injection guard), so
+  exporting only the uppercase form left plain HTTP unproxied for every client
+  that was not one of the curl, git or node shims: requests succeeded, nothing
+  was captured. Both cases are now exported, and `wiretap_stop_interception`
+  restores both.
+- Fixed `NO_PROXY` excluding every loopback address, which hid local services
+  from capture — a webhook receiver or local API on another port never reached
+  the proxy. It now excludes only the addresses wiretap itself bound, derived
+  from the real ports rather than assumed ones, so any other loopback service
+  stays interceptable. The curl shim's `--noproxy` uses the same derived list.
+- Added a guard so the proxy refuses a request aimed at its own listener rather
+  than dialling itself, covering clients that ignore `host:port` entries in
+  `NO_PROXY`.
+
+### Upgrade notes
+
+- Restart a running `wiretap intercept start` session to pick these up. Shells
+  attached to a session started on an earlier version keep the old environment
+  until they are reopened.
+
 ## v0.4.0 — 2026-09-18
 
 ### Local history search

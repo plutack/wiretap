@@ -339,6 +339,27 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.handleHTTP(w, r)
 }
 
+// targetsSelf reports whether addr names this proxy's own listener. Forwarding
+// a request to ourselves would recurse: we would dial our own listener and
+// re-issue the same request, which then dials us again. The generated shell env
+// excludes these addresses via NO_PROXY, but not every HTTP client honours
+// host:port entries there, so refuse here as well. The port is compared against
+// the address actually bound, never a compiled-in default.
+func (p *Proxy) targetsSelf(addr string) bool {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		return false
+	}
+	if host != "localhost" {
+		ip := net.ParseIP(host)
+		if ip == nil || !ip.IsLoopback() {
+			return false
+		}
+	}
+	_, selfPort, err := net.SplitHostPort(p.Addr())
+	return err == nil && selfPort != "" && selfPort == port
+}
+
 // handleConnect terminates a CONNECT tunnel and intercepts the TLS inside it.
 func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -347,6 +368,11 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 		addr = r.Host
 	}
 	host, _, _ := net.SplitHostPort(addr)
+
+	if p.targetsSelf(addr) {
+		http.Error(w, "wiretap: refusing to proxy to the proxy itself", http.StatusLoopDetected)
+		return
+	}
 
 	upstream, err := p.dialer.Dial(ctx, "tcp", addr)
 	if err != nil {
@@ -525,6 +551,13 @@ func (p *Proxy) ctx() context.Context { return context.Background() }
 // (HTTPS via CONNECT is the primary path); this still records the exchange.
 func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	// A forward-proxy request carries an absolute URL. Refuse one aimed at our
+	// own listener for the same reason as CONNECT above.
+	if p.targetsSelf(r.URL.Host) {
+		http.Error(w, "wiretap: refusing to proxy to the proxy itself", http.StatusLoopDetected)
+		return
+	}
 
 	reqBody, _ := io.ReadAll(r.Body)
 	_ = r.Body.Close()

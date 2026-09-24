@@ -40,6 +40,11 @@ type Env struct {
 	// Each shim skips this entry while resolving the real binary so it does
 	// not recurse into itself.
 	OverrideBinPath string
+	// NoProxy lists the addresses that must bypass the proxy — wiretap's own
+	// listeners, as actually bound. The curl shim passes it as --noproxy so the
+	// shim matches the environment the shell exports. Empty omits the flag and
+	// lets curl fall back to the NO_PROXY variable.
+	NoProxy []string
 }
 
 // Tool names a tool we ship a shim for.
@@ -79,7 +84,9 @@ func Shim(tool Tool, env Env) (string, error) {
 	case ToolCurl:
 		fmt.Fprintf(&b, "exec \"$__WT_REAL\" \\\n")
 		fmt.Fprintf(&b, "    --proxy %s \\\n", shellQuote("http://"+env.ProxyAddr))
-		fmt.Fprintf(&b, "    --noproxy %s \\\n", shellQuote("localhost,127.0.0.1"))
+		if noProxy := strings.Join(env.NoProxy, ","); noProxy != "" {
+			fmt.Fprintf(&b, "    --noproxy %s \\\n", shellQuote(noProxy))
+		}
 		fmt.Fprintf(&b, "    --cacert %s \\\n", shellQuote(env.CACertPath))
 		fmt.Fprintf(&b, "    \"$@\"\n")
 	case ToolNode:
