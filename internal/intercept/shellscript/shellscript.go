@@ -13,6 +13,11 @@
 // in the parent intercept package; this one only formats text.
 package shellscript
 
+import (
+	"net"
+	"strings"
+)
+
 // Env carries the values a generated script exports into the shell. Fields
 // map 1:1 to environment variables used by the proxy and its override-bin
 // shims (git/curl/node wrappers that respect the proxy).
@@ -30,6 +35,58 @@ type Env struct {
 	// successful interception (lets the app know the shell started). Empty
 	// disables the callback.
 	CallbackURL string
+	// SelfAddrs lists the addresses wiretap itself listens on for this session:
+	// the interception proxy and the local control API, as they were actually
+	// bound (both may be reconfigured or ephemeral, so the ports are never
+	// assumed). They become the NO_PROXY entries, so a client never asks the
+	// proxy to dial the proxy. ProxyAddr is always included; empty means
+	// "exclude only ProxyAddr".
+	SelfAddrs []string
+}
+
+// NoProxyList renders NO_PROXY entries for the addresses wiretap listens on.
+// Each address is emitted as bound, plus — for loopback listeners — the
+// localhost/127.0.0.1 spelling of the same port, because clients spell
+// loopback differently and only the port identifies wiretap's own endpoint.
+// Nothing here is hard-coded: ports come from the addresses the session bound.
+func NoProxyList(addrs []string) string {
+	var out []string
+	seen := make(map[string]struct{}, len(addrs)*2)
+	add := func(s string) {
+		if s == "" {
+			return
+		}
+		if _, dup := seen[s]; dup {
+			return
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	for _, addr := range addrs {
+		add(addr)
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			continue
+		}
+		if host == "localhost" {
+			add(net.JoinHostPort("127.0.0.1", port))
+			continue
+		}
+		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			add(net.JoinHostPort("localhost", port))
+		}
+	}
+	return strings.Join(out, ",")
+}
+
+// noProxyValue is the NO_PROXY value a generated script exports. It always
+// covers ProxyAddr so the proxy is never asked to dial itself, even when a
+// caller forgets to populate SelfAddrs.
+func noProxyValue(env Env) string {
+	addrs := make([]string, 0, len(env.SelfAddrs)+1)
+	addrs = append(addrs, env.SelfAddrs...)
+	addrs = append(addrs, env.ProxyAddr)
+	return NoProxyList(addrs)
 }
 
 // ShellKind enumerates the shell families we support. Each is wired to a

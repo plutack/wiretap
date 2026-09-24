@@ -165,6 +165,9 @@ func newInterceptAttachCmd() *cobra.Command {
 				ProxyAddr:       proxyAddr,
 				OverrideBinPath: filepath.Join(configDir, "override-bin"),
 				CACertPath:      filepath.Join(configDir, "ca", "wiretap-ca.crt"),
+				// Exclude the owner's listeners by their real addresses so the
+				// attached shell never asks the proxy to dial the proxy.
+				SelfAddrs: []string{proxyAddr, localAPIAddr},
 			})
 			if attachCtx.Err() != nil && cmd.Context().Err() == nil {
 				fmt.Fprintln(out, "wiretap: interception session stopped")

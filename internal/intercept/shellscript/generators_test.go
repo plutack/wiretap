@@ -16,6 +16,10 @@ func fullEnv() Env {
 		OverrideBinPath: "/home/user/.local/share/wiretap/override-bin",
 		CACertPath:      "/home/user/.local/share/wiretap/ca.crt",
 		CallbackURL:     "http://127.0.0.1:9999/callback",
+		// Both listeners, as actually bound: the control API deliberately uses a
+		// different port from the proxy so the golden proves NO_PROXY is derived
+		// from the addresses rather than hard-coded.
+		SelfAddrs: []string{"127.0.0.1:8888", "127.0.0.1:9876"},
 	}
 }
 
@@ -147,5 +151,122 @@ func TestSectionMarkers(t *testing.T) {
 	}
 	if !strings.HasPrefix(SectionStart, "# --wiretap") {
 		t.Error("section start must be a comment starting with --wiretap")
+	}
+}
+
+// TestGenerators_ExportBothProxyVarCases pins the fix for plain-HTTP traffic
+// bypassing the proxy: curl refuses the uppercase HTTP_PROXY for http:// URLs
+// (a deliberate injection guard), so a shell that exports only the uppercase
+// spelling silently sends plain HTTP straight to the internet.
+func TestGenerators_ExportBothProxyVarCases(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		got  string
+	}{
+		{"bash", Bash(fullEnv())},
+		{"fish", Fish(fullEnv())},
+		{"powershell", PowerShell(fullEnv())},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for _, want := range []string{"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy"} {
+				if !strings.Contains(tc.got, want) {
+					t.Errorf("generated script does not set %s", want)
+				}
+			}
+		})
+	}
+}
+
+// TestBash_RestoresBothProxyVarCases guards the snapshot/restore symmetry: a
+// lowercase variable we set must be restored (or erased) by the stop function,
+// otherwise stopping interception would leave the shell pointed at a dead proxy.
+func TestBash_RestoresBothProxyVarCases(t *testing.T) {
+	t.Parallel()
+	got := Bash(fullEnv())
+	for _, want := range []string{
+		`__WIRETAP_OLD_http_proxy="${http_proxy:-}"`,
+		`__WIRETAP_OLD_https_proxy="${https_proxy:-}"`,
+		`__WIRETAP_OLD_no_proxy="${no_proxy:-}"`,
+		`export http_proxy="$__WIRETAP_OLD_http_proxy"`,
+		`export no_proxy="$__WIRETAP_OLD_no_proxy"`,
+		"__WIRETAP_OLD_http_proxy __WIRETAP_OLD_https_proxy __WIRETAP_OLD_no_proxy",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("bash script missing %q", want)
+		}
+	}
+}
+
+func TestFish_RestoresBothProxyVarCases(t *testing.T) {
+	t.Parallel()
+	got := Fish(fullEnv())
+	for _, want := range []string{
+		"set -g __WIRETAP_OLD_http_proxy $http_proxy",
+		"set -gx http_proxy $__WIRETAP_OLD_http_proxy",
+		"set -e __WIRETAP_OLD_http_proxy __WIRETAP_OLD_https_proxy __WIRETAP_OLD_no_proxy",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("fish script missing %q", want)
+		}
+	}
+}
+
+// TestGenerate_NoProxyComesFromBoundAddresses is the "no hard-coded ports" test:
+// NO_PROXY must carry the addresses this session actually bound, including the
+// control API on its own port, so loopback services other than wiretap's stay
+// interceptable.
+func TestGenerate_NoProxyComesFromBoundAddresses(t *testing.T) {
+	t.Parallel()
+	env := fullEnv()
+	env.ProxyAddr = "127.0.0.1:54321"
+	env.SelfAddrs = []string{"127.0.0.1:54321", "127.0.0.1:54322"}
+
+	got := Bash(env)
+	if !strings.Contains(got, `export NO_PROXY="127.0.0.1:54321,localhost:54321,127.0.0.1:54322,localhost:54322"`) {
+		t.Errorf("NO_PROXY not derived from the bound addresses; got:\n%s", got)
+	}
+	if strings.Contains(got, "9876") || strings.Contains(got, "8888") {
+		t.Error("generated script contains a hard-coded wiretap port")
+	}
+	// A different port must not be excluded, or the whole point is lost.
+	if strings.Contains(got, "1700") {
+		t.Error("unrelated loopback service ended up in NO_PROXY")
+	}
+}
+
+func TestNoProxyList(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		in   []string
+		want string
+	}{
+		{"loopback ip gains localhost spelling", []string{"127.0.0.1:8888"}, "127.0.0.1:8888,localhost:8888"},
+		{"localhost gains ip spelling", []string{"localhost:8888"}, "localhost:8888,127.0.0.1:8888"},
+		{"ipv6 loopback", []string{"[::1]:8888"}, "[::1]:8888,localhost:8888"},
+		{"deduplicates", []string{"127.0.0.1:8888", "127.0.0.1:8888"}, "127.0.0.1:8888,localhost:8888"},
+		{"non-loopback is passed through untouched", []string{"10.0.0.5:8888"}, "10.0.0.5:8888"},
+		{"portless entry", []string{"example.test"}, "example.test"},
+		{"empty", nil, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := NoProxyList(tc.in); got != tc.want {
+				t.Errorf("NoProxyList(%v) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestNoProxyValue_AlwaysCoversProxyAddr: a caller that forgets SelfAddrs must
+// still not let the proxy be asked to dial itself.
+func TestNoProxyValue_AlwaysCoversProxyAddr(t *testing.T) {
+	t.Parallel()
+	got := noProxyValue(Env{ProxyAddr: "127.0.0.1:4444"})
+	if got != "127.0.0.1:4444,localhost:4444" {
+		t.Errorf("noProxyValue = %q, want the proxy address included", got)
 	}
 }

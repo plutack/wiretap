@@ -15,6 +15,6 @@ __WT_resolve() {
 __WT_REAL=$(__WT_resolve) || __WT_REAL='curl'
 exec "$__WT_REAL" \
     --proxy 'http://127.0.0.1:8888' \
-    --noproxy 'localhost,127.0.0.1' \
+    --noproxy '127.0.0.1:8888,127.0.0.1:9876' \
     --cacert '/home/u/.config/wiretap/ca/wiretap-ca.crt' \
     "$@"

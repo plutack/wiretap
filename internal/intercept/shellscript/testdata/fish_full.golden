@@ -3,11 +3,17 @@
     set -g __WIRETAP_OLD_HTTP_PROXY $HTTP_PROXY
     set -g __WIRETAP_OLD_HTTPS_PROXY $HTTPS_PROXY
     set -g __WIRETAP_OLD_NO_PROXY $NO_PROXY
+    set -g __WIRETAP_OLD_http_proxy $http_proxy
+    set -g __WIRETAP_OLD_https_proxy $https_proxy
+    set -g __WIRETAP_OLD_no_proxy $no_proxy
     set -g __WIRETAP_OLD_SSL_CERT_FILE $SSL_CERT_FILE
     set -g __WIRETAP_OLD_NODE_EXTRA_CA_CERTS $NODE_EXTRA_CA_CERTS
     set -x HTTP_PROXY "http://127.0.0.1:8888"
     set -x HTTPS_PROXY "http://127.0.0.1:8888"
-    set -x NO_PROXY "localhost,127.0.0.1"
+    set -x http_proxy "http://127.0.0.1:8888"
+    set -x https_proxy "http://127.0.0.1:8888"
+    set -x NO_PROXY "127.0.0.1:8888,localhost:8888,127.0.0.1:9876,localhost:9876"
+    set -x no_proxy "127.0.0.1:8888,localhost:8888,127.0.0.1:9876,localhost:9876"
     set -x SSL_CERT_FILE "/home/user/.local/share/wiretap/ca.crt"
     set -x NODE_EXTRA_CA_CERTS "/home/user/.local/share/wiretap/ca.crt"
     set -x PATH "/home/user/.local/share/wiretap/override-bin" $PATH
@@ -28,6 +34,21 @@
         else
             set -e NO_PROXY
         end
+        if set -q __WIRETAP_OLD_http_proxy[1]
+            set -gx http_proxy $__WIRETAP_OLD_http_proxy
+        else
+            set -e http_proxy
+        end
+        if set -q __WIRETAP_OLD_https_proxy[1]
+            set -gx https_proxy $__WIRETAP_OLD_https_proxy
+        else
+            set -e https_proxy
+        end
+        if set -q __WIRETAP_OLD_no_proxy[1]
+            set -gx no_proxy $__WIRETAP_OLD_no_proxy
+        else
+            set -e no_proxy
+        end
         if set -q __WIRETAP_OLD_SSL_CERT_FILE[1]
             set -gx SSL_CERT_FILE $__WIRETAP_OLD_SSL_CERT_FILE
         else
@@ -41,6 +62,7 @@
         set -e __WIRETAP_OLD_SSL_CERT_FILE
         set -e __WIRETAP_OLD_NODE_EXTRA_CA_CERTS
         set -e __WIRETAP_OLD_PATH __WIRETAP_OLD_HTTP_PROXY __WIRETAP_OLD_HTTPS_PROXY __WIRETAP_OLD_NO_PROXY
+        set -e __WIRETAP_OLD_http_proxy __WIRETAP_OLD_https_proxy __WIRETAP_OLD_no_proxy
         set -e WIRETAP_ACTIVE
         echo 'wiretap: interception disabled in this shell'
         functions -e wiretap_stop_interception
