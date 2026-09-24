@@ -3,11 +3,17 @@
     __WIRETAP_OLD_HTTP_PROXY="${HTTP_PROXY:-}"
     __WIRETAP_OLD_HTTPS_PROXY="${HTTPS_PROXY:-}"
     __WIRETAP_OLD_NO_PROXY="${NO_PROXY:-}"
+    __WIRETAP_OLD_http_proxy="${http_proxy:-}"
+    __WIRETAP_OLD_https_proxy="${https_proxy:-}"
+    __WIRETAP_OLD_no_proxy="${no_proxy:-}"
     __WIRETAP_OLD_SSL_CERT_FILE="${SSL_CERT_FILE:-}"
     __WIRETAP_OLD_NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-}"
     export HTTP_PROXY="http://127.0.0.1:8888"
     export HTTPS_PROXY="http://127.0.0.1:8888"
-    export NO_PROXY="localhost,127.0.0.1"
+    export http_proxy="http://127.0.0.1:8888"
+    export https_proxy="http://127.0.0.1:8888"
+    export NO_PROXY="127.0.0.1:8888,localhost:8888,127.0.0.1:9876,localhost:9876"
+    export no_proxy="127.0.0.1:8888,localhost:8888,127.0.0.1:9876,localhost:9876"
     export SSL_CERT_FILE="/home/user/.local/share/wiretap/ca.crt"
     export NODE_EXTRA_CA_CERTS="/home/user/.local/share/wiretap/ca.crt"
     export PATH="/home/user/.local/share/wiretap/override-bin:$PATH"
@@ -17,9 +23,12 @@
         export HTTP_PROXY="$__WIRETAP_OLD_HTTP_PROXY"
         export HTTPS_PROXY="$__WIRETAP_OLD_HTTPS_PROXY"
         export NO_PROXY="$__WIRETAP_OLD_NO_PROXY"
+        export http_proxy="$__WIRETAP_OLD_http_proxy"
+        export https_proxy="$__WIRETAP_OLD_https_proxy"
+        export no_proxy="$__WIRETAP_OLD_no_proxy"
         export SSL_CERT_FILE="$__WIRETAP_OLD_SSL_CERT_FILE"
         export NODE_EXTRA_CA_CERTS="$__WIRETAP_OLD_NODE_EXTRA_CA_CERTS"
-        unset __WIRETAP_OLD_PATH __WIRETAP_OLD_HTTP_PROXY __WIRETAP_OLD_HTTPS_PROXY __WIRETAP_OLD_NO_PROXY __WIRETAP_OLD_SSL_CERT_FILE __WIRETAP_OLD_NODE_EXTRA_CA_CERTS
+        unset __WIRETAP_OLD_PATH __WIRETAP_OLD_HTTP_PROXY __WIRETAP_OLD_HTTPS_PROXY __WIRETAP_OLD_NO_PROXY __WIRETAP_OLD_http_proxy __WIRETAP_OLD_https_proxy __WIRETAP_OLD_no_proxy __WIRETAP_OLD_SSL_CERT_FILE __WIRETAP_OLD_NODE_EXTRA_CA_CERTS
         unset WIRETAP_ACTIVE
         echo 'wiretap: interception disabled in this shell'
     }

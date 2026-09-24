@@ -2,7 +2,10 @@
     $Env:WIRETAP_ACTIVE = "1"
     $Env:HTTP_PROXY = "http://127.0.0.1:8888"
     $Env:HTTPS_PROXY = "http://127.0.0.1:8888"
-    $Env:NO_PROXY = "localhost,127.0.0.1"
+    $Env:http_proxy = "http://127.0.0.1:8888"
+    $Env:https_proxy = "http://127.0.0.1:8888"
+    $Env:NO_PROXY = "127.0.0.1:8888,localhost:8888,127.0.0.1:9876,localhost:9876"
+    $Env:no_proxy = "127.0.0.1:8888,localhost:8888,127.0.0.1:9876,localhost:9876"
     $Env:SSL_CERT_FILE = "/home/user/.local/share/wiretap/ca.crt"
     $Env:NODE_EXTRA_CA_CERTS = "/home/user/.local/share/wiretap/ca.crt"
     $Env:PATH = "/home/user/.local/share/wiretap/override-bin" + ";" + $Env:PATH
