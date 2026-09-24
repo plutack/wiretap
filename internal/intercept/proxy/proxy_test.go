@@ -1,12 +1,14 @@
 package proxy
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -246,5 +248,69 @@ func TestProxy_StopWithoutStartIsSafe(t *testing.T) {
 	p := New("127.0.0.1:0", NewCastoreSigner(nil), nil)
 	if err := p.Stop(context.Background()); err != nil {
 		t.Errorf("Stop before Start: %v", err)
+	}
+}
+
+// TestProxy_RefusesToProxyToItself pins the loop guard. NO_PROXY normally keeps
+// clients from aiming at wiretap's own listeners, but not every HTTP client
+// honours host:port entries in it, and proxying to ourselves would recurse:
+// dial our own listener, re-issue the request, dial again.
+//
+// Requests are written raw because Go's own client refuses to send loopback
+// destinations through a proxy, so it cannot express this case.
+func TestProxy_RefusesToProxyToItself(t *testing.T) {
+	t.Parallel()
+	p, _ := startProxyInTest(t, &captureCollector{})
+	self := p.Addr()
+
+	// A loopback port that is not ours must still be forwarded (and simply fail
+	// to connect), proving the guard keys on our own port rather than on
+	// "loopback" as a category.
+	if _, port, err := net.SplitHostPort(self); err == nil && port == "1" {
+		t.Skip("proxy happened to bind port 1")
+	}
+
+	cases := []struct {
+		name       string
+		request    string
+		wantStatus int
+	}{
+		{
+			name:       "plain http aimed at the proxy",
+			request:    "GET http://" + self + "/ HTTP/1.1\r\nHost: " + self + "\r\n\r\n",
+			wantStatus: http.StatusLoopDetected,
+		},
+		{
+			name:       "connect aimed at the proxy",
+			request:    "CONNECT " + self + " HTTP/1.1\r\nHost: " + self + "\r\n\r\n",
+			wantStatus: http.StatusLoopDetected,
+		},
+		{
+			name:       "another loopback port is forwarded, not refused",
+			request:    "GET http://127.0.0.1:1/ HTTP/1.1\r\nHost: 127.0.0.1:1\r\n\r\n",
+			wantStatus: http.StatusBadGateway,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			conn, err := net.Dial("tcp", self)
+			if err != nil {
+				t.Fatalf("dial proxy: %v", err)
+			}
+			defer conn.Close()
+			if _, err := conn.Write([]byte(tc.request)); err != nil {
+				t.Fatalf("write request: %v", err)
+			}
+			_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+			resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+			if err != nil {
+				t.Fatalf("read response: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != tc.wantStatus {
+				t.Errorf("status = %d, want %d", resp.StatusCode, tc.wantStatus)
+			}
+		})
 	}
 }

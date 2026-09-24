@@ -15,6 +15,9 @@ func fixedEnv() Env {
 		ProxyAddr:       "127.0.0.1:8888",
 		CACertPath:      "/home/u/.config/wiretap/ca/wiretap-ca.crt",
 		OverrideBinPath: "/tmp/wiretap-override-001",
+		// Wiretap's own listeners as bound: the golden exercises the derived
+		// --noproxy list rather than a hard-coded pair.
+		NoProxy: []string{"127.0.0.1:8888", "127.0.0.1:9876"},
 	}
 }
 
@@ -61,12 +64,12 @@ func TestShimContents(t *testing.T) {
 		}
 	})
 
-	t.Run("curl pins proxy and cacert with localhost bypass", func(t *testing.T) {
+	t.Run("curl pins proxy and cacert with wiretap's own listeners bypassed", func(t *testing.T) {
 		t.Parallel()
 		got, _ := Shim(ToolCurl, env)
 		for _, want := range []string{
 			`--proxy 'http://127.0.0.1:8888'`,
-			`--noproxy 'localhost,127.0.0.1'`,
+			`--noproxy '127.0.0.1:8888,127.0.0.1:9876'`,
 			`--cacert '/home/u/.config/wiretap/ca/wiretap-ca.crt'`, // includes closing quote
 		} {
 			if !strings.Contains(got, want) {
@@ -161,5 +164,40 @@ func TestToolsStableOrder(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("Tools()[%d] = %v, want %v", i, got[i], want[i])
 		}
+	}
+}
+
+// TestShim_CurlNoProxyFollowsEnv pins that the curl shim's --noproxy comes from
+// the caller's derived list rather than a hard-coded pair, so it matches the
+// NO_PROXY the shell exports (and does not need to name the control API's port).
+func TestShim_CurlNoProxyFollowsEnv(t *testing.T) {
+	t.Parallel()
+	env := fixedEnv()
+	env.NoProxy = []string{"127.0.0.1:8888", "127.0.0.1:54321"}
+
+	got, err := Shim(ToolCurl, env)
+	if err != nil {
+		t.Fatalf("Shim: %v", err)
+	}
+	if !strings.Contains(got, "--noproxy '127.0.0.1:8888,127.0.0.1:54321'") {
+		t.Errorf("curl shim --noproxy not taken from Env.NoProxy:\n%s", got)
+	}
+	if strings.Contains(got, "localhost,127.0.0.1") {
+		t.Error("curl shim still carries the old hard-coded no-proxy pair")
+	}
+}
+
+// TestShim_CurlOmitsNoProxyWhenUnset: with no list the flag is omitted, letting
+// curl fall back to the NO_PROXY variable the shell exports.
+func TestShim_CurlOmitsNoProxyWhenUnset(t *testing.T) {
+	t.Parallel()
+	env := fixedEnv()
+	env.NoProxy = nil
+	got, err := Shim(ToolCurl, env)
+	if err != nil {
+		t.Fatalf("Shim: %v", err)
+	}
+	if strings.Contains(got, "--noproxy") {
+		t.Errorf("curl shim should omit --noproxy when no list is set:\n%s", got)
 	}
 }

@@ -3,9 +3,15 @@
     __WIRETAP_OLD_HTTP_PROXY="${HTTP_PROXY:-}"
     __WIRETAP_OLD_HTTPS_PROXY="${HTTPS_PROXY:-}"
     __WIRETAP_OLD_NO_PROXY="${NO_PROXY:-}"
+    __WIRETAP_OLD_http_proxy="${http_proxy:-}"
+    __WIRETAP_OLD_https_proxy="${https_proxy:-}"
+    __WIRETAP_OLD_no_proxy="${no_proxy:-}"
     export HTTP_PROXY="http://127.0.0.1:8888"
     export HTTPS_PROXY="http://127.0.0.1:8888"
-    export NO_PROXY="localhost,127.0.0.1"
+    export http_proxy="http://127.0.0.1:8888"
+    export https_proxy="http://127.0.0.1:8888"
+    export NO_PROXY="127.0.0.1:8888,localhost:8888,127.0.0.1:9876,localhost:9876"
+    export no_proxy="127.0.0.1:8888,localhost:8888,127.0.0.1:9876,localhost:9876"
     export PATH="/home/user/.local/share/wiretap/override-bin:$PATH"
 
     wiretap_stop_interception() {
@@ -13,7 +19,10 @@
         export HTTP_PROXY="$__WIRETAP_OLD_HTTP_PROXY"
         export HTTPS_PROXY="$__WIRETAP_OLD_HTTPS_PROXY"
         export NO_PROXY="$__WIRETAP_OLD_NO_PROXY"
-        unset __WIRETAP_OLD_PATH __WIRETAP_OLD_HTTP_PROXY __WIRETAP_OLD_HTTPS_PROXY __WIRETAP_OLD_NO_PROXY
+        export http_proxy="$__WIRETAP_OLD_http_proxy"
+        export https_proxy="$__WIRETAP_OLD_https_proxy"
+        export no_proxy="$__WIRETAP_OLD_no_proxy"
+        unset __WIRETAP_OLD_PATH __WIRETAP_OLD_HTTP_PROXY __WIRETAP_OLD_HTTPS_PROXY __WIRETAP_OLD_NO_PROXY __WIRETAP_OLD_http_proxy __WIRETAP_OLD_https_proxy __WIRETAP_OLD_no_proxy
         unset WIRETAP_ACTIVE
         echo 'wiretap: interception disabled in this shell'
     }
