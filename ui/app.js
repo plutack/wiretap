@@ -32,6 +32,7 @@ function CommandDeck({
   onChange,
   counts,
   onSearch,
+  searchReset,
   project,
   filtered,
   total,
@@ -58,30 +59,24 @@ function CommandDeck({
       ${
         activeTab === "composer"
           ? html`<div class="workspace-summary">Manual HTTP request workbench</div>`
-          : html`<${SearchBar}
-        onSearch=${onSearch}
-        placeholder=${activeTab === "webhooks" ? "Filter source, method, or route…" : "Filter method, host, URL, or status…"}
-      />`
+          : html`<div class="search-cluster">
+              <${SearchBar}
+                onSearch=${onSearch}
+                resetToken=${searchReset}
+                placeholder=${activeTab === "webhooks" ? "Filter source, method, or route…" : "Filter method, host, URL, or status…"}
+                showBodySearch=${activeTab === "traffic"}
+                bodySearch=${bodySearch}
+                onBodySearchChange=${onBodySearchChange}
+              />
+            </div>`
       }
       ${
         activeTab === "composer"
           ? null
           : html`<div class="workspace-summary">
-        ${project ? `source:${project} · ` : ""}${total > filtered ? `${filtered} of ${total} matches` : `${filtered} visible`}
-        ${
-          activeTab === "traffic"
-            ? html`<label class="body-search-toggle" title="Also match request and response bodies. Slower: body content is not indexed, so this reads every body it scans.">
-              <input
-                type="checkbox"
-                checked=${bodySearch}
-                onChange=${(event) => onBodySearchChange(event.target.checked)}
-              />
-              <span>bodies</span>
-            </label>`
-            : null
-        }
-        ${followControl}
-      </div>`
+              ${project ? `source:${project} · ` : ""}${total > filtered ? `${filtered} of ${total} matches` : `${filtered} visible`}
+              ${followControl}
+            </div>`
       }
     </div>
   </div>`;
@@ -105,6 +100,7 @@ function App() {
   const [methodFilter, setMethodFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [searchReset, setSearchReset] = useState(0);
   // Only meaningful for traffic: extends the query to request/response bodies.
   const [searchBodies, setSearchBodies] = useState(false);
 
@@ -484,6 +480,8 @@ function App() {
       glyph: "×",
       run: () => {
         setSearch("");
+        setSearchReset((reset) => reset + 1);
+        setSearchBodies(false);
         setMethodFilter("");
         setStatusFilter("");
         setProject("");
@@ -542,6 +540,7 @@ function App() {
       status=${status}
       settingsActive=${activeTab === "settings"}
       onOpenSettings=${toggleSettings}
+      onOpenPalette=${() => setPaletteOpen(true)}
       onRefresh=${() => {
         loadStatus();
         loadScripts();
@@ -587,6 +586,7 @@ function App() {
                 onChange=${changeTab}
                 counts=${{ webhooks: displayedWebhooks.length, traffic: displayedCaptures.length, composer: null }}
                 onSearch=${setSearch}
+                searchReset=${searchReset}
                 project=${project}
                 filtered=${activeTab === "webhooks" ? displayedWebhooks.length : activeTab === "traffic" ? displayedCaptures.length : 0}
                 total=${activeTab === "webhooks" ? webhookTotal : activeTab === "traffic" ? captureTotal : 0}

@@ -15,7 +15,7 @@ Published release artifacts cover Linux and Windows, including ARM64 Linux. macO
 
 ## Linux
 
-Choose the artifact for your machine from [the v0.4.1 release](https://github.com/plutack/wiretap/releases/tag/v0.4.1):
+Choose the artifact for your machine from [the v0.4.2 release](https://github.com/plutack/wiretap/releases/tag/v0.4.2):
 
 | Format | Architectures | Best for |
 | --- | --- | --- |
@@ -26,7 +26,7 @@ Choose the artifact for your machine from [the v0.4.1 release](https://github.co
 For a tarball, extract the archive and install the binary on `PATH`:
 
 ```sh
-tar -xzf wiretap_0.4.1_linux_amd64.tar.gz
+tar -xzf wiretap_0.4.2_linux_amd64.tar.gz
 sudo install -m 0755 wiretap /usr/local/bin/wiretap
 wiretap version
 ```
@@ -34,8 +34,8 @@ wiretap version
 For an AppImage:
 
 ```sh
-chmod +x wiretap_0.4.1_x86_64.AppImage
-./wiretap_0.4.1_x86_64.AppImage gui
+chmod +x wiretap_0.4.2_x86_64.AppImage
+./wiretap_0.4.2_x86_64.AppImage gui
 ```
 
 The desktop build requires GTK 3 and WebKitGTK at runtime. Package names vary by distribution; install the WebKitGTK 4.1 runtime supplied by your distribution if the GUI does not start.
@@ -43,13 +43,13 @@ The desktop build requires GTK 3 and WebKitGTK at runtime. Package names vary by
 On Arch Linux:
 
 ```sh
-sudo pacman -U wiretap-0.4.1-x86_64.pkg.tar.zst
+sudo pacman -U wiretap-0.4.2-x86_64.pkg.tar.zst
 wiretap gui
 ```
 
 ## Windows
 
-Download the x86-64 installer from [the v0.4.1 release](https://github.com/plutack/wiretap/releases/tag/v0.4.1), or use the `.zip` when you want a portable binary. Windows on ARM is not currently published.
+Download the x86-64 installer from [the v0.4.2 release](https://github.com/plutack/wiretap/releases/tag/v0.4.2), or use the `.zip` when you want a portable binary. Windows on ARM is not currently published.
 
 ## Verify a download
 
@@ -62,7 +62,7 @@ sha256sum --check SHA256SUMS --ignore-missing
 PowerShell users can compare a file with the matching line in `SHA256SUMS`:
 
 ```powershell
-Get-FileHash .\wiretap_0.4.1_windows_x86_64-installer.exe -Algorithm SHA256
+Get-FileHash .\wiretap_0.4.2_windows_x86_64-installer.exe -Algorithm SHA256
 ```
 
 ## Build from source
