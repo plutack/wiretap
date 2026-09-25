@@ -8,7 +8,7 @@ function SystemPill({ online, label, value, optional = false }) {
   </div>`;
 }
 
-export function StatusBar({ status, onRefresh, onOpenSettings, settingsActive }) {
+export function StatusBar({ status, onRefresh, onOpenSettings, onOpenPalette, settingsActive }) {
   const s = status || {};
   const projects = s.connected_projects || [];
   const watching = projects.length
@@ -60,6 +60,19 @@ export function StatusBar({ status, onRefresh, onOpenSettings, settingsActive })
     </div>
 
     <div class="topbar-actions">
+    <button
+      class="command-palette-button"
+      title="Open command palette (Ctrl K)"
+      aria-label="Open command palette"
+      onClick=${onOpenPalette}
+    >
+      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+        <circle cx="8.5" cy="8.5" r="5.5" />
+        <path d="m13 13 4 4" />
+      </svg>
+      <span>Commands</span>
+      <kbd>Ctrl K</kbd>
+    </button>
     <button
       class="refresh-button ${settingsActive ? "active" : ""}"
       title="Settings"

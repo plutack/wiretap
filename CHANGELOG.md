@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.4.2 — 2026-09-25
+
+### Desktop search controls
+
+- Moved the traffic body-search toggle into the search field so its scope is
+  clear and the control stays close to the query it changes.
+- Replaced the browser-dependent search clear affordance with a consistently
+  aligned button that keeps focus in the field after clearing. The command
+  palette's **Clear filters** action now also clears the visible query and body
+  scope.
+- Added a visible command-palette button with the `Ctrl K` shortcut in the top
+  bar, while `/` now focuses search without conflicting with the palette. The
+  palette traps keyboard focus while open and restores it when closed.
+- Tightened the search toolbar layout and added narrow-window wrapping so the
+  tabs, search field, and scope controls remain usable in smaller windows.
+
 ## v0.4.1 — 2026-09-24
 
 ### Interception coverage

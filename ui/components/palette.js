@@ -23,11 +23,15 @@ function match(query, text) {
 export function CommandPalette({ actions, onClose }) {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  const dialogRef = useRef(null);
   const inputRef = useRef(null);
   const listRef = useRef(null);
+  const previousFocus = useRef(null);
 
   useEffect(() => {
-    inputRef.current && inputRef.current.focus();
+    previousFocus.current = document.activeElement;
+    inputRef.current?.focus();
+    return () => previousFocus.current?.focus?.();
   }, []);
 
   const visible = useMemo(() => {
@@ -49,7 +53,21 @@ export function CommandPalette({ actions, onClose }) {
   };
 
   const onKey = (e) => {
-    if (e.key === "ArrowDown") {
+    if (e.key === "Tab") {
+      const focusable = dialogRef.current?.querySelectorAll(
+        'input:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    } else if (e.key === "ArrowDown") {
       e.preventDefault();
       setActive((i) => Math.min(visible.length - 1, i + 1));
     } else if (e.key === "ArrowUp") {
@@ -71,14 +89,20 @@ export function CommandPalette({ actions, onClose }) {
   }, [active]);
 
   return html`<div class="palette-overlay" onMouseDown=${(e) => e.target === e.currentTarget && onClose()}>
-    <div class="palette" role="dialog" aria-label="Command palette">
+    <div
+      ref=${dialogRef}
+      class="palette"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Command palette"
+      onKeyDown=${onKey}
+    >
       <input
         ref=${inputRef}
         class="palette-input"
         placeholder="Jump to, filter, or act…"
         value=${query}
         onInput=${(e) => setQuery(e.target.value)}
-        onKeyDown=${onKey}
       />
       <div class="palette-list" ref=${listRef}>
         ${visible.map(

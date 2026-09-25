@@ -10,7 +10,7 @@
 
 services:
   relay:
-    image: ghcr.io/plutack/wiretap-relay:0.4.0
+    image: ghcr.io/plutack/wiretap-relay:0.4.2
     # To build from this checkout instead of pulling the published image,
     # comment out the line above and uncomment this one:
     # build: .
