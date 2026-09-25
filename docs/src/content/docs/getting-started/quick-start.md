@@ -43,6 +43,11 @@ Open **Traffic** in the dashboard. Select the new row to inspect its request and
 
 ![The Traffic tab listing captured exchanges, with each interception session in the sidebar.](/screenshots/03-traffic.png)
 
+The search field filters the complete capture history. Enable **Bodies** inside the
+field when the query should also inspect bounded request and response content.
+Press `/` to focus search, or open the command palette from the top bar with
+`Ctrl K`.
+
 ## 4. Continue from the capture
 
 Use **Open in composer** to load the request into an editable draft, or **Export as code** to generate curl, fetch, Python, Go, and other client snippets.
