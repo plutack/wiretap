@@ -23,10 +23,6 @@ Released September 25, 2026. This release puts body-search scope inside the Traf
 
 See [Install Wiretap](/getting-started/install/) for runtime dependencies and verification steps.
 
-:::caution
-Release assets currently include SHA-256 checksums but are not cryptographically signed.
-:::
-
 ## Recent releases
 
 ### v0.4.2
