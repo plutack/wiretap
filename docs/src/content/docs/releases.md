@@ -5,7 +5,7 @@ description: Download Wiretap v0.5.0, verify artifacts, and review recent change
 
 ## Current release: v0.5.0
 
-Released September 27, 2026. This release collapses large payload values into on-demand chips, bounds the webhook detail body, and fixes a tunnel read limit that stalled webhook delivery for bodies over 32 KiB.
+Released September 27, 2026. This release collapses large payload values into on-demand chips, bounds the webhook detail body, fixes a tunnel read limit that stalled webhook delivery for bodies over 32 KiB, and makes the terminal dashboard poll cheaply and hold its table columns still.
 
 [Open the v0.5.0 release](https://github.com/plutack/wiretap/releases/tag/v0.5.0) · [View every release](https://github.com/plutack/wiretap/releases) · [Download checksums](https://github.com/plutack/wiretap/releases/latest/download/SHA256SUMS)
 
@@ -27,7 +27,7 @@ See [Install Wiretap](/getting-started/install/) for runtime dependencies and ve
 
 ### v0.5.0
 
-Collapses large base64 and hex payload values into on-demand chips, bounds the webhook detail body, and raises the tunnel read limit so webhooks over 32 KiB no longer stall delivery.
+Collapses large base64 and hex payload values into on-demand chips, bounds the webhook detail body, raises the tunnel read limit so webhooks over 32 KiB no longer stall delivery, and makes the terminal dashboard poll summary projections with fixed, labelled table columns.
 
 ### v0.4.2
 
