@@ -340,6 +340,16 @@ func (a *App) Webhooks(ctx context.Context, f store.WebhookFilter) (store.Webhoo
 	return a.store.SearchWebhooks(ctx, f)
 }
 
+// WebhookSummaries lists webhook list projections matching f, newest-first,
+// without retained bodies. The polling list paths use this so a refresh never
+// reads payloads; WebhookBySeq fetches one row when it is opened.
+func (a *App) WebhookSummaries(ctx context.Context, f store.WebhookFilter) (store.WebhookSummaryPage, error) {
+	if a.store == nil {
+		return store.WebhookSummaryPage{}, errors.New("app: store not open")
+	}
+	return a.store.SearchWebhookSummaries(ctx, f)
+}
+
 // Captures lists traffic captures matching f, newest-first, with body payloads.
 // The TUI uses this shape because its detail pane renders from the row without a
 // refetch.
