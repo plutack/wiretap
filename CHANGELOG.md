@@ -24,6 +24,23 @@
   sharing the tunnel. The limit is now 16 MiB, above the relay's 10 MiB ingress
   cap.
 
+### Terminal dashboard
+
+- Polled list projections instead of full rows. The dashboard re-queried the
+  full-row searches every 500ms, so each tick read and copied up to 100 request
+  and response bodies — each up to the 10 MiB ingress cap — purely so the detail
+  pane could render without a refetch. With large payloads that was around a
+  second of work per half-second tick, so the view fell permanently behind.
+  Lists now read summary projections, load a full row once when it is opened
+  (which also serves replay, export, and copy), and skip rebuilding a list whose
+  rows cannot have changed.
+- Made the ingress and traffic tables hold their columns still. The flexible
+  column was truncated but never padded, so the payload and transfer columns
+  moved from row to row with the length of each URL or route, and the row used
+  only a fraction of the terminal. Every column is now padded to a fixed width,
+  the sizes and timestamps are right-aligned, the URL or route absorbs the spare
+  width, and a header line labels the columns.
+
 ### Upgrade notes
 
 - Restart a running desktop or `wiretap tui` to pick up the read-limit fix.
