@@ -45,7 +45,89 @@ func wantIDs(t *testing.T, got, want []int64) {
 	}
 }
 
-// TestSearchCaptureSummaries_ReachesRowsBeyondTheNewestPage is the regression
+// TestSearchWebhookSummaries_ProjectionMatchesFullRows pins the list
+// projection the TUI polls with: it must carry everything a row displays —
+// including the body length — without reading the payload.
+func TestSearchWebhookSummaries_ProjectionMatchesFullRows(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := freshPCStore(t)
+	body := []byte(`{"order_id":"abc"}`)
+	for i, project := range []string{"alpha", "beta", "alpha"} {
+		if _, err := s.StoreWebhook(ctx, WebhookRow{
+			Project: project, Seq: int64(i + 1), ReceivedAt: fixedTime,
+			SourceIP: "10.0.0.1", Method: "POST", Path: fmt.Sprintf("/x/%d", i),
+			HeadersJSON: `{"Content-Type":["application/json"]}`, Body: body,
+		}, fixedTime); err != nil {
+			t.Fatalf("StoreWebhook %d: %v", i, err)
+		}
+	}
+
+	page, err := s.SearchWebhookSummaries(ctx, WebhookFilter{})
+	if err != nil {
+		t.Fatalf("SearchWebhookSummaries: %v", err)
+	}
+	if len(page.Rows) != 3 || page.Total != 3 {
+		t.Fatalf("rows = %d, total = %d; want 3/3", len(page.Rows), page.Total)
+	}
+	first := page.Rows[0] // newest first: seq 3
+	if first.Project != "alpha" || first.Seq != 3 || first.Method != "POST" || first.Path != "/x/2" {
+		t.Errorf("row = %+v, want the projected metadata", first)
+	}
+	if first.BodyLength != len(body) {
+		t.Errorf("BodyLength = %d, want %d", first.BodyLength, len(body))
+	}
+	if first.ReceivedAt.Unix() != fixedTime.Unix() {
+		t.Errorf("ReceivedAt = %v, want %v", first.ReceivedAt, fixedTime)
+	}
+
+	// Filters behave as they do on the full-row query.
+	filtered, err := s.SearchWebhookSummaries(ctx, WebhookFilter{Project: "beta"})
+	if err != nil {
+		t.Fatalf("SearchWebhookSummaries(project): %v", err)
+	}
+	if len(filtered.Rows) != 1 || filtered.Rows[0].Seq != 2 || filtered.Total != 1 {
+		t.Errorf("project filter = %+v (total %d), want only beta/2", filtered.Rows, filtered.Total)
+	}
+	searched, err := s.SearchWebhookSummaries(ctx, WebhookFilter{Query: "/x/1"})
+	if err != nil {
+		t.Fatalf("SearchWebhookSummaries(query): %v", err)
+	}
+	if len(searched.Rows) != 1 || searched.Rows[0].Seq != 2 {
+		t.Errorf("query filter = %+v, want only seq 2", searched.Rows)
+	}
+}
+
+// TestSearchWebhookSummaries_SelectionBoundedWithCursor: paging totals still
+// describe the whole filtered set, not the remainder after the cursor.
+func TestSearchWebhookSummaries_SelectionBoundedWithCursor(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := freshPCStore(t)
+	for i := range 7 {
+		if _, err := s.StoreWebhook(ctx, WebhookRow{
+			Project: "p", Seq: int64(i + 1), ReceivedAt: fixedTime, Method: "POST", Path: "/x",
+			HeadersJSON: `{}`, Body: []byte("abc"),
+		}, fixedTime); err != nil {
+			t.Fatalf("StoreWebhook %d: %v", i, err)
+		}
+	}
+	first, err := s.SearchWebhookSummaries(ctx, WebhookFilter{Limit: 3})
+	if err != nil {
+		t.Fatalf("first page: %v", err)
+	}
+	if len(first.Rows) != 3 || !first.HasMore || first.Total != 7 {
+		t.Fatalf("first = %d rows, hasMore %v, total %d; want 3/true/7", len(first.Rows), first.HasMore, first.Total)
+	}
+	second, err := s.SearchWebhookSummaries(ctx, WebhookFilter{Limit: 3, BeforeSeq: first.Rows[2].Seq})
+	if err != nil {
+		t.Fatalf("second page: %v", err)
+	}
+	if len(second.Rows) != 3 || second.Total != 7 {
+		t.Fatalf("second = %d rows, total %d; want 3/7", len(second.Rows), second.Total)
+	}
+}
+
 // this search exists to fix: a caller only ever holds the newest page of rows,
 // so filtering in the caller could never see older traffic no matter how
 // exactly it matched.

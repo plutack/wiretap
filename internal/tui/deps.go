@@ -13,17 +13,16 @@ import (
 // option provided, extended to every capability the GUI bindings expose).
 // internal/cli/tui.go fills it in from *app.App — the TUI never imports app.
 //
-// The listing queries return fully-populated rows (bodies included), so the
-// detail pane renders straight from the selected row; only replay/export
-// refetch server-side by id inside app.App.
-//
-// Listings take a filter rather than a bare limit because the predicate runs in
-// SQLite: a caller only ever holds a page of rows, so filtering after the fact
-// could never see older traffic.
+// The listing queries return list projections rather than full rows: the lists
+// are re-queried on a short interval, and reading retained payloads every time
+// is what made the dashboard slow. TheDetail queries load one full row when it
+// is opened, which is where the bodies are needed.
 type Deps struct {
-	Webhooks func(ctx context.Context, f store.WebhookFilter) (store.WebhookPage, error)
-	Captures func(ctx context.Context, f store.CaptureFilter) (store.CapturePage, error)
-	Sessions func(ctx context.Context, limit int) ([]store.InterceptSessionRow, error)
+	Webhooks      func(ctx context.Context, f store.WebhookFilter) (store.WebhookSummaryPage, error)
+	Captures      func(ctx context.Context, f store.CaptureFilter) (store.CaptureSummaryPage, error)
+	WebhookDetail func(ctx context.Context, project string, seq int64) (*store.WebhookRow, error)
+	CaptureDetail func(ctx context.Context, id int64) (*store.TrafficCaptureRow, error)
+	Sessions      func(ctx context.Context, limit int) ([]store.InterceptSessionRow, error)
 
 	Replay        func(ctx context.Context, project string, seq int64, targetURL string) (int, error)
 	ExportTargets func() ([]export.Target, error)
