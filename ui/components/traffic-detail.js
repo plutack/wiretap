@@ -80,6 +80,7 @@ export function TrafficDetail({ capture, onExport, onLoadBody, onCompose, onClos
           ? html`<${ExportSnippet}
             exportKey=${`capture-${capture.id}`}
             convert=${onExport}
+            large=${Boolean(capture.req_body_truncated)}
           />`
           : null
       }

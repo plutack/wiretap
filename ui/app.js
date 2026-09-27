@@ -414,14 +414,18 @@ function App() {
         webhook=${selection.data}
         defaultTarget=${(status && status.forward_url) || ""}
         onReplay=${api.replayWebhook}
-        onCompose=${() =>
+        onLoadBody=${(limit) =>
+          api.getWebhookBody(selection.data.project, selection.data.seq, limit)}
+        onCompose=${async () => {
+          const full = await api.getWebhookBody(selection.data.project, selection.data.seq, 0);
           openComposer({
             method: selection.data.method || "POST",
             url: (status && status.forward_url) || "",
             headers: selection.data.headers || {},
-            body: selection.data.body || "",
+            body: decodeBase64Text(full.body_base64),
             apply_transforms: true,
-          })}
+          });
+        }}
         onExport=${(target, client) =>
           api.exportWebhook(selection.data.project, selection.data.seq, target, client)}
         onClose=${closeDetail}

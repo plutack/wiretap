@@ -1,29 +1,33 @@
 ---
 title: Releases and downloads
-description: Download Wiretap v0.4.2, verify artifacts, and review recent changes.
+description: Download Wiretap v0.5.0, verify artifacts, and review recent changes.
 ---
 
-## Current release: v0.4.2
+## Current release: v0.5.0
 
-Released September 25, 2026. This release puts body-search scope inside the Traffic query, improves the clear control and narrow-window layout, and makes the command palette shortcut discoverable.
+Released September 27, 2026. This release collapses large payload values into on-demand chips, bounds the webhook detail body, and fixes a tunnel read limit that stalled webhook delivery for bodies over 32 KiB.
 
-[Open the v0.4.2 release](https://github.com/plutack/wiretap/releases/tag/v0.4.2) · [View every release](https://github.com/plutack/wiretap/releases) · [Download checksums](https://github.com/plutack/wiretap/releases/latest/download/SHA256SUMS)
+[Open the v0.5.0 release](https://github.com/plutack/wiretap/releases/tag/v0.5.0) · [View every release](https://github.com/plutack/wiretap/releases) · [Download checksums](https://github.com/plutack/wiretap/releases/latest/download/SHA256SUMS)
 
 ### Assets
 
 | Platform | Artifact |
 | --- | --- |
-| Linux x86-64 | [`wiretap_0.4.2_linux_amd64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.4.2/wiretap_0.4.2_linux_amd64.tar.gz) |
-| Linux ARM64 | [`wiretap_0.4.2_linux_arm64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.4.2/wiretap_0.4.2_linux_arm64.tar.gz) |
-| AppImage x86-64 | [`wiretap_0.4.2_x86_64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.4.2/wiretap_0.4.2_x86_64.AppImage) |
-| AppImage ARM64 | [`wiretap_0.4.2_aarch64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.4.2/wiretap_0.4.2_aarch64.AppImage) |
-| Arch Linux x86-64 | [`wiretap-0.4.2-x86_64.pkg.tar.zst`](https://github.com/plutack/wiretap/releases/download/v0.4.2/wiretap-0.4.2-x86_64.pkg.tar.zst) |
-| Windows x86-64 | [`wiretap_0.4.2_windows_x86_64-installer.exe`](https://github.com/plutack/wiretap/releases/download/v0.4.2/wiretap_0.4.2_windows_x86_64-installer.exe) |
-| Windows portable x86-64 | [`wiretap_0.4.2_windows_x86_64.zip`](https://github.com/plutack/wiretap/releases/download/v0.4.2/wiretap_0.4.2_windows_x86_64.zip) |
+| Linux x86-64 | [`wiretap_0.5.0_linux_amd64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.5.0/wiretap_0.5.0_linux_amd64.tar.gz) |
+| Linux ARM64 | [`wiretap_0.5.0_linux_arm64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.5.0/wiretap_0.5.0_linux_arm64.tar.gz) |
+| AppImage x86-64 | [`wiretap_0.5.0_x86_64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.5.0/wiretap_0.5.0_x86_64.AppImage) |
+| AppImage ARM64 | [`wiretap_0.5.0_aarch64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.5.0/wiretap_0.5.0_aarch64.AppImage) |
+| Arch Linux x86-64 | [`wiretap-0.5.0-x86_64.pkg.tar.zst`](https://github.com/plutack/wiretap/releases/download/v0.5.0/wiretap-0.5.0-x86_64.pkg.tar.zst) |
+| Windows x86-64 | [`wiretap_0.5.0_windows_x86_64-installer.exe`](https://github.com/plutack/wiretap/releases/download/v0.5.0/wiretap_0.5.0_windows_x86_64-installer.exe) |
+| Windows portable x86-64 | [`wiretap_0.5.0_windows_x86_64.zip`](https://github.com/plutack/wiretap/releases/download/v0.5.0/wiretap_0.5.0_windows_x86_64.zip) |
 
 See [Install Wiretap](/getting-started/install/) for runtime dependencies and verification steps.
 
 ## Recent releases
+
+### v0.5.0
+
+Collapses large base64 and hex payload values into on-demand chips, bounds the webhook detail body, and raises the tunnel read limit so webhooks over 32 KiB no longer stall delivery.
 
 ### v0.4.2
 

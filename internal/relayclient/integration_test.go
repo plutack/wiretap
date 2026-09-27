@@ -164,6 +164,62 @@ func TestClientRelay_HappyPath(t *testing.T) {
 	}
 }
 
+// TestClientRelay_LargeBodyPushed guards the tunnel's per-message read limit.
+// The relay's ingress accepts bodies up to 10 MiB and PUSH frames carry them as
+// base64, so a payload well over the websocket library's 32 KiB default must
+// still arrive. Regression: without SetReadLimit the read failed with
+// ErrMessageTooBig, the session closed, and the relay re-pushed the same seq on
+// every reconnect — pinning the project's cursor forever.
+func TestClientRelay_LargeBodyPushed(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_, hs := freshRelayServer(t, "c1", "secret-token", "project-a")
+	pcStore := freshPCStore(t)
+
+	arrivals := make(chan store.WebhookRow, 4)
+	c := relayclient.New(relayclient.Config{
+		URL:         wsURL(hs),
+		ClientID:    "c1",
+		ClientToken: "secret-token",
+		Projects:    []string{"project-a"},
+	}, pcStore,
+		relayclient.WithCallbacks(relayclient.Callbacks{
+			OnWebhook: func(r store.WebhookRow) { arrivals <- r },
+		}),
+	)
+	go func() { _ = c.Run(ctx) }()
+
+	// 256 KiB inflates past the 32768-byte default read limit.
+	body := bytes.Repeat([]byte("A"), 256*1024)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, hs.URL+"/project-a/large", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/octet-stream")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("ingress: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("ingress status = %d", resp.StatusCode)
+	}
+
+	select {
+	case got := <-arrivals:
+		if got.Seq != 1 {
+			t.Errorf("Seq = %d, want 1", got.Seq)
+		}
+		if !bytes.Equal(got.Body, body) {
+			t.Errorf("body = %d bytes, want %d (truncated or mangled)", len(got.Body), len(body))
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out: >32 KiB push never arrived (websocket read-limit regression)")
+	}
+
+	if got, _ := pcStore.LastSeq(ctx, "project-a"); got != 1 {
+		t.Errorf("PCStore.LastSeq = %d, want 1", got)
+	}
+}
+
 // TestClientRelay_OfflineIngressStreamsOnConnect confirms store-and-forward:
 // when webhooks arrive at the relay's HTTP ingress while NO tunnel is
 // attached, the relay stores them in its SQLite. When the PC then connects
