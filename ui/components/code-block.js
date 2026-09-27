@@ -1,14 +1,20 @@
 // BodyViewer renders bounded previews. Syntax highlighting is reserved for
-// small bodies; larger bodies use one text node and expand only on demand.
+// small bodies; larger bodies render as one plain-text node. Base64/hex data
+// runs are collapsed into chips that expand only on an explicit click — laying
+// out a multi-hundred-KB token inline is what used to freeze the inspector.
 import { html } from "../vendor/preact/index.js";
 import { useEffect, useMemo, useRef, useState } from "../vendor/preact/index.js";
-import { prettyBody, highlightJSON } from "../lib/format.js";
+import { prettyBody, highlightJSON, collapseRuns, fmtBytes } from "../lib/format.js";
 import { copyText } from "../lib/clipboard.js";
 import { requestSyntaxHighlight, supportsSyntaxHighlights } from "../lib/syntax.js";
 import { Dropdown } from "./dropdown.js";
 
 const HIGHLIGHT_LIMIT = 100 * 1024;
 const PREVIEW_STEP = 256 * 1024;
+// Minimum length of a base64/hex data run that is worth collapsing into a chip.
+const BLOB_MIN = 2048;
+// Largest blob turned into an inline thumbnail (base64 characters).
+const THUMB_MAX = 1024 * 1024;
 
 function mediaType(contentType) {
   return String(contentType || "")
@@ -74,6 +80,7 @@ export function BodyViewer({
   const [previewBase64, setPreviewBase64] = useState(bodyBase64 || "");
   const [previewTruncated, setPreviewTruncated] = useState(truncated);
   const [loadState, setLoadState] = useState("idle");
+  const [expanded, setExpanded] = useState(() => new Set());
   const loadID = useRef(0);
   const type = mediaType(contentType);
 
@@ -82,6 +89,7 @@ export function BodyViewer({
     setPreviewBase64(bodyBase64 || "");
     setPreviewTruncated(truncated);
     setLoadState("idle");
+    setExpanded(new Set());
   }, [bodyBase64, truncated]);
 
   const bytes = useMemo(
@@ -91,26 +99,54 @@ export function BodyViewer({
   const text = useMemo(() => bytesToText(bytes), [bytes]);
   const selectedMode = mode === "auto" ? autoMode(type) : mode;
   const canHighlight = bytes.length <= HIGHLIGHT_LIMIT && !previewTruncated;
-  const effectiveMode = selectedMode === "pretty" && !canHighlight ? "text" : selectedMode;
-  const totalLength = bodyLength ?? bytes.length;
-  const language = effectiveMode === "pretty" ? syntaxLanguage(type) : "";
-  const useMicrolighter = Boolean(language) && supportsSyntaxHighlights();
 
-  const formatted = useMemo(() => {
-    if (effectiveMode === "hex") return { text: hexDump(bytes), html: "" };
-    if (effectiveMode === "pretty") {
-      const pretty = prettyBody(text, contentType);
-      return {
-        text: pretty.isJSON ? pretty.text : text,
-        html: pretty.isJSON && !useMicrolighter ? highlightJSON(pretty.text) : "",
-      };
-    }
-    return { text, html: "" };
-  }, [bytes, contentType, effectiveMode, text, useMicrolighter]);
+  // Pretty-printing stays available past the highlight cap: the indented shape
+  // is what makes a collapsed blob readable in context. Only the *highlighting*
+  // is size-limited.
+  const pretty = useMemo(() => prettyBody(text, contentType), [text, contentType]);
+  const effectiveMode =
+    selectedMode === "pretty" && !pretty.isJSON
+      ? "text"
+      : selectedMode === "image" && !/^image\//.test(type)
+        ? "text"
+        : selectedMode;
+  const showingPretty = effectiveMode === "pretty";
+
+  const bodyText = useMemo(
+    () => (effectiveMode === "hex" ? hexDump(bytes) : showingPretty ? pretty.text : text),
+    [effectiveMode, bytes, showingPretty, pretty.text, text],
+  );
+
+  const segments = useMemo(() => collapseRuns(bodyText, { minRun: BLOB_MIN }), [bodyText]);
+  const blobCount = segments.reduce((n, s) => n + (s.blob ? 1 : 0), 0);
+  const hasBlobs = blobCount > 0;
+
+  // Data URLs for image blobs are built once per body so the browser decodes
+  // each thumbnail a single time.
+  const thumbs = useMemo(() => {
+    const out = new Map();
+    segments.forEach((seg, i) => {
+      if (seg.blob && seg.kind.startsWith("image/") && seg.bytes <= THUMB_MAX) {
+        out.set(i, `data:${seg.kind};base64,${seg.text}`);
+      }
+    });
+    return out;
+  }, [segments]);
+
+  const totalLength = bodyLength ?? bytes.length;
+  const language = showingPretty ? syntaxLanguage(type) : "";
+  // Microlighter and the span-based highlighter both need the whole body as one
+  // string; skip them when blobs are collapsed so the chips stay authoritative.
+  const useMicrolighter =
+    Boolean(language) && canHighlight && !hasBlobs && supportsSyntaxHighlights();
+  const highlightHTML =
+    showingPretty && canHighlight && !useMicrolighter && !hasBlobs
+      ? highlightJSON(pretty.text)
+      : "";
 
   useEffect(() => {
     if (useMicrolighter) requestSyntaxHighlight();
-  }, [formatted.text, language, useMicrolighter]);
+  }, [bodyText, language, useMicrolighter]);
 
   const imageURL = useMemo(() => {
     if (effectiveMode !== "image" || previewTruncated || !bytes.length || !/^image\//.test(type))
@@ -125,6 +161,15 @@ export function BodyViewer({
   );
 
   if (!bytes.length && !previewTruncated) return html`<p class="body-empty">(empty)</p>`;
+
+  const toggleBlob = (index) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
 
   const fetchBody = async (limit, purpose) => {
     if (!loadBody) return null;
@@ -151,7 +196,7 @@ export function BodyViewer({
   };
   const copy = async () => {
     try {
-      let value = formatted.text;
+      let value = bodyText;
       if (previewTruncated && loadBody) {
         const result = await fetchBody(0, "copy");
         if (!result) return;
@@ -162,7 +207,6 @@ export function BodyViewer({
     } catch {
       setCopyState("failed");
     }
-    setTimeout(() => setCopyState("idle"), 1600);
   };
   const download = async () => {
     const result = previewTruncated && loadBody ? await fetchBody(0, "save") : null;
@@ -182,6 +226,32 @@ export function BodyViewer({
     mode === "auto" && selectedMode !== effectiveMode
       ? `Auto (${effectiveMode} preview)`
       : `Auto (${effectiveMode})`;
+
+  // One collapsed chip per blob: label + size, a thumbnail for images, and the
+  // run rendered only once the user opens it.
+  const renderSegment = (seg, index) => {
+    if (!seg.blob) return seg.text;
+    const label = `${seg.kind} · ${fmtBytes(seg.bytes)}`;
+    if (expanded.has(index)) {
+      return html`<span
+        key=${index}
+        class="blob-open"
+        title="Collapse this value"
+        onClick=${() => toggleBlob(index)}
+      >${seg.text}</span>`;
+    }
+    const thumb = thumbs.get(index);
+    return html`<button
+      key=${index}
+      type="button"
+      class="blob-chip"
+      title=${`${label} — click to render inline`}
+      onClick=${() => toggleBlob(index)}
+    >
+      ${thumb ? html`<img class="blob-thumb" src=${thumb} alt="" />` : null}
+      <span>${label}</span>
+    </button>`;
+  };
 
   return html`<div class="body-viewer">
     <div class="body-viewer-toolbar">
@@ -224,11 +294,16 @@ export function BodyViewer({
       }
       ${loadState === "failed" ? html`<span>Could not load more.</span>` : null}
     </div>`
-        : selectedMode === "pretty" && !canHighlight
+        : hasBlobs
           ? html`<div class="body-large-warning">
+      ${blobCount === 1 ? "1 embedded value is" : `${blobCount} embedded values are`} collapsed.
+      Click a chip to render it inline.
+    </div>`
+          : showingPretty && !canHighlight
+            ? html`<div class="body-large-warning">
       Syntax highlighting is disabled above ${Math.round(HIGHLIGHT_LIMIT / 1024)} KB; displaying one plain-text node.
     </div>`
-          : null
+            : null
     }
     ${
       effectiveMode === "image" && previewTruncated
@@ -236,10 +311,10 @@ export function BodyViewer({
         : effectiveMode === "image" && imageURL
           ? html`<div class="body-image-wrap"><img class="body-image" src=${imageURL} alt="Captured ${type} body" /></div>`
           : useMicrolighter
-            ? html`<pre class="${maxHeightClass} body-code"><code class="language-${language}" data-language=${language}>${formatted.text}</code></pre>`
-            : formatted.html
-              ? html`<pre class="${maxHeightClass} body-code" dangerouslySetInnerHTML=${{ __html: formatted.html }}></pre>`
-              : html`<pre class="${maxHeightClass} body-code">${formatted.text}</pre>`
+            ? html`<pre class="${maxHeightClass} body-code"><code class="language-${language}" data-language=${language}>${pretty.text}</code></pre>`
+            : highlightHTML
+              ? html`<pre class="${maxHeightClass} body-code" dangerouslySetInnerHTML=${{ __html: highlightHTML }}></pre>`
+              : html`<pre class="${maxHeightClass} body-code">${segments.map(renderSegment)}</pre>`
     }
   </div>`;
 }

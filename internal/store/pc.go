@@ -160,6 +160,34 @@ func (s *PCStore) TrafficCaptureBody(ctx context.Context, id int64, response boo
 	return body, bodyLen, nil
 }
 
+// WebhookBody loads one webhook's body, optionally bounded to limit bytes
+// (limit <= 0 returns the whole body). bodyLen is the full stored length so
+// callers can render "N of M KB" and offer an explicit fetch-everything action.
+// Mirrors TrafficCaptureBody: large webhook bodies are the same freeze risk in
+// the detail pane, so the bound belongs here rather than in the frontend.
+func (s *PCStore) WebhookBody(ctx context.Context, project string, seq int64, limit int) ([]byte, int, error) {
+	expr := "COALESCE(body, '')"
+	args := []any{}
+	if limit > 0 {
+		expr = "substr(" + expr + ", 1, ?)"
+		args = append(args, limit)
+	}
+	args = append(args, project, seq)
+	row := s.db.QueryRowContext(ctx,
+		"SELECT "+expr+", COALESCE(length(body), 0) FROM webhooks WHERE project = ? AND seq = ?",
+		args...,
+	)
+	var body []byte
+	var bodyLen int
+	if err := row.Scan(&body, &bodyLen); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, 0, fmt.Errorf("PCStore.WebhookBody %s/%d: %w", project, seq, ErrNotFound)
+		}
+		return nil, 0, fmt.Errorf("PCStore.WebhookBody %s/%d: %w", project, seq, err)
+	}
+	return body, bodyLen, nil
+}
+
 // TrafficCaptureByID returns a single traffic capture with its request/response
 // headers and bodies populated (the detail view). Returns ErrNotFound when no
 // row has that id.

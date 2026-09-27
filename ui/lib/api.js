@@ -15,6 +15,7 @@ import {
   GetCaptureBody,
   GetSettings,
   GetWebhook,
+  GetWebhookBody,
   ImportRelayClientFile,
   ListCaptures,
   ListComposeRecipes,
@@ -51,6 +52,7 @@ import {
 export const api = {
   listWebhooks: (filter = {}) => ListWebhooks(filter),
   getWebhook: (project, seq) => GetWebhook(project, seq),
+  getWebhookBody: (project, seq, limit) => GetWebhookBody(project, seq, limit),
   replayWebhook: (project, seq, targetURL) => ReplayWebhook(project, seq, targetURL),
   listCaptures: (filter = {}) => ListCaptures(filter),
   listSessions: (beforeID = 0, limit = 20) => ListSessions(beforeID, limit),

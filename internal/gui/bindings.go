@@ -75,20 +75,29 @@ func New(a *app.App, opts ...Option) *Bindings {
 
 // --- Views ---------------------------------------------------------------
 
-// WebhookView is the GUI + wailsjs DTO for a webhook row. Body is omitted in
-// list responses (BodyLen set); GetWebhook fills Body + Headers for the detail
-// view and the replay form.
+// WebhookView is the GUI + wailsjs DTO for a webhook row. Body content is never
+// inlined: list responses carry BodyLen only, and GetWebhook adds a bounded
+// BodyBase64 preview (see webhookPreviewBytes) plus BodyTruncated. The full
+// body is fetched on demand through GetWebhookBody, so a large payload cannot
+// cross the IPC boundary just because a row was selected.
 type WebhookView struct {
-	Project    string              `json:"project"`
-	Seq        int64               `json:"seq"`
-	ReceivedAt string              `json:"received_at"` // RFC3339 UTC
-	SourceIP   string              `json:"source_ip,omitempty"`
-	Method     string              `json:"method,omitempty"`
-	Path       string              `json:"path,omitempty"`
-	Headers    map[string][]string `json:"headers,omitempty"`
-	Body       string              `json:"body,omitempty"`
-	BodyLen    int                 `json:"body_len"`
+	Project       string              `json:"project"`
+	Seq           int64               `json:"seq"`
+	ReceivedAt    string              `json:"received_at"` // RFC3339 UTC
+	SourceIP      string              `json:"source_ip,omitempty"`
+	Method        string              `json:"method,omitempty"`
+	Path          string              `json:"path,omitempty"`
+	Headers       map[string][]string `json:"headers,omitempty"`
+	BodyBase64    string              `json:"body_base64,omitempty"`
+	BodyLen       int                 `json:"body_len"`
+	BodyTruncated bool                `json:"body_truncated,omitempty"`
 }
+
+// webhookPreviewBytes caps the body prefix GetWebhook ships to the webview.
+// The detail pane renders this immediately and offers "show more" through
+// GetWebhookBody; anything larger is a one-click, explicitly bounded fetch.
+// Same value as the traffic-capture preview step so both panes page alike.
+const webhookPreviewBytes = 256 * 1024
 
 // CaptureView is the GUI DTO for a traffic capture. Bodies are omitted in list
 // responses; GetCapture fills bounded Base64 previews for the detail pane.
@@ -480,15 +489,30 @@ func (b *Bindings) ListSessions(beforeID int64, limit int) (SessionPageView, err
 	return SessionPageView{Sessions: out, Total: total, HasMore: hasMore}, nil
 }
 
-// GetWebhook returns one webhook with body + headers populated for the detail
-// view and the replay form. Returns an error suitable for the frontend when the
-// row is absent (errors.Is, store.ErrNotFound).
+// GetWebhook returns one webhook with headers and a bounded body preview for the
+// detail view and the replay form. Returns an error suitable for the frontend
+// when the row is absent (errors.Is, store.ErrNotFound).
 func (b *Bindings) GetWebhook(project string, seq int64) (WebhookView, error) {
 	wh, err := b.app.WebhookBySeq(context.Background(), project, seq)
 	if err != nil {
 		return WebhookView{}, fmt.Errorf("get webhook %s/%d: %w", project, seq, err)
 	}
 	return webhookDetail(wh), nil
+}
+
+// GetWebhookBody returns a bounded webhook body prefix. limit <= 0 returns the
+// complete body and should only be used for explicit user actions (render all,
+// copy all, save).
+func (b *Bindings) GetWebhookBody(project string, seq int64, limit int) (CaptureBodyView, error) {
+	body, bodyLen, err := b.app.WebhookBody(context.Background(), project, seq, limit)
+	if err != nil {
+		return CaptureBodyView{}, fmt.Errorf("get webhook %s/%d body: %w", project, seq, err)
+	}
+	return CaptureBodyView{
+		BodyBase64: base64.StdEncoding.EncodeToString(body),
+		BodyLen:    bodyLen,
+		Truncated:  len(body) < bodyLen,
+	}, nil
 }
 
 // ReplayWebhook re-POSTs a stored webhook to targetURL and returns the upstream
@@ -667,16 +691,23 @@ func webhookSummary(rows []store.WebhookRow) []WebhookView {
 }
 
 func webhookDetail(w *store.WebhookRow) WebhookView {
+	body := w.Body
+	truncated := false
+	if len(body) > webhookPreviewBytes {
+		body = body[:webhookPreviewBytes]
+		truncated = true
+	}
 	return WebhookView{
-		Project:    w.Project,
-		Seq:        w.Seq,
-		ReceivedAt: w.ReceivedAt.Format(time.RFC3339),
-		SourceIP:   w.SourceIP,
-		Method:     w.Method,
-		Path:       w.Path,
-		Headers:    parseHeaders(w.HeadersJSON),
-		Body:       string(w.Body),
-		BodyLen:    len(w.Body),
+		Project:       w.Project,
+		Seq:           w.Seq,
+		ReceivedAt:    w.ReceivedAt.Format(time.RFC3339),
+		SourceIP:      w.SourceIP,
+		Method:        w.Method,
+		Path:          w.Path,
+		Headers:       parseHeaders(w.HeadersJSON),
+		BodyBase64:    base64.StdEncoding.EncodeToString(body),
+		BodyLen:       len(w.Body),
+		BodyTruncated: truncated,
 	}
 }
 
