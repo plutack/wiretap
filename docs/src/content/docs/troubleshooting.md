@@ -58,9 +58,9 @@ Profiles created by v0.2.11 or v0.2.12 may reference a different collection. Rec
 
 ## A large body is truncated in the viewer
 
-This is expected. Wiretap initially fetches at most 256 KiB per captured request or response body and expands the preview progressively. Use **Show more**, **Save**, or **Copy all** when you deliberately need more data.
+This is expected. Wiretap initially fetches at most 256 KiB per webhook, captured request, or captured response body and expands the preview progressively. Use **Show more**, **Save**, or **Copy all** when you deliberately need more data.
 
-Formatting and syntax highlighting apply only to complete bodies no larger than 100 KiB. Larger previews render as plain text to keep the UI responsive.
+Formatting and syntax highlighting apply only to complete bodies no larger than 100 KiB. A base64 or hex value of 2 KiB or more is shown as a collapsed chip rather than as text; click the chip to render it inline. Exporting a large webhook as a code snippet is generated on demand for the same reason, so the snippet is not rebuilt every time you change rows.
 
 ## A composed response is truncated
 
