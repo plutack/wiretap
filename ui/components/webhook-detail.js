@@ -22,6 +22,7 @@ export function WebhookDetail({
   onCompose,
   onExport,
   onClose,
+  onLoadBody,
   defaultTarget = "",
 }) {
   // Prefill the replay target with the configured forward URL (settings →
@@ -58,7 +59,14 @@ export function WebhookDetail({
       </section>
 
       <${BodySection} title="Body" len=${fmtBytes(webhook.body_len)}>
-        <${CodeBlock} body=${webhook.body} contentType=${ct} />
+        <${CodeBlock}
+          key=${`webhook-${webhook.project}-${webhook.seq}`}
+          bodyBase64=${webhook.body_base64}
+          bodyLength=${webhook.body_len}
+          truncated=${webhook.body_truncated}
+          contentType=${ct}
+          loadBody=${onLoadBody}
+        />
       </>
 
       <section class="inspector-section border-t border-neutral-800 pt-4">
@@ -104,6 +112,7 @@ export function WebhookDetail({
           ? html`<${ExportSnippet}
             exportKey=${`webhook-${webhook.project}-${webhook.seq}`}
             convert=${onExport}
+            large=${Boolean(webhook.body_truncated)}
           />`
           : null
       }

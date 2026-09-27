@@ -2795,9 +2795,11 @@ export class WebhookQueryInput {
 }
 
 /**
- * WebhookView is the GUI + wailsjs DTO for a webhook row. Body is omitted in
- * list responses (BodyLen set); GetWebhook fills Body + Headers for the detail
- * view and the replay form.
+ * WebhookView is the GUI + wailsjs DTO for a webhook row. Body content is never
+ * inlined: list responses carry BodyLen only, and GetWebhook adds a bounded
+ * BodyBase64 preview (see webhookPreviewBytes) plus BodyTruncated. The full
+ * body is fetched on demand through GetWebhookBody, so a large payload cannot
+ * cross the IPC boundary just because a row was selected.
  */
 export class WebhookView {
     /**
@@ -2860,7 +2862,7 @@ export class WebhookView {
              * @member
              * @type {string | undefined}
              */
-            this["body"] = undefined;
+            this["body_base64"] = undefined;
         }
         if (!("body_len" in $$source)) {
             /**
@@ -2868,6 +2870,13 @@ export class WebhookView {
              * @type {number}
              */
             this["body_len"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["body_truncated"] = undefined;
         }
 
         Object.assign(this, $$source);

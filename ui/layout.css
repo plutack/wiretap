@@ -2939,6 +2939,43 @@ textarea:focus-visible {
   overflow-wrap: anywhere;
 }
 
+/* Collapsed large payload values. A base64/hex blob renders as a chip instead
+   of text: laying out an enormous single-line token forces the browser to
+   line-break the whole thing, which is what makes the inspector hang. Clicking
+   a chip expands it inline, bounded by the preview cap. */
+.blob-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 2px;
+  padding: 0 8px;
+  border: 1px dashed var(--wt-neutral-600);
+  border-radius: 999px;
+  background: var(--wt-hover);
+  color: var(--wt-brand-300);
+  font-family: inherit;
+  font-size: 0.7rem;
+  line-height: 1.7;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+.blob-chip:hover {
+  border-style: solid;
+  background: var(--wt-hover-strong);
+}
+.blob-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  object-fit: cover;
+}
+.blob-open {
+  border-radius: 3px;
+  background: var(--wt-hover);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
 .body-image-wrap {
   display: grid;
   min-height: 180px;
