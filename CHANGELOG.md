@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.5.0 — 2026-09-27
+
+### Large payload inspection
+
+- Collapsed large payload values into chips in the body viewer. Base64 and hex
+  runs of 2 KiB or more show the value's kind and size, with a thumbnail for
+  recognised images, and render inline only when clicked. The surrounding body
+  keeps its structure, and multi-megabyte payloads no longer freeze the
+  inspector or the traffic viewer.
+- Bounded the webhook detail body end to end: `GetWebhook` returns a 256 KiB
+  preview with a truncation flag, and a new `GetWebhookBody` binding serves the
+  complete value on demand.
+- Large webhook code snippets are generated on demand instead of whenever a row
+  is selected.
+
+### Relay delivery
+
+- Fixed the tunnel read limit, which used the websocket library's 32 KiB
+  default. Any webhook body over roughly 24 KiB closed the session, and because
+  the relay resumes from the last acknowledged sequence, the same row was
+  re-pushed forever — pinning that project's cursor and stalling every project
+  sharing the tunnel. The limit is now 16 MiB, above the relay's 10 MiB ingress
+  cap.
+
+### Upgrade notes
+
+- Restart a running desktop or `wiretap tui` to pick up the read-limit fix.
+  Cursors pinned by an oversized webhook resume on the next connect; no
+  webhooks are lost and no manual cleanup is required.
+
 ## v0.4.2 — 2026-09-25
 
 ### Desktop search controls

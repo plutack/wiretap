@@ -419,6 +419,16 @@ func (a *App) WebhookBySeq(ctx context.Context, project string, seq int64) (*sto
 	return a.store.WebhookBySeq(ctx, project, seq)
 }
 
+// WebhookBody loads one webhook body, optionally bounded to limit bytes
+// (limit <= 0 returns the whole body). Used by the GUI detail pane so a
+// multi-megabyte payload is not shipped to the webview up front.
+func (a *App) WebhookBody(ctx context.Context, project string, seq int64, limit int) ([]byte, int, error) {
+	if a.store == nil {
+		return nil, 0, errors.New("app: store not open")
+	}
+	return a.store.WebhookBody(ctx, project, seq, limit)
+}
+
 // InsertTrafficCapture appends a traffic capture. Returns the row id. Used by
 // the interception proxy's recorder adapter.
 func (a *App) InsertTrafficCapture(ctx context.Context, c store.TrafficCaptureRow) (int64, error) {

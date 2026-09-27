@@ -146,9 +146,9 @@ export function GetSettings() {
 }
 
 /**
- * GetWebhook returns one webhook with body + headers populated for the detail
- * view and the replay form. Returns an error suitable for the frontend when the
- * row is absent (errors.Is, store.ErrNotFound).
+ * GetWebhook returns one webhook with headers and a bounded body preview for the
+ * detail view and the replay form. Returns an error suitable for the frontend
+ * when the row is absent (errors.Is, store.ErrNotFound).
  * @param {string} project
  * @param {number} seq
  * @returns {$CancellablePromise<$models.WebhookView>}
@@ -156,6 +156,21 @@ export function GetSettings() {
 export function GetWebhook(project, seq) {
     return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetWebhook", project, seq).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType7($result);
+    }));
+}
+
+/**
+ * GetWebhookBody returns a bounded webhook body prefix. limit <= 0 returns the
+ * complete body and should only be used for explicit user actions (render all,
+ * copy all, save).
+ * @param {string} project
+ * @param {number} seq
+ * @param {number} limit
+ * @returns {$CancellablePromise<$models.CaptureBodyView>}
+ */
+export function GetWebhookBody(project, seq, limit) {
+    return $Call.ByName("github.com/plutack/wiretap/internal/gui.Bindings.GetWebhookBody", project, seq, limit).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType5($result);
     }));
 }
 

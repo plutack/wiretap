@@ -147,11 +147,14 @@ func TestBindings_ListWebhooks_All(t *testing.T) {
 		t.Fatalf("page = %d rows, total %d, hasMore %v; want 3/3/false",
 			len(got.Webhooks), got.Total, got.HasMore)
 	}
-	// Summary shape: no body string, but BodyLen set; no headers map.
+	// Summary shape: no body content, but BodyLen set; no headers map.
 	var sawA, sawB bool
 	for _, w := range got.Webhooks {
-		if w.Body != "" {
+		if w.BodyBase64 != "" {
 			t.Errorf("body leaked into summary for %s/%d", w.Project, w.Seq)
+		}
+		if w.BodyTruncated {
+			t.Errorf("BodyTruncated set in summary for %s/%d", w.Project, w.Seq)
 		}
 		if w.Headers != nil {
 			t.Errorf("headers leaked into summary for %s/%d", w.Project, w.Seq)
@@ -198,8 +201,15 @@ func TestBindings_GetWebhook_DetailIncludesBodyAndHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetWebhook: %v", err)
 	}
-	if got.Body != `{"hello":"world"}` {
-		t.Errorf("Body = %q", got.Body)
+	decoded, err := base64.StdEncoding.DecodeString(got.BodyBase64)
+	if err != nil {
+		t.Fatalf("BodyBase64 is not valid base64: %v", err)
+	}
+	if string(decoded) != `{"hello":"world"}` {
+		t.Errorf("body = %q, want %q", decoded, `{"hello":"world"}`)
+	}
+	if got.BodyTruncated {
+		t.Error("BodyTruncated = true for a small body")
 	}
 	if got.BodyLen != len(`{"hello":"world"}`) {
 		t.Errorf("BodyLen = %d", got.BodyLen)
@@ -209,6 +219,63 @@ func TestBindings_GetWebhook_DetailIncludesBodyAndHeaders(t *testing.T) {
 	}
 	if got.Project != "project-a" || got.Seq != 1 {
 		t.Errorf("project/seq = %s %d", got.Project, got.Seq)
+	}
+}
+
+// TestBindings_GetWebhook_BoundsLargeBody confirms a large payload is sent as a
+// bounded base64 prefix — never the whole body — and that GetWebhookBody can
+// still return the complete body on demand. Regression guard for the detail
+// pane freeze: an unbounded body renders one enormous text node.
+func TestBindings_GetWebhook_BoundsLargeBody(t *testing.T) {
+	t.Parallel()
+	b, a := newBindings(t)
+	large := bytes.Repeat([]byte("A"), webhookPreviewBytes+4096)
+	seedWebhook(t, a, "project-a", 2, "POST", "/big", string(large))
+
+	got, err := b.GetWebhook("project-a", 2)
+	if err != nil {
+		t.Fatalf("GetWebhook: %v", err)
+	}
+	if !got.BodyTruncated {
+		t.Error("BodyTruncated = false, want true for a body over the preview cap")
+	}
+	if got.BodyLen != len(large) {
+		t.Errorf("BodyLen = %d, want %d", got.BodyLen, len(large))
+	}
+	prefix, err := base64.StdEncoding.DecodeString(got.BodyBase64)
+	if err != nil {
+		t.Fatalf("BodyBase64 is not valid base64: %v", err)
+	}
+	if len(prefix) != webhookPreviewBytes {
+		t.Errorf("preview length = %d, want %d", len(prefix), webhookPreviewBytes)
+	}
+
+	// The full body is still reachable through the explicit, unbounded fetch.
+	full, err := b.GetWebhookBody("project-a", 2, 0)
+	if err != nil {
+		t.Fatalf("GetWebhookBody: %v", err)
+	}
+	if full.Truncated {
+		t.Error("unbounded fetch reported Truncated = true")
+	}
+	whole, err := base64.StdEncoding.DecodeString(full.BodyBase64)
+	if err != nil {
+		t.Fatalf("full BodyBase64 is not valid base64: %v", err)
+	}
+	if len(whole) != len(large) {
+		t.Errorf("full body length = %d, want %d", len(whole), len(large))
+	}
+
+	// A bounded fetch reports truncation relative to the stored length.
+	bounded, err := b.GetWebhookBody("project-a", 2, 1024)
+	if err != nil {
+		t.Fatalf("GetWebhookBody(bounded): %v", err)
+	}
+	if !bounded.Truncated || bounded.BodyLen != len(large) {
+		t.Errorf("bounded fetch = truncated:%v len:%d", bounded.Truncated, bounded.BodyLen)
+	}
+	if n := len(bounded.BodyBase64); n != base64.StdEncoding.EncodedLen(1024) {
+		t.Errorf("bounded prefix base64 length = %d, want %d", n, base64.StdEncoding.EncodedLen(1024))
 	}
 }
 

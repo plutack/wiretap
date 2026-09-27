@@ -87,6 +87,44 @@ func TestPCStore_StoreWebhook_RawHeadersAndBodyPreserved(t *testing.T) {
 	}
 }
 
+func TestPCStore_WebhookBody_BoundedAndMissing(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := freshPCStore(t)
+	body := bytes.Repeat([]byte("abcdefgh"), 2048) // 16 KiB
+	if _, err := s.StoreWebhook(ctx, WebhookRow{
+		Project: "project-a", Seq: 1, ReceivedAt: fixedTime, Method: "POST",
+		HeadersJSON: "{}", Body: body,
+	}, fixedTime); err != nil {
+		t.Fatalf("StoreWebhook: %v", err)
+	}
+
+	// Unbounded returns the whole body plus its full length.
+	got, n, err := s.WebhookBody(ctx, "project-a", 1, 0)
+	if err != nil {
+		t.Fatalf("WebhookBody(all): %v", err)
+	}
+	if n != len(body) || !bytes.Equal(got, body) {
+		t.Errorf("unbounded = %d bytes (reported %d), want %d", len(got), n, len(body))
+	}
+
+	// Bounded returns a prefix but still reports the full stored length.
+	prefix, n, err := s.WebhookBody(ctx, "project-a", 1, 1024)
+	if err != nil {
+		t.Fatalf("WebhookBody(1024): %v", err)
+	}
+	if n != len(body) {
+		t.Errorf("bodyLen = %d, want %d", n, len(body))
+	}
+	if len(prefix) != 1024 || !bytes.Equal(prefix, body[:1024]) {
+		t.Errorf("prefix = %d bytes, want the first 1024", len(prefix))
+	}
+
+	if _, _, err := s.WebhookBody(ctx, "project-a", 99, 0); !errors.Is(err, ErrNotFound) {
+		t.Errorf("missing row: err = %v, want ErrNotFound", err)
+	}
+}
+
 func TestPCStore_StoreWebhook_AndLastSeq(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

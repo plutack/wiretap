@@ -116,3 +116,79 @@ export function highlightJSON(json) {
     },
   );
 }
+
+/**
+ * Split a body into segments, marking base64/hex data runs long enough to be
+ * expensive to render. A blob like an embedded base64 image or a large binary
+ * field is one enormous token; putting it in a single text node makes the
+ * browser line-break a multi-hundred-KB word, which is what freezes the
+ * inspector. Callers render blob segments as a collapsed chip and expand one
+ * only on an explicit click — the surrounding structure stays readable.
+ *
+ * Detection is by data alphabet (not whitespace-delimited words) so a minified
+ * JSON body still collapses only its blob fields, leaving the keys and
+ * punctuation visible.
+ *
+ * Joining `segments.map((s) => s.text)` always reproduces the input exactly.
+ * `bytes` is the run's UTF-16 length — exact for the ASCII data this targets.
+ *
+ * @param {string} text
+ * @param {{minRun?: number}} [opts] minimum run length to collapse (default 2 KiB)
+ * @returns {Array<{text: string, blob: boolean, bytes: number, kind: string}>}
+ */
+export function collapseRuns(text, opts = {}) {
+  const src = String(text ?? "");
+  const minRun = Math.max(1, opts.minRun ?? 2048);
+  if (!src || src.length < minRun) return [plainSegment(src)];
+  const re = new RegExp(`[A-Za-z0-9+/]{${minRun},}={0,2}`, "g");
+  const out = [];
+  let last = 0;
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const run = m[0];
+    if (m.index > last) out.push(plainSegment(src.slice(last, m.index)));
+    out.push({
+      text: run,
+      blob: true,
+      bytes: run.length,
+      // Look just behind the match so a data URL keeps its prefix label.
+      kind: runKind(run, src.slice(Math.max(0, m.index - 9), m.index)),
+    });
+    last = m.index + run.length;
+  }
+  if (!out.length) return [plainSegment(src)];
+  if (last < src.length) out.push(plainSegment(src.slice(last)));
+  return out;
+}
+
+function plainSegment(text) {
+  return { text, blob: false, bytes: text.length, kind: "" };
+}
+
+/**
+ * Label a collapsible run so the chip can say what it is. All checks are
+ * prefix-based or bounded regexes so this stays cheap on a multi-megabyte run.
+ * @param {string} run
+ * @param {string} before up to 9 chars immediately preceding the run
+ * @returns {string}
+ */
+function runKind(run, before) {
+  if (before.endsWith("base64,")) return "data URI";
+  const image = imageKind(run);
+  if (image) return image;
+  if (run.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(run)) return "hex";
+  return "base64";
+}
+
+/**
+ * Recognise common image magic bytes inside a base64 run without decoding it.
+ * @param {string} run
+ * @returns {string} media type, or "" when it is not a known image
+ */
+function imageKind(run) {
+  if (run.startsWith("iVBORw0KGgo")) return "image/png";
+  if (run.startsWith("/9j/")) return "image/jpeg";
+  if (run.startsWith("R0lGOD")) return "image/gif";
+  if (run.startsWith("UklGR")) return "image/webp";
+  return "";
+}

@@ -26,13 +26,17 @@ function loadTargets() {
 // survive opening the next capture.
 const sticky = { target: "shell", client: "" };
 
-export function ExportSnippet({ exportKey, convert }) {
+export function ExportSnippet({ exportKey, convert, large = false }) {
   const [targets, setTargets] = useState([]);
   const [target, setTarget] = useState(sticky.target);
   const [client, setClient] = useState(sticky.client);
   const [snippet, setSnippet] = useState("");
   const [error, setError] = useState("");
   const [copyState, setCopyState] = useState("idle");
+  // A large body is converted only when asked: the snippet embeds the whole
+  // payload, so generating it on selection burns CPU and builds a
+  // multi-hundred-KB string nobody requested.
+  const [requested, setRequested] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -47,9 +51,17 @@ export function ExportSnippet({ exportKey, convert }) {
 
   const active = useMemo(() => targets.find((t) => t.key === target) || null, [targets, target]);
 
-  // Re-convert whenever the row or the language/client selection changes.
+  // Opening a different row clears the snippet and any earlier request.
+  useEffect(() => {
+    setRequested(false);
+    setSnippet("");
+  }, [exportKey]);
+
+  // Re-convert whenever the row or the language/client selection changes — but
+  // for a large body only after an explicit request.
   useEffect(() => {
     if (!active) return undefined;
+    if (large && !requested) return undefined;
     let alive = true;
     setError("");
     convert(target, client).then(
@@ -63,7 +75,7 @@ export function ExportSnippet({ exportKey, convert }) {
     return () => {
       alive = false;
     };
-  }, [exportKey, target, client, active]);
+  }, [exportKey, target, client, active, large, requested]);
 
   const pickTarget = (key) => {
     sticky.target = key;
@@ -113,7 +125,12 @@ export function ExportSnippet({ exportKey, convert }) {
     ${
       error
         ? html`<p class="mt-2 text-xs text-rose-400">${error}</p>`
-        : html`<div class="mt-2 overflow-hidden rounded-md border border-neutral-800 bg-neutral-950">
+        : large && !requested
+          ? html`<div class="mt-2 flex items-center gap-2">
+            <button class="body-action" onClick=${() => setRequested(true)}>Generate snippet</button>
+            <span class="text-xs text-neutral-500">Large body — generated on demand.</span>
+          </div>`
+          : html`<div class="mt-2 overflow-hidden rounded-md border border-neutral-800 bg-neutral-950">
           <div class="flex items-center gap-2 border-b border-neutral-800 bg-neutral-900/60 px-2 py-1">
             <span class="chip bg-brand-500/15 text-brand-300">${target}${client ? "/" + client : ""}</span>
             <div class="ml-auto">
