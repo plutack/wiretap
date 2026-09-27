@@ -28,7 +28,7 @@ var currentTheme = darkTheme()
 
 // --- items ----------------------------------------------------------------
 
-type webhookItem struct{ row store.WebhookRow }
+type webhookItem struct{ row store.WebhookSummaryRow }
 
 func (i webhookItem) FilterValue() string {
 	return i.row.Project + " " + i.row.Method + " " + i.row.Path
@@ -37,7 +37,9 @@ func (i webhookItem) FilterValue() string {
 // key identifies the row across refreshes so the cursor can be restored.
 func (i webhookItem) key() string { return i.row.Project + "/" + strconv.FormatInt(i.row.Seq, 10) }
 
-type captureItem struct{ row store.TrafficCaptureRow }
+type captureItem struct {
+	row store.TrafficCaptureSummaryRow
+}
 
 func (i captureItem) FilterValue() string {
 	return fmt.Sprintf("%s %d %s", i.row.Method, i.row.Status, i.row.URL)
@@ -133,6 +135,86 @@ func padRight(s string, want int) string {
 	return s + strings.Repeat(" ", gap)
 }
 
+// padLeft left-pads s with spaces to want cells. Used for numeric and time
+// columns so their digits line up on the right edge.
+func padLeft(s string, want int) string {
+	gap := want - lipgloss.Width(s)
+	if gap <= 0 {
+		return s
+	}
+	return strings.Repeat(" ", gap) + s
+}
+
+// cellStyle renders a padded cell. lipgloss.Style.Render has exactly this
+// shape, so a style can be assigned directly and applied after padding.
+type cellStyle func(strs ...string) string
+
+// colSpec is one cell of a list table. width == 0 marks a flexible column that
+// absorbs the space left after the fixed ones; right aligns a column to its
+// right edge. style is applied after the cell is padded, so colouring never
+// disturbs the layout.
+type colSpec struct {
+	width int
+	right bool
+	text  string
+	style cellStyle
+}
+
+// renderCols lays the cells out on one line of exactly width display cells.
+//
+// Every cell is padded to its final width — including the flexible one. That is
+// what keeps the columns in the same place no matter how long a URL or path is:
+// a cell that is merely truncated (and never padded) lets everything after it
+// slide left, so the size and time columns wander from row to row.
+func renderCols(cells []colSpec, width int) string {
+	if len(cells) == 0 || width <= 0 {
+		return ""
+	}
+	const sep = "  "
+	flexible, fixed := 0, 0
+	for _, c := range cells {
+		if c.width <= 0 {
+			flexible++
+			continue
+		}
+		fixed += c.width
+	}
+	slack := width - fixed - len(sep)*(len(cells)-1)
+	flexWidth, remainder := 0, 0
+	if flexible > 0 {
+		flexWidth, remainder = slack/flexible, slack%flexible
+	}
+
+	var b strings.Builder
+	for _, c := range cells {
+		if b.Len() > 0 {
+			b.WriteString(sep)
+		}
+		w := c.width
+		if w <= 0 {
+			w = flexWidth
+			if remainder > 0 {
+				w++
+				remainder--
+			}
+			if w < 1 {
+				w = 1
+			}
+		}
+		text := cutWidth(c.text, w)
+		if c.right {
+			text = padLeft(text, w)
+		} else {
+			text = padRight(text, w)
+		}
+		if c.style != nil {
+			text = c.style(text)
+		}
+		b.WriteString(text)
+	}
+	return b.String()
+}
+
 // cutWidth truncates s to want display cells, appending "…" when cut.
 func cutWidth(s string, want int) string {
 	if want <= 0 {
@@ -147,17 +229,83 @@ func cutWidth(s string, want int) string {
 	return ansi.Truncate(s, want-1, "…")
 }
 
+// Column widths shared by the rows and their header, so labels can never drift
+// out of alignment with the data beneath them.
+const (
+	colMethodW = 6
+	colStatusW = 4
+	colSourceW = 18
+	colXferW   = 17
+	colSizeW   = 9
+	colTimeW   = 8
+)
+
+// webhookColumns is the ingress table's layout. ROUTE absorbs the slack, which
+// pushes PAYLOAD and SEEN to fixed positions at the right edge.
+func webhookColumns(r store.WebhookSummaryRow, t theme) []colSpec {
+	return []colSpec{
+		{width: colMethodW, text: r.Method, style: t.method.Render},
+		{width: colSourceW, text: fmt.Sprintf("%s/%d", r.Project, r.Seq), style: t.badge.Render},
+		{text: r.Path},
+		{width: colSizeW, right: true, text: byteCount(r.BodyLength)},
+		{width: colTimeW, right: true, text: fmtTime(r.ReceivedAt), style: t.dim.Render},
+	}
+}
+
+// captureColumns is the traffic table's layout; the URL absorbs the slack.
+func captureColumns(r store.TrafficCaptureSummaryRow, t theme) []colSpec {
+	status := "–"
+	var statusStyle cellStyle
+	if r.Status != 0 {
+		status = strconv.Itoa(r.Status)
+		style := t.statusStyle(r.Status)
+		statusStyle = style.Render
+	}
+	return []colSpec{
+		{width: colMethodW, text: r.Method, style: t.method.Render},
+		{width: colStatusW, text: status, style: statusStyle},
+		{text: r.URL},
+		{width: colXferW, right: true, text: fmt.Sprintf("↑%s ↓%s", byteCount(r.ReqBodyLen), byteCount(r.RespBodyLen))},
+		{width: colTimeW, right: true, text: fmtTime(r.At), style: t.dim.Render},
+	}
+}
+
+// listHeader labels the active tab's columns. It renders through renderCols
+// with the same widths as the rows, so it lines up exactly.
+func listHeader(tab tab, width int, t theme) string {
+	dim := t.dim.Render
+	switch tab {
+	case tabIngress:
+		return renderCols([]colSpec{
+			{width: colMethodW, text: "METHOD", style: dim},
+			{width: colSourceW, text: "SOURCE", style: dim},
+			{text: "ROUTE", style: dim},
+			{width: colSizeW, right: true, text: "PAYLOAD", style: dim},
+			{width: colTimeW, right: true, text: "SEEN", style: dim},
+		}, width)
+	case tabTraffic:
+		return renderCols([]colSpec{
+			{width: colMethodW, text: "METHOD", style: dim},
+			{width: colStatusW, text: "CODE", style: dim},
+			{text: "URL", style: dim},
+			{width: colXferW, right: true, text: "TRANSFER", style: dim},
+			{width: colTimeW, right: true, text: "SEEN", style: dim},
+		}, width)
+	default:
+		return ""
+	}
+}
+
+// hasColumns reports whether a tab is rendered as a table (and therefore needs
+// the header line).
+func hasColumns(tab tab) bool { return tab == tabIngress || tab == tabTraffic }
+
 func renderWebhookRow(w io.Writer, item list.Item, selected bool, width int, t theme) {
 	r, ok := item.(webhookItem)
 	if !ok {
 		return
 	}
-	method := t.method.Render(padRight(cutWidth(r.row.Method, 7), 7))
-	src := t.badge.Render(padRight(cutWidth(fmt.Sprintf("%s/%d", r.row.Project, r.row.Seq), 18), 18))
-	path := cutWidth(r.row.Path, maxInt(width-2-7-18-10-9, 4))
-	size := padRight(byteCount(len(r.row.Body)), 9)
-	line := strings.Join([]string{method, src, path, size, fmtTime(r.row.ReceivedAt)}, "  ")
-	fmt.Fprint(w, decorateRow(line, selected, width, t))
+	fmt.Fprint(w, decorateRow(renderCols(webhookColumns(r.row, t), width), selected, width, t))
 }
 
 func renderCaptureRow(w io.Writer, item list.Item, selected bool, width int, t theme) {
@@ -165,15 +313,7 @@ func renderCaptureRow(w io.Writer, item list.Item, selected bool, width int, t t
 	if !ok {
 		return
 	}
-	method := t.method.Render(padRight(cutWidth(r.row.Method, 7), 7))
-	status := padRight("–", 4)
-	if r.row.Status != 0 {
-		status = padRight(t.statusStyle(r.row.Status).Render(strconv.Itoa(r.row.Status)), 4)
-	}
-	xfer := padRight(fmt.Sprintf("↑%s ↓%s", byteCount(len(r.row.ReqBody)), byteCount(len(r.row.RespBody))), 17)
-	url := cutWidth(r.row.URL, maxInt(width-2-7-4-17-9, 4))
-	line := strings.Join([]string{method, status, url, xfer, fmtTime(r.row.At)}, "  ")
-	fmt.Fprint(w, decorateRow(line, selected, width, t))
+	fmt.Fprint(w, decorateRow(renderCols(captureColumns(r.row, t), width), selected, width, t))
 }
 
 func renderScriptRow(w io.Writer, item list.Item, selected bool, width int, t theme) {

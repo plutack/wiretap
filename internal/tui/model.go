@@ -69,12 +69,32 @@ type Model struct {
 	traffic list.Model
 	scripts list.Model
 
-	// Latest raw snapshots; filters re-derive list items from these without
-	// a refetch, and the paused backlog diff uses them too.
-	webhookRows []store.WebhookRow
-	captureRows []store.TrafficCaptureRow
+	// Latest list snapshots; filters re-derive list items from these without a
+	// refetch, and the paused backlog diff uses them too.
+	//
+	// Projections only. These used to hold full rows, so every 500ms tick
+	// re-read and re-copied up to 100 request and response bodies — the reason
+	// the dashboard felt slow. The detail pane fetches one full row when it is
+	// opened, which is the only place the payloads are needed.
+	webhookRows []store.WebhookSummaryRow
+	captureRows []store.TrafficCaptureSummaryRow
 	scriptRows  []store.ScriptRow
 	sessions    []store.InterceptSessionRow
+
+	// Content signatures of the rendered lists. applyRows skips rebuilding a
+	// list whose signature is unchanged, so a quiet tick does not re-render.
+	ingressSig string
+	trafficSig string
+
+	// Full rows for the current selection, loaded on first use and cached by row
+	// identity. The lists hold summaries, so everything that needs headers or a
+	// body — the detail pane, replay, export, copy — goes through fullWebhook /
+	// fullCapture. A single local row read is fast enough to do inline, and it
+	// replaces reading every row's payload on every poll.
+	selWebhook    *store.WebhookRow
+	selWebhookKey string
+	selCapture    *store.TrafficCaptureRow
+	selCaptureKey string
 
 	paused     bool
 	pausedKeys map[string]struct{} // identity of rows frozen at pause time
@@ -424,8 +444,8 @@ func (m Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openDetail()
 	case "r":
 		if m.tab == tabIngress {
-			if it, ok := m.ingress.SelectedItem().(webhookItem); ok {
-				r := newReplay(&it.row, m.status.ForwardURL, m.width)
+			if row := m.fullWebhook(); row != nil {
+				r := newReplay(row, m.status.ForwardURL, m.width)
 				m.replay = &r
 				m.focus = focusReplay
 				m.layout()
@@ -437,16 +457,16 @@ func (m Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		eh := maxInt(m.contentHeight()+1, 4)
 		switch m.tab {
 		case tabIngress:
-			if it, ok := m.ingress.SelectedItem().(webhookItem); ok {
-				e := newExport(&it.row, nil, m.width, eh)
+			if row := m.fullWebhook(); row != nil {
+				e := newExport(row, nil, m.width, eh)
 				m.export = &e
 				m.focus = focusExport
 				m.layout()
 				return m, fetchTargetsCmd(m.deps)
 			}
 		case tabTraffic:
-			if it, ok := m.traffic.SelectedItem().(captureItem); ok {
-				e := newExport(nil, &it.row, m.width, eh)
+			if row := m.fullCapture(); row != nil {
+				e := newExport(nil, row, m.width, eh)
 				m.export = &e
 				m.focus = focusExport
 				m.layout()
@@ -457,12 +477,12 @@ func (m Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "y":
 		switch m.tab {
 		case tabIngress:
-			if it, ok := m.ingress.SelectedItem().(webhookItem); ok && len(it.row.Body) > 0 {
-				return m, copyTextCmd(string(it.row.Body))
+			if row := m.fullWebhook(); row != nil && len(row.Body) > 0 {
+				return m, copyTextCmd(string(row.Body))
 			}
 		case tabTraffic:
-			if it, ok := m.traffic.SelectedItem().(captureItem); ok && len(it.row.RespBody) > 0 {
-				return m, copyTextCmd(string(it.row.RespBody))
+			if row := m.fullCapture(); row != nil && len(row.RespBody) > 0 {
+				return m, copyTextCmd(string(row.RespBody))
 			}
 		}
 		return m, nil
@@ -580,20 +600,61 @@ func (m *Model) clearLens() tea.Cmd {
 	return m.applyRows()
 }
 
+// fullWebhook returns the complete row for the current ingress selection,
+// loading it on first use and caching it under the row's identity.
+func (m *Model) fullWebhook() *store.WebhookRow {
+	it, ok := m.ingress.SelectedItem().(webhookItem)
+	if !ok || m.deps.WebhookDetail == nil {
+		return nil
+	}
+	key := webhookItem{row: it.row}.key()
+	if m.selWebhook != nil && m.selWebhookKey == key {
+		return m.selWebhook
+	}
+	row, err := m.deps.WebhookDetail(context.Background(), it.row.Project, it.row.Seq)
+	if err != nil {
+		m.setToast("load webhook: "+err.Error(), true)
+		return nil
+	}
+	m.selWebhook, m.selWebhookKey = row, key
+	return row
+}
+
+// fullCapture is fullWebhook's counterpart for the traffic list.
+func (m *Model) fullCapture() *store.TrafficCaptureRow {
+	it, ok := m.traffic.SelectedItem().(captureItem)
+	if !ok || m.deps.CaptureDetail == nil {
+		return nil
+	}
+	key := strconv.FormatInt(it.row.ID, 10)
+	if m.selCapture != nil && m.selCaptureKey == key {
+		return m.selCapture
+	}
+	row, err := m.deps.CaptureDetail(context.Background(), it.row.ID)
+	if err != nil {
+		m.setToast("load capture: "+err.Error(), true)
+		return nil
+	}
+	m.selCapture, m.selCaptureKey = row, key
+	return row
+}
+
+// openDetail opens the detail pane for the current selection. The list only
+// holds a summary, so the full row (headers and bodies) is loaded here.
 func (m Model) openDetail() (tea.Model, tea.Cmd) {
 	// +1: detail keeps its own hint line in addition to the list-area rows.
 	h := maxInt(m.contentHeight()+1, 4)
 	switch m.tab {
 	case tabIngress:
-		if it, ok := m.ingress.SelectedItem().(webhookItem); ok {
-			d := newWebhookDetail(&it.row, m.width, h)
+		if row := m.fullWebhook(); row != nil {
+			d := newWebhookDetail(row, m.width, h)
 			m.detail = &d
 			m.focus = focusDetail
 			m.layout()
 		}
 	case tabTraffic:
-		if it, ok := m.traffic.SelectedItem().(captureItem); ok {
-			d := newCaptureDetail(&it.row, m.width, h)
+		if row := m.fullCapture(); row != nil {
+			d := newCaptureDetail(row, m.width, h)
 			m.detail = &d
 			m.focus = focusDetail
 			m.layout()
@@ -718,18 +779,57 @@ func (m *Model) refreshScripts(ctx context.Context) tea.Cmd {
 // snapshots through the lens filters, preserving the cursor by row identity.
 // The active tab is skipped while paused so its rows stay frozen. The
 // returned command re-runs any active text filter (see setItems).
+//
+// Rebuilding is skipped when the rows cannot have changed: SetItems makes
+// bubbles re-filter and re-render every visible row, so doing it on each 500ms
+// tick burns CPU redrawing an identical list. Rows are immutable once stored,
+// so the content signature is a sound comparison.
 func (m *Model) applyRows() tea.Cmd {
 	var cmds []tea.Cmd
 	if !(m.paused && m.tab == tabIngress) {
-		cmds = append(cmds, setItems(&m.ingress, webhookItems(m.webhookRows, m.methodLens)))
+		if sig := webhookRowsSig(m.webhookRows, m.methodLens); sig != m.ingressSig {
+			m.ingressSig = sig
+			cmds = append(cmds, setItems(&m.ingress, webhookItems(m.webhookRows, m.methodLens)))
+		}
 	}
 	if !(m.paused && m.tab == tabTraffic) {
-		cmds = append(cmds, setItems(&m.traffic, captureItems(m.captureRows, m.methodLens, m.statusLens)))
+		if sig := captureRowsSig(m.captureRows, m.methodLens, m.statusLens); sig != m.trafficSig {
+			m.trafficSig = sig
+			cmds = append(cmds, setItems(&m.traffic, captureItems(m.captureRows, m.methodLens, m.statusLens)))
+		}
 	}
 	if m.paused && m.tab != tabTransforms {
 		m.backlog = m.countBacklog()
 	}
 	return tea.Batch(cmds...)
+}
+
+// webhookRowsSig is a content signature for the ingress list: two equal
+// signatures mean the rendered rows are identical.
+func webhookRowsSig(rows []store.WebhookSummaryRow, method string) string {
+	var b strings.Builder
+	for _, r := range rows {
+		if method != "" && r.Method != method {
+			continue
+		}
+		fmt.Fprintf(&b, "%s/%d\x00%s\x00%s\x00%d\n", r.Project, r.Seq, r.Method, r.Path, r.BodyLength)
+	}
+	return b.String()
+}
+
+// captureRowsSig is webhookRowsSig's counterpart for the traffic list.
+func captureRowsSig(rows []store.TrafficCaptureSummaryRow, method, status string) string {
+	var b strings.Builder
+	for _, r := range rows {
+		if method != "" && r.Method != method {
+			continue
+		}
+		if status != "" && !statusInFamily(r.Status, status) {
+			continue
+		}
+		fmt.Fprintf(&b, "%d\x00%s\x00%d\x00%d\x00%s\n", r.ID, r.Method, r.Status, r.ReqBodyLen+r.RespBodyLen, r.URL)
+	}
+	return b.String()
 }
 
 // countBacklog counts fresh rows on the active tab that were not in the
@@ -767,7 +867,7 @@ func setItems(l *list.Model, items []list.Item) tea.Cmd {
 	return cmd
 }
 
-func webhookItems(rows []store.WebhookRow, method string) []list.Item {
+func webhookItems(rows []store.WebhookSummaryRow, method string) []list.Item {
 	out := make([]list.Item, 0, len(rows))
 	for _, r := range rows {
 		if method != "" && r.Method != method {
@@ -778,7 +878,7 @@ func webhookItems(rows []store.WebhookRow, method string) []list.Item {
 	return out
 }
 
-func captureItems(rows []store.TrafficCaptureRow, method, status string) []list.Item {
+func captureItems(rows []store.TrafficCaptureSummaryRow, method, status string) []list.Item {
 	out := make([]list.Item, 0, len(rows))
 	for _, r := range rows {
 		if method != "" && r.Method != method {
@@ -836,13 +936,17 @@ func (m *Model) layout() {
 }
 
 // contentHeight is the rows available to list/detail/export panes: total
-// minus header, tabs, rule, status, and help lines; one less when the
-// replay prompt is open.
+// minus header, tabs, rule, status, and help lines; one less for the column
+// header on a tab that renders as a table, and one less when the replay prompt
+// is open.
 func (m Model) contentHeight() int {
 	if m.height == 0 {
 		return 3
 	}
 	h := m.height - 5
+	if hasColumns(m.tab) {
+		h-- // the column header line above the list
+	}
 	if m.replay != nil {
 		h--
 	}
@@ -876,6 +980,13 @@ func (m Model) View() string {
 	b.WriteByte('\n')
 	b.WriteString(m.rule())
 	b.WriteByte('\n')
+
+	if m.focus == focusLists && hasColumns(m.tab) {
+		// Rows carry a two-cell cursor gutter, so the header matches it and the
+		// labels sit directly over their columns.
+		b.WriteString("  " + listHeader(m.tab, m.width-2, currentTheme))
+		b.WriteByte('\n')
+	}
 
 	switch m.focus {
 	case focusExport:

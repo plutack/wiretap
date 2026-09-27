@@ -35,10 +35,12 @@ var tuiFixedTime = time.Unix(1_700_000_000, 0).UTC()
 // per-test fakes.
 func storeDeps(st *store.PCStore) Deps {
 	return Deps{
-		Webhooks: st.SearchWebhooks,
-		Captures: st.SearchCaptures,
-		Sessions: st.InterceptSessions,
-		Scripts:  st.Scripts,
+		Webhooks:      st.SearchWebhookSummaries,
+		Captures:      st.SearchCaptureSummaries,
+		WebhookDetail: st.WebhookBySeq,
+		CaptureDetail: st.TrafficCaptureByID,
+		Sessions:      st.InterceptSessions,
+		Scripts:       st.Scripts,
 		SetScriptEnabled: func(ctx context.Context, id int64, enabled bool) error {
 			return st.SetScriptEnabled(ctx, id, enabled, tuiFixedTime)
 		},
@@ -265,9 +267,9 @@ func TestSessionFilterDrivesQuery(t *testing.T) {
 
 	var queried []int64
 	deps := storeDeps(st)
-	deps.Captures = func(ctx context.Context, f store.CaptureFilter) (store.CapturePage, error) {
+	deps.Captures = func(ctx context.Context, f store.CaptureFilter) (store.CaptureSummaryPage, error) {
 		queried = append(queried, f.SessionID)
-		return st.SearchCaptures(ctx, f)
+		return st.SearchCaptureSummaries(ctx, f)
 	}
 
 	m := mustTick(t, New(deps))

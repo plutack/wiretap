@@ -81,6 +81,26 @@ type WebhookPage struct {
 	HasMore bool
 }
 
+// WebhookSummaryRow is the list projection of a webhook: what a polling list
+// shows, without the retained header and body blobs. BodyLength comes from
+// SQLite's length() so a list query never loads a payload.
+type WebhookSummaryRow struct {
+	Project    string
+	Seq        int64
+	ReceivedAt time.Time
+	SourceIP   string
+	Method     string
+	Path       string
+	BodyLength int
+}
+
+// WebhookSummaryPage is a filtered page of webhook summaries.
+type WebhookSummaryPage struct {
+	Rows    []WebhookSummaryRow
+	Total   int64
+	HasMore bool
+}
+
 // whereClause accumulates " AND "-joined conditions alongside their arguments.
 // Both slices are appended in lockstep by add and containsAny so positional
 // parameters always line up with the placeholders.
@@ -332,6 +352,51 @@ func (s *PCStore) SearchCaptures(ctx context.Context, f CaptureFilter) (CaptureP
 	if f.BeforeID > 0 {
 		if page.Total, err = s.countRows(ctx, "traffic_captures", captureWhere(f, false), "SearchCaptures"); err != nil {
 			return CapturePage{}, err
+		}
+	}
+	return page, nil
+}
+
+// SearchWebhookSummaries is SearchWebhooks' list projection. It selects the
+// body length instead of the body, so a list that re-queries on a short
+// interval never reads retained payloads — the same split the capture queries
+// make between summaries and full rows.
+func (s *PCStore) SearchWebhookSummaries(ctx context.Context, f WebhookFilter) (WebhookSummaryPage, error) {
+	limit := pageLimit(f.Limit)
+	w := webhookWhere(f, true)
+	q := `SELECT project, seq, received_at, COALESCE(source_ip, ''), method, COALESCE(path, ''),
+		 COALESCE(length(body), 0), COUNT(*) OVER ()
+		 FROM webhooks` + w.sql() + ` ORDER BY seq DESC LIMIT ?`
+
+	rows, err := s.db.QueryContext(ctx, q, append(w.args, limit+1)...)
+	if err != nil {
+		return WebhookSummaryPage{}, fmt.Errorf("PCStore.SearchWebhookSummaries: %w", err)
+	}
+	defer rows.Close()
+
+	page := WebhookSummaryPage{Rows: make([]WebhookSummaryRow, 0, limit)}
+	for rows.Next() {
+		var (
+			r        WebhookSummaryRow
+			received int64
+			total    int64
+		)
+		if err := rows.Scan(&r.Project, &r.Seq, &received, &r.SourceIP, &r.Method, &r.Path, &r.BodyLength, &total); err != nil {
+			return WebhookSummaryPage{}, fmt.Errorf("PCStore.SearchWebhookSummaries scan: %w", err)
+		}
+		r.ReceivedAt = time.Unix(received, 0).UTC()
+		page.Total = total
+		page.Rows = append(page.Rows, r)
+	}
+	if err := rows.Err(); err != nil {
+		return WebhookSummaryPage{}, fmt.Errorf("PCStore.SearchWebhookSummaries rows: %w", err)
+	}
+	kept, hasMore := applyPage(len(page.Rows), limit)
+	page.Rows = page.Rows[:kept]
+	page.HasMore = hasMore
+	if f.BeforeSeq > 0 {
+		if page.Total, err = s.countRows(ctx, "webhooks", webhookWhere(f, false), "SearchWebhookSummaries"); err != nil {
+			return WebhookSummaryPage{}, err
 		}
 	}
 	return page, nil
