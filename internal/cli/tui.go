@@ -38,8 +38,10 @@ func newTUICmd(version string) *cobra.Command {
 			}
 
 			deps := tui.Deps{
-				Webhooks:         a.Webhooks,
-				Captures:         a.Captures,
+				Webhooks:         a.WebhookSummaries,
+				Captures:         a.CaptureSummaries,
+				WebhookDetail:    a.WebhookBySeq,
+				CaptureDetail:    a.CaptureByID,
 				Sessions:         a.InterceptSessions,
 				Replay:           a.ReplayWebhook,
 				ExportTargets:    a.ExportTargets,
