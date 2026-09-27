@@ -44,6 +44,17 @@ const (
 	MessageBinary
 )
 
+// maxMessageBytes bounds a single message the client reads from the relay.
+//
+// coder/websocket defaults to a 32 KiB per-message read limit. A relay PUSH
+// carries the webhook body and raw headers, and encoding/json renders the
+// []byte body as base64 (~4/3 inflation). The relay's ingress accepts bodies up
+// to 10 MiB, so the default limit aborts the session on any large webhook;
+// because the relay re-pushes from the last acked sequence, that project's sync
+// would then stall permanently. Raise the ceiling above the ingress cap
+// (10 MiB raw is roughly 13.3 MiB as base64, plus JSON framing and headers).
+const maxMessageBytes = 16 << 20 // 16 MiB
+
 // WSNetDialer is the production Dialer. It delegates to coder/websocket.Dial.
 type WSNetDialer struct{}
 
@@ -59,6 +70,9 @@ func (WSNetDialer) Dial(ctx context.Context, url string, headers http.Header) (C
 	if err != nil {
 		return nil, err
 	}
+	// Lift the library's 32 KiB default; large webhook bodies arrive as a
+	// single base64 frame (see maxMessageBytes).
+	conn.SetReadLimit(maxMessageBytes)
 	return WSNetConn{c: conn}, nil
 }
 
