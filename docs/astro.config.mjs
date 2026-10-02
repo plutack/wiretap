@@ -1,6 +1,7 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightImageZoom from 'starlight-image-zoom';
+import starlightThemeNord from 'starlight-theme-nord';
 
 export default defineConfig({
   site: process.env.SITE_URL,
@@ -9,6 +10,8 @@ export default defineConfig({
       title: 'Wiretap',
       description: 'Capture HTTP traffic and receive public webhooks without exposing your development machine.',
       plugins: [
+        // Nord color theme for the docs.
+        starlightThemeNord(),
         // Click any documentation image to open it enlarged. Image alt text
         // doubles as the zoom caption, so keep alt text descriptive.
         starlightImageZoom(),
