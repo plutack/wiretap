@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.5.2 — 2026-10-10
+
+### Graceful shutdown
+
+- Relay shutdown rejects new work, drains accepted HTTP requests within five
+  seconds, closes upgraded tunnels, and joins delivery/ACK workers before SQLite.
+- Client shutdown has bounded tunnel termination and tracks replay, automatic
+  forwarding, scripts, and store operations; the relay writer is joined.
+- Interception drains HTTP/CONNECT exchanges and control API handlers, then
+  cancels upstream I/O and force-closes stalled connections at the deadline.
+- Shell startup cleanup and bounded session finalization run after drain timeouts;
+  owned stores close only after their workers leave. GUI/TUI/interception cleanup
+  errors are propagated rather than silently discarded.
+- Added race-tested draining, forced cancellation, active CONNECT, pre-HELLO tunnel,
+  store-close-last, and durable webhook resume-after-restart regressions.
+
+### Upgrade notes
+
+- Restart relay and clients; no new database or tunnel-protocol migration is needed.
+- Allow at least seven seconds for relay shutdown and eight seconds for interception
+  before SIGKILL. Requests exceeding the drain budget can be interrupted; upstream
+  side effects may already have occurred and are not automatically retried.
+- An uncooperative worker produces a shutdown error and keeps its store open rather
+  than closing it underneath live work. SIGKILL cannot run cleanup.
+- Client log destinations remain command-specific; unified logging is deferred.
+
 ## v0.5.1 — 2026-10-10
 
 ### Structured diagnostics
