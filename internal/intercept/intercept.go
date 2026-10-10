@@ -27,6 +27,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/plutack/wiretap/internal/logging"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -49,6 +51,7 @@ import (
 // (Installer, PCStore, Clock) so tests run without touching the real trust
 // store or the wall clock.
 type Deps struct {
+	Logger       *slog.Logger
 	ConfigDir    string                // for CA persistence + override-bin
 	ProxyAddr    string                // interception proxy listen addr (use :0 for ephemeral)
 	LocalAPIAddr string                // local control API listen addr
@@ -72,6 +75,7 @@ type Deps struct {
 // Session is a live interception: proxy + local API up, override-bin on disk,
 // startup files patched. Stop reverses it.
 type Session struct {
+	logger       *slog.Logger
 	proxy        *proxy.Proxy
 	localAPI     *http.Server
 	localAPILn   net.Listener
@@ -90,7 +94,18 @@ type Session struct {
 
 // Start runs the orchestration described at the package doc and returns a
 // Session. On error it cleans up any half-started pieces.
-func Start(ctx context.Context, deps Deps) (*Session, error) {
+func Start(ctx context.Context, deps Deps) (session *Session, result error) {
+	logger := deps.Logger
+	if logger == nil {
+		logger = logging.FromContext(ctx)
+	}
+	logger = logger.With("subsystem", "intercept")
+	logger.Info("intercept_starting")
+	defer func() {
+		if result != nil {
+			logger.Error("intercept_start_failed")
+		}
+	}()
 	if deps.Installer == nil {
 		return nil, errors.New("intercept: Installer is required")
 	}
@@ -104,6 +119,7 @@ func Start(ctx context.Context, deps Deps) (*Session, error) {
 
 	ca, err := deps.Installer.EnsureCA(ctx)
 	if err != nil {
+		logger.Error("intercept_ca_ensure_failed")
 		return nil, fmt.Errorf("intercept: ensure CA: %w", err)
 	}
 	caCertPath := filepath.Join(deps.ConfigDir, "ca", "wiretap-ca.crt")
@@ -118,7 +134,7 @@ func Start(ctx context.Context, deps Deps) (*Session, error) {
 	// the real listener port. The proxy does not begin serving until the
 	// recorder, startup files, and local API are all ready.
 	recorder := &storeRecorder{st: deps.PCStore, clock: clock}
-	proxyOpts := []proxy.Option{proxy.WithClock(clock)}
+	proxyOpts := []proxy.Option{proxy.WithClock(clock), proxy.WithLogger(logger)}
 	if transformer := newScriptTransformer(deps.ScriptEngine, deps.PCStore, deps.OnScriptError); transformer != nil {
 		proxyOpts = append(proxyOpts, proxy.WithTransformer(transformer))
 	}
@@ -186,11 +202,21 @@ func Start(ctx context.Context, deps Deps) (*Session, error) {
 
 	api := localapi.New(deps.PCStore, localapi.WithVersion(deps.Version))
 	httpSrv := &http.Server{Handler: api.Routes()}
-	go func() { _ = prox.Start() }()
-	go func() { _ = httpSrv.Serve(apiLn) }()
+	go func() {
+		if err := prox.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
+			logger.Error("intercept_proxy_serve_failed")
+		}
+	}()
+	go func() {
+		if err := httpSrv.Serve(apiLn); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
+			logger.Error("intercept_api_serve_failed")
+		}
+	}()
 
 	sessionStarted = true
+	logger.Info("intercept_started", "session_id", sessionID)
 	return &Session{
+		logger:       logger,
 		proxy:        prox,
 		localAPI:     httpSrv,
 		localAPILn:   apiLn,
@@ -232,10 +258,22 @@ func (s *Session) LocalAPIAddr() string {
 // Stop tears the session down: stops proxy + local API, reverts the patched
 // startup files (so normal shells are clean again), and removes the per-session
 // override-bin directory. The CA is left installed. Multiple calls are safe.
-func (s *Session) Stop(ctx context.Context) error {
+func (s *Session) Stop(ctx context.Context) (result error) {
 	if s == nil {
 		return nil
 	}
+	logger := s.logger
+	if logger == nil {
+		logger = logging.FromContext(ctx)
+	}
+	logger.Info("intercept_stop_requested", "session_id", s.sessionID)
+	defer func() {
+		if result != nil {
+			logger.Error("intercept_stop_failed", "session_id", s.sessionID)
+		} else {
+			logger.Info("intercept_stopped", "session_id", s.sessionID)
+		}
+	}()
 	var errs []error
 	if s.proxy != nil {
 		errs = append(errs, s.proxy.Stop(ctx))
