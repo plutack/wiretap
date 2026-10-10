@@ -23,7 +23,9 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"github.com/plutack/wiretap/internal/logging"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	neturl "net/url"
@@ -154,6 +156,7 @@ func (d *tlsDialer) Dial(ctx context.Context, network, addr string) (net.Conn, e
 // resolved address, serves in a goroutine). Stop cancels serving and closes
 // in-flight client connections.
 type Proxy struct {
+	logger      *slog.Logger
 	addr        string
 	signer      CertSigner
 	recorder    Recorder
@@ -171,6 +174,15 @@ type Proxy struct {
 
 // Option configures a Proxy.
 type Option func(*Proxy)
+
+// WithLogger enables safe proxy diagnostics; raw URLs and errors are omitted.
+func WithLogger(logger *slog.Logger) Option {
+	return func(p *Proxy) {
+		if logger != nil {
+			p.logger = logger.With("subsystem", "proxy")
+		}
+	}
+}
 
 // WithClock injects a clock used to timestamp captures. Defaults to
 // testutil.SystemClock.
@@ -213,6 +225,7 @@ func WithRoundTripper(rt http.RoundTripper) Option {
 func New(addr string, signer CertSigner, recorder Recorder, opts ...Option) *Proxy {
 	p := &Proxy{
 		addr:      addr,
+		logger:    logging.FromContext(context.Background()),
 		signer:    signer,
 		recorder:  recorder,
 		dialer:    defaultUpstreamDialer(),
@@ -376,6 +389,7 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	upstream, err := p.dialer.Dial(ctx, "tcp", addr)
 	if err != nil {
+		p.logger.Warn("proxy_upstream_connect_failed", "tls", true)
 		http.Error(w, "wiretap: upstream unreachable: "+err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -404,12 +418,14 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	leaf, err := p.signer.LeafCert(host)
 	if err != nil {
+		p.logger.Error("proxy_certificate_sign_failed")
 		return
 	}
 	clientTLS := tls.Server(clientConn, &tls.Config{Certificates: []tls.Certificate{leaf}})
 	// After Hijack the server cancels r.Context(), so drive the handshake with a
 	// fresh background context rather than a soon-dead one.
 	if err := clientTLS.HandshakeContext(context.Background()); err != nil {
+		p.logger.Warn("proxy_client_tls_handshake_failed")
 		return
 	}
 	defer clientTLS.Close()
@@ -583,6 +599,7 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := p.roundTrip.RoundTrip(outReq)
 	if err != nil {
+		p.logger.Warn("proxy_upstream_request_failed", "tls", false)
 		http.Error(w, "wiretap: upstream error: "+err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -659,5 +676,9 @@ func (p *Proxy) record(ctx context.Context, c Capture) {
 	if p.recorder == nil {
 		return
 	}
-	_ = p.recorder.Record(ctx, c)
+	if err := p.recorder.Record(ctx, c); err != nil {
+		p.logger.Error("capture_persistence_failed")
+	} else {
+		p.logger.Debug("capture_persisted", "status", c.Status, "request_bytes", len(c.ReqBody), "response_bytes", len(c.RespBody))
+	}
 }

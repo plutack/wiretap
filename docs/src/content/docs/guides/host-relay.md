@@ -23,6 +23,8 @@ Persist the SQLite database. Losing it removes registrations, projects, subscrip
 | `WIRETAP_ADMIN_TOKEN` | required | Authorizes `/register` and `/admin/*` |
 | `WIRETAP_RELAY_ADDR` | `:8443` | HTTP listen address |
 | `WIRETAP_RELAY_DB` | `relay.db` | SQLite database path |
+| `WIRETAP_LOG_FORMAT` | `text` (container image: `json`) | Structured log output: `text` or `json` |
+| `WIRETAP_LOG_LEVEL` | `info` | Minimum level: `debug`, `info`, `warn`, or `error` |
 
 Equivalent flags are `-admin-token`, `-addr`, and `-db`; flags win over environment variables. `GET /health` is unauthenticated.
 
@@ -101,6 +103,41 @@ curl https://relay.example.com/health
 5. Attach a public domain and point the health check at `/health`.
 
 Coolify's proxy handles HTTPS and WebSocket forwarding.
+
+## Relay logs
+
+Logs go to stderr using Go's `log/slog`, with `component=relay` and the build
+`version` on every record. The container image defaults to JSON for Docker and
+Coolify; running the binary directly defaults to readable text. Flags
+`-log-format` and `-log-level` override the corresponding environment variables.
+Invalid logging settings fail startup rather than silently disabling logging.
+
+```sh
+docker logs --follow wiretap-relay
+# For a direct binary:
+WIRETAP_LOG_LEVEL=debug wiretap-relay -log-format json
+```
+
+At `info`, expect database open/migration/close, listening, tunnel connect/disconnect,
+and shutdown events. `debug` adds HTTP completion, persisted ingress, and ACK
+progress. HTTP rejection responses are `warn`; server failures are `error`.
+Successful health polling is debug-only. Each HTTP request gets a generated
+`X-Request-ID` response header, also attached to its request/tunnel log events.
+A tunnel HTTP completion event measures the connection's lifetime, not just the
+upgrade handshake.
+
+Logs deliberately omit raw request paths, query strings, headers, payloads,
+remote addresses, and peer-controlled error text. They may contain authenticated
+client IDs, project names, sequence numbers, sizes, and durations; restrict access
+to deployment logs. The shared logger also redacts common secret attribute names
+as defense in depth, but does not promise to sanitize arbitrary strings.
+Failures use stable event names and operation metadata instead of dumping raw
+error messages that might expose secrets.
+
+`http_shutdown_completed` means HTTP shutdown finished; it does **not** yet
+promise that upgraded WebSockets and all workers were gracefully drained. Full
+relay tunnel draining is separate follow-up work. Client/TUI/desktop diagnostics
+use file-backed logs; see [Client diagnostic logs](/reference/cli/#client-diagnostic-logs).
 
 ## Upgrade safely
 

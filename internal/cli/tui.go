@@ -2,7 +2,7 @@ package cli
 
 import (
 	"fmt"
-	"os"
+	"github.com/plutack/wiretap/internal/logging"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -23,7 +23,8 @@ func newTUICmd(version string) *cobra.Command {
 		Use:   "tui",
 		Short: "Live dashboard of captured webhooks and traffic",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			a := app.New(newConfigManager(), app.WithScriptEngine(newScriptEngine(), logScriptError))
+			logger := logging.FromContext(cmd.Context())
+			a := app.New(newConfigManager(), app.WithLogger(logger), app.WithScriptEngine(newScriptEngine(), scriptErrorLogger(logger)))
 			if err := a.Open(cmd.Context()); err != nil {
 				return fmt.Errorf("tui: open store: %w", err)
 			}
@@ -33,8 +34,8 @@ func newTUICmd(version string) *cobra.Command {
 			// URL or credentials are missing — the dashboard still shows
 			// historical data from the local SQLite).
 			if err := a.StartTunnel(cmd.Context()); err != nil {
-				// Non-fatal: surface to stderr but keep the dashboard open.
-				fmt.Fprintf(os.Stderr, "wiretap: tunnel not started: %v\n", err)
+				// Diagnostics must not write into Bubble Tea's terminal.
+				logger.Warn("client_tunnel_start_failed")
 			}
 
 			deps := tui.Deps{

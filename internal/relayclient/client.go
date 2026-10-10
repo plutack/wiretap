@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+
+	"github.com/plutack/wiretap/internal/logging"
 	"math/rand/v2"
 	"net/http"
 	"time"
@@ -79,10 +82,27 @@ type Client struct {
 	backoff     Backoff
 	callbacks   Callbacks
 	transformer WebhookTransformer
+	logger      *slog.Logger
+}
+
+func (c *Client) log() *slog.Logger {
+	if c.logger != nil {
+		return c.logger
+	}
+	return logging.FromContext(context.Background())
 }
 
 // Option configures a Client. Passed to New.
 type Option func(*Client)
+
+// WithLogger enables safe tunnel diagnostics without changing global logging.
+func WithLogger(logger *slog.Logger) Option {
+	return func(c *Client) {
+		if logger != nil {
+			c.logger = logger.With("subsystem", "relayclient")
+		}
+	}
+}
 
 // WithClock injects a clock; tests pass a FakeClock so received_at / stored_at
 // are deterministic. Defaults to SystemClock.
@@ -114,6 +134,7 @@ func WithWebhookTransformer(t WebhookTransformer) Option {
 func New(cfg Config, st *store.PCStore, opts ...Option) *Client {
 	c := &Client{
 		cfg:     cfg,
+		logger:  logging.FromContext(context.Background()),
 		store:   st,
 		clock:   testutil.SystemClock{},
 		dialer:  WSNetDialer{},
@@ -150,6 +171,7 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 		// Recoverable: back off and redial.
 		wait := c.backoff.Next()
+		c.log().Warn("relay_reconnect_scheduled", "delay", wait)
 		select {
 		case <-ctx.Done():
 			return ErrShutdown
@@ -161,12 +183,17 @@ func (c *Client) Run(ctx context.Context) error {
 // runOnce dials, runs the protocol loop until the session ends, and returns
 // the cause. Never retries — Run handles that.
 func (c *Client) runOnce(ctx context.Context) error {
+	c.log().Debug("relay_connect_attempt")
 	lastSeqs, err := c.loadCursors(ctx)
 	if err != nil {
+		if ctx.Err() == nil {
+			c.log().Error("relay_cursor_load_failed")
+		}
 		return fmt.Errorf("load cursors: %w", err)
 	}
 	conn, err := c.dialer.Dial(ctx, c.cfg.URL, c.authHeaders())
 	if err != nil {
+		c.log().Debug("relay_dial_failed")
 		return fmt.Errorf("dial: %w", err)
 	}
 	defer conn.Close()
@@ -195,6 +222,8 @@ func (c *Client) runOnce(ctx context.Context) error {
 	// so future reconnects load local cursors for projects granted by an admin
 	// after this client was originally configured.
 	c.cfg.Projects = append([]string(nil), ok.Projects...)
+	c.log().Info("relay_connected", "project_count", len(ok.Projects))
+	defer func() { c.log().Info("relay_disconnected", "cancelled", ctx.Err() != nil) }()
 	if c.callbacks.OnConnect != nil {
 		c.callbacks.OnConnect(ok.Projects)
 	}
@@ -264,10 +293,14 @@ func (c *Client) reader(ctx context.Context, conn Conn, ackCh chan<- relayproto.
 			var err error
 			inserted, err = c.store.StoreWebhook(ctx, row, c.clock.Now())
 			if err != nil {
+				if ctx.Err() == nil {
+					c.log().Error("webhook_persistence_failed", "seq", push.Seq)
+				}
 				// Storage error is the only thing that ends the session.
 				return fmt.Errorf("store webhook %s/%d: %w", push.Project, push.Seq, err)
 			}
 		}
+		c.log().Debug("webhook_processed", "seq", push.Seq, "inserted", inserted, "rejected", rejected)
 		// Always ack, even if duplicated: the relay uses the ack to advance
 		// acked_seq; an idempotent store + redundant ack is the safe pair.
 		ack := relayproto.Ack{
@@ -298,8 +331,10 @@ func (c *Client) transformWebhook(ctx context.Context, row store.WebhookRow) (st
 	out, err := c.transformer.TransformWebhook(ctx, row)
 	if err != nil {
 		if errors.Is(err, ErrWebhookRejected) {
+			c.log().Debug("webhook_transform_rejected", "seq", row.Seq)
 			return row, true
 		}
+		c.log().Warn("webhook_transform_failed", "seq", row.Seq)
 		return row, false
 	}
 	return out, false
@@ -317,8 +352,12 @@ func (c *Client) writer(ctx context.Context, conn Conn, ackCh <-chan relayproto.
 				return
 			}
 			if err := writeMsg(ctx, conn, ack); err != nil {
+				if ctx.Err() == nil {
+					c.log().Warn("relay_ack_write_failed", "seq", ack.UpToSeq)
+				}
 				return
 			}
+			c.log().Debug("relay_ack_sent", "seq", ack.UpToSeq)
 		}
 	}
 }

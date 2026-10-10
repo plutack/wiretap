@@ -21,6 +21,48 @@ Run `wiretap <command> --help` for the flags shipped by your installed version.
 replace a different local relay identity. The imported bearer token prefers the
 operating-system keyring; delete the handoff file after use.
 
+## Client diagnostic logs
+
+The desktop, TUI, and operational CLI commands write structured diagnostics to a
+file, **never to stdout/stderr**. This keeps Bubble Tea rendering, intercepted
+shells, and machine-readable command output intact. Help/version output does not
+open a diagnostic file.
+
+| Flag | Environment | Default |
+| --- | --- | --- |
+| `--log-file` | `WIRETAP_LOG_FILE` | `<config-dir>/logs/<command>.log` |
+| `--log-format` | `WIRETAP_LOG_FORMAT` | `text` (`json` is also supported) |
+| `--log-level` | `WIRETAP_LOG_LEVEL` | `info` (`debug`, `warn`, `error` also supported) |
+
+Flags override environment variables. Default filenames follow the command path:
+`wiretap-tui.log`, `wiretap-gui.log`, and `wiretap-intercept-start.log`, for example.
+The config directory is Wiretap's usual OS-specific directory (typically
+`~/.config/wiretap` on Linux). To use a known destination:
+
+```sh
+wiretap tui --log-file /tmp/wiretap-tui.log --log-format json --log-level debug
+# Read this from another terminal, not inside the TUI's terminal:
+tail -f /tmp/wiretap-tui.log
+```
+
+Files are append-only until approximately 10 MiB, then reset in place; this is a
+bounded diagnostic history, not an audit archive. Files use owner-only permissions
+on Unix. Use different files for simultaneous processes, especially with an
+explicit `--log-file` override. Log destinations must be regular files, not `-`,
+devices, or symlinks. Failure to open the log aborts command startup; write failures
+are reported when the command exits, never by printing into a live TUI.
+
+Records include component, version, command, PID, and subsystem. Info covers store
+and tunnel lifecycle and replay outcomes; debug adds connection attempts, persisted
+captures/webhooks, and ACK progress. Failures and reconnect backoff are visible at
+warn/error. Script exceptions and automatic forwarding outcomes also go to the
+file instead of the terminal. Logs omit raw URLs, paths, headers, payloads, script
+names/exception text, and credential values. Sequence/session IDs, status codes,
+sizes and durations may be retained. Review diagnostic files before sharing them.
+
+These are backend diagnostics, not browser console capture or a new desktop log
+viewer. Full bounded shutdown/draining remains separate work.
+
 ## Interception
 
 | Command | Purpose |
