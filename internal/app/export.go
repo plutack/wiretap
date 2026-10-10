@@ -21,6 +21,11 @@ func (a *App) ExportTargets() ([]export.Target, error) {
 // ExportCapture renders the *request half* of a stored traffic capture as a
 // code snippet for target/client (empty client = target default).
 func (a *App) ExportCapture(ctx context.Context, id int64, target, client string) (string, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return "", admissionErr
+	}
+	defer finish()
 	c, err := a.CaptureByID(ctx, id)
 	if err != nil {
 		return "", err
@@ -39,6 +44,11 @@ func (a *App) ExportCapture(ctx context.Context, id int64, target, client string
 // and preserved sub-path; when no relay is configured a clearly-fake
 // placeholder host is used so the snippet is still copyable.
 func (a *App) ExportWebhook(ctx context.Context, project string, seq int64, target, client string) (string, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return "", admissionErr
+	}
+	defer finish()
 	w, err := a.WebhookBySeq(ctx, project, seq)
 	if err != nil {
 		return "", err

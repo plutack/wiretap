@@ -32,6 +32,11 @@ type ComposeRecipeDraft struct {
 // ComposeRecipes lists enabled user-authored on_compose scripts. Wiretap does
 // not ship provider-specific recipes; users own and edit every adapter.
 func (a *App) ComposeRecipes(ctx context.Context) ([]ComposeRecipe, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return nil, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return nil, errStoreNotOpen
 	}
@@ -53,6 +58,11 @@ func (a *App) ComposeRecipes(ctx context.Context) ([]ComposeRecipe, error) {
 // no network I/O and does not invoke the enabled on_replay chain; the result is
 // returned to the composer for inspection and editing before Send is pressed.
 func (a *App) ApplyComposeRecipe(ctx context.Context, recipeID, source, baseURL string) (ComposeRecipeDraft, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return ComposeRecipeDraft{}, admissionErr
+	}
+	defer finish()
 	if a.scriptEngine == nil {
 		return ComposeRecipeDraft{}, ErrScriptEngineUnavailable
 	}

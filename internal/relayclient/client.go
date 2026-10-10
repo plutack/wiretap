@@ -236,8 +236,13 @@ func (c *Client) runOnce(ctx context.Context) error {
 	defer cancel()
 
 	ackCh := make(chan relayproto.Ack, 16)
-	go c.writer(sessCtx, conn, ackCh)
-	return c.reader(sessCtx, conn, ackCh)
+	writerDone := make(chan struct{})
+	go func() { defer close(writerDone); c.writer(sessCtx, conn, ackCh); cancel() }()
+	err = c.reader(sessCtx, conn, ackCh)
+	cancel()
+	_ = conn.Close()
+	<-writerDone
+	return err
 }
 
 // loadCursors reads the highest persisted seq per project from the local

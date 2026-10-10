@@ -250,10 +250,14 @@ func (s *Server) HandleTunnel(w http.ResponseWriter, r *http.Request) {
 	// writer by protocol; we honour that with the tunnelReadLoop goroutine
 	// below. CloseRead would cancel all reads and break the protocol, so we
 	// keep both sides open.
-	defer conn.Close(websocket.StatusInternalError, "internal error")
-
 	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
+	var workers sync.WaitGroup
+	s.setTunnelForce(ctx, func() { _ = conn.CloseNow() })
+	defer func() {
+		cancel()
+		_ = conn.CloseNow()
+		workers.Wait()
+	}()
 
 	// Look up projects subscribed to by this client.
 	paths, err := s.store.ProjectsByClient(r.Context(), c.ClientID)
@@ -325,15 +329,15 @@ func (s *Server) HandleTunnel(w http.ResponseWriter, r *http.Request) {
 	// when the outbound channel is temporarily full.
 	for _, p := range paths {
 		wake := session.addProject(p)
-		go s.deliveryPump(ctx, session, p, resume[p], wake)
+		workers.Go(func() { s.deliveryPump(ctx, session, p, resume[p], wake) })
 		session.notify(p)
 	}
 
 	// Read loop (PC -> relay): ACK and REPLAY messages.
-	go func() {
+	workers.Go(func() {
 		s.tunnelReadLoop(ctx, conn, session)
 		cancel()
-	}()
+	})
 
 	// Write loop (relay -> PC): drain session.out until ctx is cancelled.
 	for {

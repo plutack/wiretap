@@ -26,8 +26,10 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/plutack/wiretap/internal/logging"
+	"sync"
 
 	"github.com/spf13/cobra"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -62,7 +64,7 @@ func newGUICmd(version string) *cobra.Command {
 
 // runGUI is the launch glue, kept out of the cobra closure so it reads cleanly.
 // It owns the *app.App lifecycle for the duration of the window.
-func runGUI(parent context.Context, version string) error {
+func runGUI(parent context.Context, version string) (result error) {
 	themeCtx, stopThemeWatcher := context.WithCancel(parent)
 	defer stopThemeWatcher()
 
@@ -75,7 +77,17 @@ func runGUI(parent context.Context, version string) error {
 	if err := a.Open(parent); err != nil {
 		return fmt.Errorf("gui: open store: %w", err)
 	}
-	defer a.Close()
+	var shutdownOnce sync.Once
+	var shutdownErr error
+	shutdown := func() {
+		shutdownOnce.Do(func() {
+			shutdownErr = a.Close()
+			if shutdownErr != nil {
+				logger.Error("gui_shutdown_failed")
+			}
+		})
+	}
+	defer func() { shutdown(); result = errors.Join(result, shutdownErr) }()
 
 	// Connect the relay tunnel in the background (no-op when relay URL or
 	// credentials are missing — the dashboard still shows historical data).
@@ -106,9 +118,7 @@ func runGUI(parent context.Context, version string) error {
 		Assets: application.AssetOptions{
 			Handler: application.BundledAssetFileServer(guiassets.Assets),
 		},
-		OnShutdown: func() {
-			_ = a.Close()
-		},
+		OnShutdown: shutdown,
 	})
 
 	// Wails' Linux frame is a GTK decoration, separate from the webview and

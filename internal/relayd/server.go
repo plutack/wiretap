@@ -31,6 +31,7 @@ type Server struct {
 	version    string
 	tunnels    *TunnelRegistry
 	logger     *slog.Logger
+	lifecycle  relayLifecycle
 }
 
 // Option configures a Server.
@@ -111,7 +112,7 @@ func (s *Server) Routes() http.Handler {
 	// Catch-all for ingress. The first segment of the path is the project;
 	// everything after is preserved as the webhook's "path" column.
 	mux.HandleFunc("/", s.handleIngress)
-	return s.logRequests(mux)
+	return s.logRequests(s.admit(mux))
 }
 
 // handleAddClientProject claims one new path for the existing authenticated
