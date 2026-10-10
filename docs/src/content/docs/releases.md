@@ -1,29 +1,33 @@
 ---
 title: Releases and downloads
-description: Download Wiretap v0.5.1, verify artifacts, and review recent changes.
+description: Download Wiretap v0.5.2, verify artifacts, and review recent changes.
 ---
 
-## Current release: v0.5.1
+## Current release: v0.5.2
 
-Released October 10, 2026. This release adds structured relay diagnostics and file-backed client logging for desktop, TUI, and CLI, keeping background messages out of the terminal dashboard. Logs cover lifecycle, persistence, reconnects, replay, scripts, and interception failures, with configurable levels and privacy safeguards.
+Released October 10, 2026. This release adds bounded graceful shutdown for both relay and client: accepted work drains, stalled connections are cancelled, tunnel/proxy workers are joined, and databases close last. Interception shell cleanup and session finalization run even after drain timeouts.
 
-[Open the v0.5.1 release](https://github.com/plutack/wiretap/releases/tag/v0.5.1) · [View every release](https://github.com/plutack/wiretap/releases) · [Download checksums](https://github.com/plutack/wiretap/releases/latest/download/SHA256SUMS)
+[Open the v0.5.2 release](https://github.com/plutack/wiretap/releases/tag/v0.5.2) · [View every release](https://github.com/plutack/wiretap/releases) · [Download checksums](https://github.com/plutack/wiretap/releases/latest/download/SHA256SUMS)
 
 ### Assets
 
 | Platform | Artifact |
 | --- | --- |
-| Linux x86-64 | [`wiretap_0.5.1_linux_amd64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.5.1/wiretap_0.5.1_linux_amd64.tar.gz) |
-| Linux ARM64 | [`wiretap_0.5.1_linux_arm64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.5.1/wiretap_0.5.1_linux_arm64.tar.gz) |
-| AppImage x86-64 | [`wiretap_0.5.1_x86_64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.5.1/wiretap_0.5.1_x86_64.AppImage) |
-| AppImage ARM64 | [`wiretap_0.5.1_aarch64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.5.1/wiretap_0.5.1_aarch64.AppImage) |
-| Arch Linux x86-64 | [`wiretap-0.5.1-x86_64.pkg.tar.zst`](https://github.com/plutack/wiretap/releases/download/v0.5.1/wiretap-0.5.1-x86_64.pkg.tar.zst) |
-| Windows x86-64 | [`wiretap_0.5.1_windows_x86_64-installer.exe`](https://github.com/plutack/wiretap/releases/download/v0.5.1/wiretap_0.5.1_windows_x86_64-installer.exe) |
-| Windows portable x86-64 | [`wiretap_0.5.1_windows_x86_64.zip`](https://github.com/plutack/wiretap/releases/download/v0.5.1/wiretap_0.5.1_windows_x86_64.zip) |
+| Linux x86-64 | [`wiretap_0.5.2_linux_amd64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.5.2/wiretap_0.5.2_linux_amd64.tar.gz) |
+| Linux ARM64 | [`wiretap_0.5.2_linux_arm64.tar.gz`](https://github.com/plutack/wiretap/releases/download/v0.5.2/wiretap_0.5.2_linux_arm64.tar.gz) |
+| AppImage x86-64 | [`wiretap_0.5.2_x86_64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.5.2/wiretap_0.5.2_x86_64.AppImage) |
+| AppImage ARM64 | [`wiretap_0.5.2_aarch64.AppImage`](https://github.com/plutack/wiretap/releases/download/v0.5.2/wiretap_0.5.2_aarch64.AppImage) |
+| Arch Linux x86-64 | [`wiretap-0.5.2-x86_64.pkg.tar.zst`](https://github.com/plutack/wiretap/releases/download/v0.5.2/wiretap-0.5.2-x86_64.pkg.tar.zst) |
+| Windows x86-64 | [`wiretap_0.5.2_windows_x86_64-installer.exe`](https://github.com/plutack/wiretap/releases/download/v0.5.2/wiretap_0.5.2_windows_x86_64-installer.exe) |
+| Windows portable x86-64 | [`wiretap_0.5.2_windows_x86_64.zip`](https://github.com/plutack/wiretap/releases/download/v0.5.2/wiretap_0.5.2_windows_x86_64.zip) |
 
 See [Install Wiretap](/getting-started/install/) for runtime dependencies and verification steps.
 
 ## Recent releases
+
+### v0.5.2
+
+Adds bounded relay/client shutdown, HTTP/CONNECT draining and forced cancellation, worker joining before database closure, and durable webhook restart-resume regression tests. See [Relay shutdown](/guides/host-relay/#graceful-shutdown-v052) and [Client shutdown](/reference/cli/#graceful-client-shutdown-v052) for interruption and deployment budgets.
 
 ### v0.5.1
 

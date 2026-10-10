@@ -63,7 +63,7 @@ sizes and durations may be retained. Review diagnostic files before sharing them
 These are backend diagnostics, not browser console capture or a new desktop log
 viewer.
 
-## Graceful client shutdown (next release)
+## Graceful client shutdown (v0.5.2)
 
 Closing the GUI, quitting the TUI, or signalling the TUI stops admission of new
 app operations, cancels and joins the relay tunnel and its writer, and gives

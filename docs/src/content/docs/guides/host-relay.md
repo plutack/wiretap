@@ -137,7 +137,7 @@ error messages that might expose secrets.
 Client/TUI/desktop diagnostics use file-backed logs; see
 [Client diagnostic logs](/reference/cli/#client-diagnostic-logs).
 
-## Graceful shutdown (next release)
+## Graceful shutdown (v0.5.2)
 
 On SIGINT or SIGTERM the relay rejects new work with HTTP 503 and stops accepting
 connections. Accepted HTTP requests get up to five seconds to finish. It then
