@@ -27,10 +27,12 @@ RUN apk add --no-cache su-exec \
 COPY --from=build /out/wiretap-relay /usr/local/bin/wiretap-relay
 COPY packaging/relay/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
-# No ENV here on purpose: configuration comes from the platform (Coolify's
-# dashboard env, docker run -e). The binary's own defaults (:8443, relay.db
-# relative to WORKDIR) land the database at /data/relay.db anyway.
+# Connection/storage configuration comes from the platform (Coolify's dashboard
+# env, docker run -e). The binary defaults (:8443, relay.db relative to WORKDIR)
+# land the database at /data/relay.db. Only the container's log format is preset.
 WORKDIR /data
+# Structured output for Docker/Coolify log collection; override at deployment.
+ENV WIRETAP_LOG_FORMAT=json
 USER root
 EXPOSE 8443
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \

@@ -27,7 +27,7 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
+	"github.com/plutack/wiretap/internal/logging"
 
 	"github.com/spf13/cobra"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -67,7 +67,8 @@ func runGUI(parent context.Context, version string) error {
 	defer stopThemeWatcher()
 
 	mgr := config.NewManager(config.WithClientSecretStore(secretstore.ClientSystem{}))
-	a := app.New(mgr, app.WithScriptEngine(newScriptEngine(), logScriptError))
+	logger := logging.FromContext(parent)
+	a := app.New(mgr, app.WithLogger(logger), app.WithScriptEngine(newScriptEngine(), scriptErrorLogger(logger)))
 
 	// Open the local store before serving any view; the GUI is read-only w.r.t.
 	// the store except for replay, which targets an external URL.
@@ -79,8 +80,7 @@ func runGUI(parent context.Context, version string) error {
 	// Connect the relay tunnel in the background (no-op when relay URL or
 	// credentials are missing — the dashboard still shows historical data).
 	if err := a.StartTunnel(parent); err != nil {
-		// Non-fatal: surface to stderr but keep the window open.
-		fmt.Fprintf(os.Stderr, "wiretap: tunnel not started: %v\n", err)
+		logger.Warn("client_tunnel_start_failed")
 	}
 
 	var window *application.WebviewWindow

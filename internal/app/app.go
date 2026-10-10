@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -35,6 +36,7 @@ import (
 	"time"
 
 	"github.com/plutack/wiretap/internal/config"
+	"github.com/plutack/wiretap/internal/logging"
 	"github.com/plutack/wiretap/internal/relayclient"
 	"github.com/plutack/wiretap/internal/scripting"
 	"github.com/plutack/wiretap/internal/store"
@@ -51,10 +53,11 @@ type TunnelRunner interface {
 // the store, StartTunnel to connect the relay, and Close to release everything.
 // Methods are safe for concurrent use; the tunnel lifecycle is mutex-guarded.
 type App struct {
-	mgr   *config.Manager
-	cfg   *config.Config
-	creds *config.Credentials
-	clock testutil.Clock
+	mgr    *config.Manager
+	cfg    *config.Config
+	creds  *config.Credentials
+	clock  testutil.Clock
+	logger *slog.Logger
 
 	// tunnelFactory builds a runner from the resolved config + store.
 	// Default wires relayclient.Client; tests inject a noop.
@@ -93,6 +96,15 @@ type TunnelConfig struct {
 
 // Option configures an App.
 type Option func(*App)
+
+// WithLogger injects diagnostic logging; unconfigured apps are silent.
+func WithLogger(logger *slog.Logger) Option {
+	return func(a *App) {
+		if logger != nil {
+			a.logger = logger.With("subsystem", "app")
+		}
+	}
+}
 
 // WithConfig overrides the loaded config (useful when a caller already has it).
 func WithConfig(cfg *config.Config) Option {
@@ -135,6 +147,7 @@ func New(mgr *config.Manager, opts ...Option) *App {
 	a := &App{
 		mgr:             mgr,
 		clock:           testutil.SystemClock{},
+		logger:          logging.FromContext(context.Background()),
 		replayTransport: http.DefaultTransport.(*http.Transport).Clone(),
 	}
 	a.tunnelFactory = a.defaultTunnelFactory // method value; closes over a so OnConnect can write back
@@ -179,7 +192,12 @@ func (a *App) Store() *store.PCStore { return a.store }
 // Open opens (and migrates) the local SQLite database, resolving the path
 // from the config (defaulting to <configDir>/wiretap.db). Idempotent: a
 // second call is a no-op if the store is already open.
-func (a *App) Open(ctx context.Context) error {
+func (a *App) Open(ctx context.Context) (result error) {
+	defer func() {
+		if result != nil {
+			a.logger.Error("client_store_open_failed")
+		}
+	}()
 	if a.store != nil {
 		return nil
 	}
@@ -211,6 +229,7 @@ func (a *App) Open(ctx context.Context) error {
 	a.db = db
 	a.store = store.NewPCStore(db)
 	a.reconcileInterceptSessions(ctx)
+	a.logger.Info("client_store_opened")
 	return nil
 }
 
@@ -221,6 +240,11 @@ func (a *App) Close() error {
 	var err error
 	if a.db != nil {
 		err = a.db.Close()
+		if err != nil {
+			a.logger.Error("client_store_close_failed")
+		} else {
+			a.logger.Info("client_store_closed")
+		}
 		a.db = nil
 		a.store = nil
 	}
@@ -270,9 +294,13 @@ func (a *App) StartTunnel(ctx context.Context) error {
 	// mutex, so the goroutine must not read the struct field.
 	done := make(chan struct{})
 	a.tunnelDone = done
+	a.logger.Info("client_tunnel_starting", "project_count", len(tcfg.Projects))
 	go func() {
 		defer close(done)
-		_ = runner.Run(tctx)
+		if err := runner.Run(tctx); err != nil && !errors.Is(err, relayclient.ErrShutdown) && tctx.Err() == nil {
+			a.logger.Error("client_tunnel_worker_failed")
+		}
+		a.logger.Info("client_tunnel_worker_stopped")
 	}()
 	return nil
 }
@@ -323,10 +351,12 @@ func (a *App) StopTunnel() {
 	if cancel == nil {
 		return
 	}
+	a.logger.Info("client_tunnel_stop_requested")
 	cancel()
 	if done != nil {
 		<-done
 	}
+	a.logger.Info("client_tunnel_stopped")
 }
 
 // --- Querier surface (TUI / GUI / local API) ----------------------------
@@ -442,7 +472,16 @@ func (a *App) InsertTrafficCapture(ctx context.Context, c store.TrafficCaptureRo
 // method, headers, and body are sent as-is; the response status is returned.
 // This is a local replay (send to a dev server), distinct from the relay's
 // tunnel re-push.
-func (a *App) ReplayWebhook(ctx context.Context, project string, seq int64, targetURL string) (int, error) {
+func (a *App) ReplayWebhook(ctx context.Context, project string, seq int64, targetURL string) (status int, result error) {
+	started := time.Now()
+	a.logger.Debug("webhook_replay_started", "seq", seq)
+	defer func() {
+		if result != nil {
+			a.logger.Warn("webhook_replay_failed", "seq", seq, "duration", time.Since(started))
+		} else {
+			a.logger.Info("webhook_replay_completed", "seq", seq, "status", status, "duration", time.Since(started))
+		}
+	}()
 	wh, err := a.WebhookBySeq(ctx, project, seq)
 	if err != nil {
 		return 0, err
@@ -496,7 +535,15 @@ type ComposedResponse struct {
 
 // SendRequest sends an arbitrary user-composed HTTP request. When transforms
 // is true, enabled on_replay scripts run before the request is built.
-func (a *App) SendRequest(ctx context.Context, method, targetURL string, headers http.Header, body []byte, transforms bool) (*ComposedResponse, error) {
+func (a *App) SendRequest(ctx context.Context, method, targetURL string, headers http.Header, body []byte, transforms bool) (response *ComposedResponse, result error) {
+	startedOperation := time.Now()
+	defer func() {
+		if result != nil {
+			a.logger.Warn("composed_request_failed", "duration", time.Since(startedOperation))
+		} else {
+			a.logger.Info("composed_request_completed", "status", response.Status, "truncated", response.Truncated, "duration", time.Since(startedOperation))
+		}
+	}()
 	method = strings.ToUpper(strings.TrimSpace(method))
 	if method == "" {
 		method = http.MethodPost
@@ -609,6 +656,7 @@ func (e *ReplayRejectedError) Error() string {
 func (a *App) defaultTunnelFactory(cfg TunnelConfig, st *store.PCStore) TunnelRunner {
 	opts := []relayclient.Option{
 		relayclient.WithClock(testutil.SystemClock{}),
+		relayclient.WithLogger(a.logger),
 		relayclient.WithCallbacks(relayclient.Callbacks{
 			OnConnect:    a.syncConnectedProjects,
 			OnDisconnect: func(_ error) { a.SetConnectedProjects(nil) },
@@ -651,7 +699,9 @@ func (a *App) syncConnectedProjects(projects []string) {
 	}
 	updated := *creds
 	updated.Projects = want
-	_ = a.SaveRelayCredentials(updated)
+	if err := a.SaveRelayCredentials(updated); err != nil {
+		a.logger.Error("client_subscription_save_failed")
+	}
 }
 
 // forwardTimeout bounds one auto-forward delivery attempt.
@@ -671,12 +721,8 @@ func (a *App) autoForwardWebhook(row store.WebhookRow) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), forwardTimeout)
 		defer cancel()
-		status, err := a.ReplayWebhook(ctx, row.Project, row.Seq, target)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "wiretap: forward %s/%d -> %s: %v\n", row.Project, row.Seq, target, err)
-			return
-		}
-		fmt.Fprintf(os.Stderr, "wiretap: forwarded %s/%d -> %s (HTTP %d)\n", row.Project, row.Seq, target, status)
+		// ReplayWebhook records a safe outcome in the diagnostic file.
+		_, _ = a.ReplayWebhook(ctx, row.Project, row.Seq, target)
 	}()
 }
 

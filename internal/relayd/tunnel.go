@@ -224,9 +224,11 @@ func (r *TunnelRegistry) countTunnels() int {
 //  6. PC sends ACK per project; relay advances that subscription's cursor.
 //  7. Loop continues: ingress calls pushIfTunnelAttached → PUSH; PC ACKs.
 func (s *Server) HandleTunnel(w http.ResponseWriter, r *http.Request) {
+	logger := s.requestLogger(r.Context())
 	// Validate client creds before upgrading.
 	c, err := s.authClientByBasic(r)
 	if err != nil {
+		logger.Warn("tunnel_authentication_rejected")
 		status, code, msg := errStatus(err)
 		writeErr(w, status, code, msg)
 		return
@@ -238,6 +240,7 @@ func (s *Server) HandleTunnel(w http.ResponseWriter, r *http.Request) {
 		InsecureSkipVerify: true,
 	})
 	if err != nil {
+		logger.Warn("tunnel_upgrade_failed")
 		// Accept already wrote an error response; nothing more to do.
 		return
 	}
@@ -255,6 +258,7 @@ func (s *Server) HandleTunnel(w http.ResponseWriter, r *http.Request) {
 	// Look up projects subscribed to by this client.
 	paths, err := s.store.ProjectsByClient(r.Context(), c.ClientID)
 	if err != nil {
+		logger.Error("tunnel_project_lookup_failed")
 		_ = conn.Close(websocket.StatusInternalError, "store error")
 		return
 	}
@@ -266,6 +270,7 @@ func (s *Server) HandleTunnel(w http.ResponseWriter, r *http.Request) {
 	// Wait for HELLO.
 	hello, err := readHello(ctx, conn)
 	if err != nil {
+		logger.Warn("tunnel_hello_rejected", "reason", "invalid_hello")
 		_ = conn.Close(websocket.StatusPolicyViolation, "expected hello")
 		return
 	}
@@ -274,6 +279,7 @@ func (s *Server) HandleTunnel(w http.ResponseWriter, r *http.Request) {
 	// they MUST match; if they differ we reject. This catches suspicious
 	// clients early.
 	if hello.ClientID != c.ClientID {
+		logger.Warn("tunnel_hello_rejected", "reason", "identity_mismatch")
 		_ = conn.Close(websocket.StatusPolicyViolation, "client_id mismatch")
 		return
 	}
@@ -284,7 +290,9 @@ func (s *Server) HandleTunnel(w http.ResponseWriter, r *http.Request) {
 	defer s.tunnels.detach(session)
 
 	// Touch last_seen_at.
-	_ = s.store.TouchClient(ctx, c.ClientID, s.clock.Now())
+	if err := s.store.TouchClient(ctx, c.ClientID, s.clock.Now()); err != nil && ctx.Err() == nil {
+		logger.Error("tunnel_last_seen_failed", "client_id", c.ClientID)
+	}
 	resume := make(map[string]int64, len(paths))
 	for _, project := range paths {
 		cursor := hello.LastSeqs[project]
@@ -305,6 +313,12 @@ func (s *Server) HandleTunnel(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		return
 	}
+
+	logger.Info("tunnel_connected", "client_id", c.ClientID, "project_count", len(paths))
+	connectedAt := time.Now()
+	defer func() {
+		logger.Info("tunnel_disconnected", "client_id", c.ClientID, "duration", time.Since(connectedAt))
+	}()
 
 	// Start an independent catch-up pump per project. Ingress only wakes these
 	// pumps, so slow consumers no longer block ingress or silently lose a push
@@ -333,6 +347,7 @@ func (s *Server) HandleTunnel(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if err := writeJSONMessage(ctx, conn, m); err != nil {
+				logger.Debug("tunnel_write_ended", "client_id", c.ClientID)
 				return
 			}
 		}
@@ -358,6 +373,9 @@ func (s *Server) deliveryPump(ctx context.Context, session *TunnelSession, proje
 		for {
 			rows, err := s.store.WebhooksAfterLimit(ctx, project, cursor, batchSize)
 			if err != nil {
+				if ctx.Err() == nil {
+					s.requestLogger(ctx).Error("tunnel_delivery_lookup_failed", "client_id", session.clientID, "project", project, "after_seq", cursor)
+				}
 				break
 			}
 			for _, row := range rows {
@@ -390,7 +408,13 @@ func (s *Server) tunnelReadLoop(ctx context.Context, conn *websocket.Conn, sess 
 			if !sess.owns(v.Project) {
 				continue
 			}
-			_ = s.store.MarkDeliveredForClient(ctx, v.Project, sess.clientID, v.UpToSeq, s.clock.Now())
+			if err := s.store.MarkDeliveredForClient(ctx, v.Project, sess.clientID, v.UpToSeq, s.clock.Now()); err != nil {
+				if ctx.Err() == nil {
+					s.requestLogger(ctx).Error("tunnel_ack_persistence_failed", "client_id", sess.clientID, "project", v.Project, "seq", v.UpToSeq)
+				}
+			} else {
+				s.requestLogger(ctx).Debug("tunnel_ack_persisted", "client_id", sess.clientID, "project", v.Project, "seq", v.UpToSeq)
+			}
 		case relayproto.Replay:
 			if !sess.owns(v.Project) {
 				continue

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
@@ -29,6 +30,7 @@ type Server struct {
 	idgen      testutil.IDGen
 	version    string
 	tunnels    *TunnelRegistry
+	logger     *slog.Logger
 }
 
 // Option configures a Server.
@@ -46,6 +48,15 @@ func WithIDGen(g testutil.IDGen) Option { return func(s *Server) { s.idgen = g }
 // routes. An empty token rejects all admin requests.
 func WithAdminToken(tok string) Option { return func(s *Server) { s.adminToken = tok } }
 
+// WithLogger injects structured logging. NewServer is silent unless configured.
+func WithLogger(logger *slog.Logger) Option {
+	return func(s *Server) {
+		if logger != nil {
+			s.logger = logger
+		}
+	}
+}
+
 // WithVersion stamps the version returned by /health.
 func WithVersion(v string) Option { return func(s *Server) { s.version = v } }
 
@@ -58,6 +69,7 @@ func NewServer(st *store.RelayStore, opts ...Option) *Server {
 		idgen:   testutil.HexIDGen{},
 		version: "dev",
 		tunnels: NewTunnelRegistry(),
+		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	for _, o := range opts {
 		o(s)
@@ -99,7 +111,7 @@ func (s *Server) Routes() http.Handler {
 	// Catch-all for ingress. The first segment of the path is the project;
 	// everything after is preserved as the webhook's "path" column.
 	mux.HandleFunc("/", s.handleIngress)
-	return mux
+	return s.logRequests(mux)
 }
 
 // handleAddClientProject claims one new path for the existing authenticated
@@ -234,6 +246,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 // allocated sequence, which is a per-project counter and would disclose how many
 // webhooks that project has ever received to anyone who can POST to the path.
 func (s *Server) handleIngress(w http.ResponseWriter, r *http.Request) {
+	logger := s.requestLogger(r.Context())
 	// Reserved routes never reach here (they're registered earlier in the
 	// mux), but defensive check the path starts with /something.
 	if r.URL.Path == "/" {
@@ -249,6 +262,9 @@ func (s *Server) handleIngress(w http.ResponseWriter, r *http.Request) {
 	}
 	// Ensure the project has at least one subscriber.
 	if _, err := s.store.ClientByProject(r.Context(), project); err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			logger.Error("ingress_project_lookup_failed")
+		}
 		// Treat not-found as 404 (don't leak existence to scanners).
 		writeErr(w, http.StatusNotFound, "not_found", "no such project")
 		return
@@ -269,6 +285,7 @@ func (s *Server) handleIngress(w http.ResponseWriter, r *http.Request) {
 	// Allocate the next seq for the project and insert.
 	seq, err := s.store.NextWebhookSeq(r.Context(), project)
 	if err != nil {
+		logger.Error("ingress_sequence_failed", "project", project)
 		writeErr(w, http.StatusInternalServerError, "internal", "next seq: "+err.Error())
 		return
 	}
@@ -284,6 +301,7 @@ func (s *Server) handleIngress(w http.ResponseWriter, r *http.Request) {
 		Body:        body,
 	}
 	if err := s.store.InsertWebhook(r.Context(), row); err != nil {
+		logger.Error("ingress_persistence_failed", "project", project, "seq", seq)
 		writeErr(w, http.StatusInternalServerError, "internal", "insert webhook: "+err.Error())
 		return
 	}
@@ -293,6 +311,7 @@ func (s *Server) handleIngress(w http.ResponseWriter, r *http.Request) {
 	// reconnect.
 	s.pushIfTunnelAttached(r.Context(), project, row)
 
+	logger.Debug("ingress_persisted", "project", project, "seq", seq, "body_bytes", len(body))
 	writeJSON(w, http.StatusOK, api.IngressResponse{Status: "received"})
 }
 

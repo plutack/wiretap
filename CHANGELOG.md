@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.5.1 — 2026-10-10
+
+### Structured diagnostics
+
+- Added a shared Go `log/slog` foundation with configurable text/JSON output,
+  debug/info/warn/error levels, and defensive redaction of common secret fields.
+- Instrumented relay startup, database migration/close, ingress persistence,
+  tunnel lifecycle, ACK progress, and HTTP shutdown. HTTP requests receive a
+  generated `X-Request-ID` for log correlation. Container logs default to JSON
+  on stderr; direct relay runs default to text.
+- Added file-backed client diagnostics for desktop, TUI, and operational CLI
+  commands, including local store/tunnel lifecycle, reconnect backoff, replay,
+  composed requests, scripts, interception/TLS failures, and capture persistence.
+- Removed script-error and automatic-forwarding stderr output that could disrupt
+  the TUI. Client diagnostic files are bounded to approximately 10 MiB, use
+  owner-only permissions on Unix, and reject terminal devices and symlinks.
+- Added race-tested privacy, output isolation, WebSocket, and SIGTERM lifecycle
+  regressions. Logs omit payloads, raw URLs, headers, credentials, and
+  peer-controlled exception text.
+
+### Upgrade notes
+
+- Restart the relay and clients to enable the new diagnostics. No database or
+  tunnel-protocol migration is required.
+- Configure `WIRETAP_LOG_FORMAT` and `WIRETAP_LOG_LEVEL`, or use the corresponding
+  log-format/log-level flags. Clients also accept `--log-file` or
+  `WIRETAP_LOG_FILE`; default files live under `<config-dir>/logs/`.
+- Client commands now need a writable diagnostic file. Files are reset at the
+  size limit, not retained as an audit archive; use separate files for concurrent
+  processes. Existing command output stays separate from diagnostic logs.
+- This release instruments existing shutdown behavior; full WebSocket draining
+  and bounded client shutdown remain follow-up work.
+
 ## v0.5.0 — 2026-09-27
 
 ### Large payload inspection
