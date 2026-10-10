@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -44,7 +45,7 @@ func newInterceptStartCmd(version string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "start",
 		Short: "Start the interception proxy + control API and spawn an intercepted shell",
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) (result error) {
 			m := newConfigManager()
 			cfg, err := m.Load()
 			if err != nil {
@@ -79,6 +80,9 @@ func newInterceptStartCmd(version string) *cobra.Command {
 			deps.OnScriptError = scriptErrorLogger(logger)
 			sess, err := interceptStart(cmd.Context(), deps)
 			if err != nil {
+				if deps.CloseStore != nil {
+					_ = deps.CloseStore()
+				}
 				return err
 			}
 			if err := writePIDFile(deps.ConfigDir, os.Getpid(), sess.SessionID(), sess.ProxyAddr(), sess.LocalAPIAddr()); err != nil {
@@ -87,7 +91,7 @@ func newInterceptStartCmd(version string) *cobra.Command {
 			}
 			defer func() {
 				removePIDFile(deps.ConfigDir)
-				_ = sess.Stop(context.Background())
+				result = errors.Join(result, sess.Stop(context.Background()))
 			}()
 
 			out := cmd.OutOrStdout()
@@ -311,6 +315,7 @@ func resolveInterceptDeps(m *config.Manager, cfg *config.Config, kind shellscrip
 		ShellKind:    kind,
 		Installer:    castore.NewInstaller(configDir),
 		PCStore:      store.NewPCStore(db),
+		CloseStore:   db.Close,
 		Version:      version,
 		ScriptEngine: newScriptEngine(),
 	}, nil

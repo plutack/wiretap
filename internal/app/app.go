@@ -79,6 +79,9 @@ type App struct {
 	store *store.PCStore
 
 	mu                sync.Mutex
+	closing           bool
+	operations        map[*appOperation]struct{}
+	operationsChanged chan struct{}
 	tunnelCtx         context.Context
 	tunnelCancel      context.CancelFunc
 	tunnelDone        chan struct{}
@@ -187,7 +190,7 @@ func (a *App) configLocked() (*config.Config, error) {
 }
 
 // Store returns the PC store. Returns nil before Open.
-func (a *App) Store() *store.PCStore { return a.store }
+func (a *App) Store() *store.PCStore { a.mu.Lock(); defer a.mu.Unlock(); return a.store }
 
 // Open opens (and migrates) the local SQLite database, resolving the path
 // from the config (defaulting to <configDir>/wiretap.db). Idempotent: a
@@ -236,19 +239,9 @@ func (a *App) Open(ctx context.Context) (result error) {
 // Close stops the tunnel (if running) and closes the store. Safe to call
 // multiple times.
 func (a *App) Close() error {
-	a.StopTunnel()
-	var err error
-	if a.db != nil {
-		err = a.db.Close()
-		if err != nil {
-			a.logger.Error("client_store_close_failed")
-		} else {
-			a.logger.Info("client_store_closed")
-		}
-		a.db = nil
-		a.store = nil
-	}
-	return err
+	ctx, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
+	defer cancel()
+	return a.Shutdown(ctx)
 }
 
 // StartTunnel resolves the relay config + credentials and runs the tunnel in
@@ -256,6 +249,11 @@ func (a *App) Close() error {
 // empty or credentials are missing — the app still serves historical data.
 // Returns an error only if the store is not open yet.
 func (a *App) StartTunnel(ctx context.Context) error {
+	_, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return errors.New("app: store not open; call Open first")
 	}
@@ -284,6 +282,9 @@ func (a *App) StartTunnel(ctx context.Context) error {
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.closing {
+		return ErrClosing
+	}
 	if a.tunnelCancel != nil {
 		return nil // already running
 	}
@@ -341,22 +342,9 @@ func (a *App) SetConnectedProjects(p []string) {
 // StopTunnel cancels the background tunnel and waits for it to exit. Safe to
 // call when not running or after Close.
 func (a *App) StopTunnel() {
-	a.mu.Lock()
-	cancel := a.tunnelCancel
-	done := a.tunnelDone
-	a.tunnelCancel = nil
-	a.tunnelDone = nil
-	a.tunnelCtx = nil
-	a.mu.Unlock()
-	if cancel == nil {
-		return
-	}
-	a.logger.Info("client_tunnel_stop_requested")
-	cancel()
-	if done != nil {
-		<-done
-	}
-	a.logger.Info("client_tunnel_stopped")
+	ctx, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
+	defer cancel()
+	_ = a.StopTunnelContext(ctx)
 }
 
 // --- Querier surface (TUI / GUI / local API) ----------------------------
@@ -364,6 +352,11 @@ func (a *App) StopTunnel() {
 // Webhooks lists webhooks matching f, newest-first. Delegates to PCStore; the
 // predicate runs in SQLite so a match older than the newest page is still found.
 func (a *App) Webhooks(ctx context.Context, f store.WebhookFilter) (store.WebhookPage, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return store.WebhookPage{}, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return store.WebhookPage{}, errors.New("app: store not open")
 	}
@@ -374,6 +367,11 @@ func (a *App) Webhooks(ctx context.Context, f store.WebhookFilter) (store.Webhoo
 // without retained bodies. The polling list paths use this so a refresh never
 // reads payloads; WebhookBySeq fetches one row when it is opened.
 func (a *App) WebhookSummaries(ctx context.Context, f store.WebhookFilter) (store.WebhookSummaryPage, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return store.WebhookSummaryPage{}, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return store.WebhookSummaryPage{}, errors.New("app: store not open")
 	}
@@ -384,6 +382,11 @@ func (a *App) WebhookSummaries(ctx context.Context, f store.WebhookFilter) (stor
 // The TUI uses this shape because its detail pane renders from the row without a
 // refetch.
 func (a *App) Captures(ctx context.Context, f store.CaptureFilter) (store.CapturePage, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return store.CapturePage{}, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return store.CapturePage{}, errors.New("app: store not open")
 	}
@@ -393,6 +396,11 @@ func (a *App) Captures(ctx context.Context, f store.CaptureFilter) (store.Captur
 // CaptureSummaries lists capture metadata and body lengths matching f, without
 // loading body blobs. It backs the GUI's frequent polling path.
 func (a *App) CaptureSummaries(ctx context.Context, f store.CaptureFilter) (store.CaptureSummaryPage, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return store.CaptureSummaryPage{}, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return store.CaptureSummaryPage{}, errors.New("app: store not open")
 	}
@@ -402,6 +410,11 @@ func (a *App) CaptureSummaries(ctx context.Context, f store.CaptureFilter) (stor
 // InterceptSessions lists recorded interception sessions, newest-first, with
 // capture counts. Backs the GUI's session filter.
 func (a *App) InterceptSessions(ctx context.Context, limit int) ([]store.InterceptSessionRow, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return nil, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return nil, errors.New("app: store not open")
 	}
@@ -409,6 +422,11 @@ func (a *App) InterceptSessions(ctx context.Context, limit int) ([]store.Interce
 }
 
 func (a *App) InterceptSessionsPage(ctx context.Context, beforeID int64, limit int) ([]store.InterceptSessionRow, int, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return nil, 0, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return nil, 0, errors.New("app: store not open")
 	}
@@ -418,6 +436,11 @@ func (a *App) InterceptSessionsPage(ctx context.Context, beforeID int64, limit i
 // CaptureByID loads one traffic capture with its full headers and bodies
 // populated. Returns store.ErrNotFound (wrapped) when absent.
 func (a *App) CaptureByID(ctx context.Context, id int64) (*store.TrafficCaptureRow, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return nil, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return nil, errors.New("app: store not open")
 	}
@@ -426,6 +449,11 @@ func (a *App) CaptureByID(ctx context.Context, id int64) (*store.TrafficCaptureR
 
 // CapturePreviewByID loads headers and bounded body prefixes for the GUI.
 func (a *App) CapturePreviewByID(ctx context.Context, id int64, bodyLimit int) (*store.TrafficCapturePreviewRow, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return nil, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return nil, errors.New("app: store not open")
 	}
@@ -434,6 +462,11 @@ func (a *App) CapturePreviewByID(ctx context.Context, id int64, bodyLimit int) (
 
 // CaptureBody loads one request or response body, optionally bounded.
 func (a *App) CaptureBody(ctx context.Context, id int64, response bool, limit int) ([]byte, int, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return nil, 0, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return nil, 0, errors.New("app: store not open")
 	}
@@ -443,6 +476,11 @@ func (a *App) CaptureBody(ctx context.Context, id int64, response bool, limit in
 // WebhookBySeq loads one webhook by (project, seq). Returns store.ErrNotFound
 // (wrapped) when absent.
 func (a *App) WebhookBySeq(ctx context.Context, project string, seq int64) (*store.WebhookRow, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return nil, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return nil, errors.New("app: store not open")
 	}
@@ -453,6 +491,11 @@ func (a *App) WebhookBySeq(ctx context.Context, project string, seq int64) (*sto
 // (limit <= 0 returns the whole body). Used by the GUI detail pane so a
 // multi-megabyte payload is not shipped to the webview up front.
 func (a *App) WebhookBody(ctx context.Context, project string, seq int64, limit int) ([]byte, int, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return nil, 0, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return nil, 0, errors.New("app: store not open")
 	}
@@ -462,6 +505,11 @@ func (a *App) WebhookBody(ctx context.Context, project string, seq int64, limit 
 // InsertTrafficCapture appends a traffic capture. Returns the row id. Used by
 // the interception proxy's recorder adapter.
 func (a *App) InsertTrafficCapture(ctx context.Context, c store.TrafficCaptureRow) (int64, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return 0, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return 0, errors.New("app: store not open")
 	}
@@ -473,6 +521,11 @@ func (a *App) InsertTrafficCapture(ctx context.Context, c store.TrafficCaptureRo
 // This is a local replay (send to a dev server), distinct from the relay's
 // tunnel re-push.
 func (a *App) ReplayWebhook(ctx context.Context, project string, seq int64, targetURL string) (status int, result error) {
+	ctx, finish, err := a.beginOperation(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer finish()
 	started := time.Now()
 	a.logger.Debug("webhook_replay_started", "seq", seq)
 	defer func() {
@@ -536,6 +589,11 @@ type ComposedResponse struct {
 // SendRequest sends an arbitrary user-composed HTTP request. When transforms
 // is true, enabled on_replay scripts run before the request is built.
 func (a *App) SendRequest(ctx context.Context, method, targetURL string, headers http.Header, body []byte, transforms bool) (response *ComposedResponse, result error) {
+	ctx, finish, operationErr := a.beginOperation(ctx)
+	if operationErr != nil {
+		return nil, operationErr
+	}
+	defer finish()
 	startedOperation := time.Now()
 	defer func() {
 		if result != nil {
@@ -718,8 +776,13 @@ func (a *App) autoForwardWebhook(row store.WebhookRow) {
 		return
 	}
 	target := cfg.Relay.ForwardURL
+	ownedCtx, finish, err := a.beginOperation(context.Background())
+	if err != nil {
+		return
+	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), forwardTimeout)
+		defer finish()
+		ctx, cancel := context.WithTimeout(ownedCtx, forwardTimeout)
 		defer cancel()
 		// ReplayWebhook records a safe outcome in the diagnostic file.
 		_, _ = a.ReplayWebhook(ctx, row.Project, row.Seq, target)

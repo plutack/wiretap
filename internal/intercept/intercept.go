@@ -35,6 +35,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/plutack/wiretap/internal/intercept/castore"
@@ -52,6 +53,7 @@ import (
 // store or the wall clock.
 type Deps struct {
 	Logger       *slog.Logger
+	CloseStore   func() error          // optional owner cleanup after workers exit
 	ConfigDir    string                // for CA persistence + override-bin
 	ProxyAddr    string                // interception proxy listen addr (use :0 for ephemeral)
 	LocalAPIAddr string                // local control API listen addr
@@ -76,6 +78,9 @@ type Deps struct {
 // startup files patched. Stop reverses it.
 type Session struct {
 	logger       *slog.Logger
+	closeStore   func() error
+	apiLife      *apiLifecycle
+	stopMu       sync.Mutex
 	proxy        *proxy.Proxy
 	localAPI     *http.Server
 	localAPILn   net.Listener
@@ -201,7 +206,8 @@ func Start(ctx context.Context, deps Deps) (session *Session, result error) {
 	}
 
 	api := localapi.New(deps.PCStore, localapi.WithVersion(deps.Version))
-	httpSrv := &http.Server{Handler: api.Routes()}
+	apiLife := &apiLifecycle{}
+	httpSrv := &http.Server{Handler: apiLife.wrap(api.Routes())}
 	go func() {
 		if err := prox.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
 			logger.Error("intercept_proxy_serve_failed")
@@ -217,6 +223,8 @@ func Start(ctx context.Context, deps Deps) (session *Session, result error) {
 	logger.Info("intercept_started", "session_id", sessionID)
 	return &Session{
 		logger:       logger,
+		closeStore:   deps.CloseStore,
+		apiLife:      apiLife,
 		proxy:        prox,
 		localAPI:     httpSrv,
 		localAPILn:   apiLn,
@@ -262,6 +270,13 @@ func (s *Session) Stop(ctx context.Context) (result error) {
 	if s == nil {
 		return nil
 	}
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+	}
+	s.stopMu.Lock()
+	defer s.stopMu.Unlock()
 	logger := s.logger
 	if logger == nil {
 		logger = logging.FromContext(ctx)
@@ -275,11 +290,35 @@ func (s *Session) Stop(ctx context.Context) (result error) {
 		}
 	}()
 	var errs []error
+	workersStopped := true
+	if s.apiLife != nil {
+		s.apiLife.drain(false)
+	}
 	if s.proxy != nil {
 		errs = append(errs, s.proxy.Stop(ctx))
 	}
 	if s.localAPI != nil {
-		errs = append(errs, s.localAPI.Shutdown(ctx))
+		if err := s.localAPI.Shutdown(ctx); err != nil {
+			errs = append(errs, err)
+			if s.apiLife != nil {
+				s.apiLife.drain(true)
+			}
+			_ = s.localAPI.Close()
+		}
+	}
+	forceCtx, forceCancel := context.WithTimeout(context.Background(), time.Second)
+	defer forceCancel()
+	if s.proxy != nil {
+		if err := s.proxy.Wait(forceCtx); err != nil {
+			workersStopped = false
+			errs = append(errs, err)
+		}
+	}
+	if s.apiLife != nil {
+		if err := s.apiLife.wait(forceCtx); err != nil {
+			workersStopped = false
+			errs = append(errs, err)
+		}
 	}
 	if s.localAPILn != nil {
 		if err := s.localAPILn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
@@ -301,9 +340,18 @@ func (s *Session) Stop(ctx context.Context) (result error) {
 		if s.clock != nil {
 			now = s.clock.Now()
 		}
-		if err := s.st.EndInterceptSession(context.Background(), s.sessionID, now); err != nil {
+		finalCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := s.st.EndInterceptSession(finalCtx, s.sessionID, now); err != nil {
 			errs = append(errs, err)
 		}
+	}
+	if workersStopped && s.closeStore != nil {
+		errs = append(errs, s.closeStore())
+		s.closeStore = nil
+		s.st = nil
+	} else if !workersStopped {
+		logger.Error("intercept_store_close_deferred", "reason", "workers_still_running")
 	}
 	return errors.Join(errs...)
 }
@@ -333,6 +381,7 @@ func Cleanup(kind shellscript.ShellKind, configDir string) ([]string, error) {
 func (s *Session) SpawnShell(ctx context.Context, kind shellscript.ShellKind) error {
 	name, args := ShellCommand(kind)
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.WaitDelay = time.Second
 	cmd.Env = append(os.Environ(), "WIRETAP_ACTIVE=1")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -378,6 +427,7 @@ func SpawnAttachedShell(ctx context.Context, kind shellscript.ShellKind, env she
 
 	name, args := AttachedShellCommand(kind, initPath)
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.WaitDelay = time.Second
 	// The owner's startup-file block may be present for one shell kind. Remove
 	// the marker while the attached shell reads its normal profile so that the
 	// generated init script below is the only thing that enables interception.

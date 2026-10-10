@@ -109,11 +109,11 @@ func (w WSNetConn) Write(ctx context.Context, b []byte) error {
 	return w.c.Write(wctx, websocket.MessageText, b)
 }
 
-// Close terminates the WebSocket. coder/websocket accepts a status + reason;
-// StatusNormalClosure is the clean-close code that does not trip the peer's
-// reconnect logic into an immediate retry burst.
+// Close immediately releases the socket. Session cancellation already stops
+// protocol work; do not spend another close-handshake timeout waiting on a peer.
+// Durable cursors make a later reconnect safe even if the last ACK was unsent.
 func (w WSNetConn) Close() error {
-	return w.c.Close(websocket.StatusNormalClosure, "client shutdown")
+	return w.c.CloseNow()
 }
 
 // base64Std is a tiny alias around encoding/base64.StdEncoding used by
