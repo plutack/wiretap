@@ -17,6 +17,7 @@ import (
 	"github.com/plutack/wiretap/internal/intercept"
 	"github.com/plutack/wiretap/internal/intercept/castore"
 	"github.com/plutack/wiretap/internal/intercept/shellscript"
+	"github.com/plutack/wiretap/internal/logging"
 	"github.com/plutack/wiretap/internal/store"
 )
 
@@ -73,6 +74,9 @@ func newInterceptStartCmd(version string) *cobra.Command {
 				return err
 			}
 
+			logger := logging.FromContext(cmd.Context())
+			deps.Logger = logger
+			deps.OnScriptError = scriptErrorLogger(logger)
 			sess, err := interceptStart(cmd.Context(), deps)
 			if err != nil {
 				return err
@@ -301,15 +305,14 @@ func resolveInterceptDeps(m *config.Manager, cfg *config.Config, kind shellscrip
 	}
 
 	return intercept.Deps{
-		ConfigDir:     configDir,
-		ProxyAddr:     cfg.Intercept.ProxyAddr,
-		LocalAPIAddr:  cfg.Intercept.LocalAPIAddr,
-		ShellKind:     kind,
-		Installer:     castore.NewInstaller(configDir),
-		PCStore:       store.NewPCStore(db),
-		Version:       version,
-		ScriptEngine:  newScriptEngine(),
-		OnScriptError: logScriptError,
+		ConfigDir:    configDir,
+		ProxyAddr:    cfg.Intercept.ProxyAddr,
+		LocalAPIAddr: cfg.Intercept.LocalAPIAddr,
+		ShellKind:    kind,
+		Installer:    castore.NewInstaller(configDir),
+		PCStore:      store.NewPCStore(db),
+		Version:      version,
+		ScriptEngine: newScriptEngine(),
 	}, nil
 }
 

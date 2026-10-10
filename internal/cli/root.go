@@ -40,6 +40,7 @@ func NewRootCmd(version string) *cobra.Command {
 	root.AddCommand(newTUICmd(version))
 	root.AddCommand(newInterceptCmd(version))
 	root.AddCommand(newGUICmd(version))
+	configureClientLogging(root, version)
 	return root
 }
 
