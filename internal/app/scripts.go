@@ -22,6 +22,11 @@ var errStoreNotOpen = errors.New("app: store not open")
 // Scripts lists every stored script (all triggers), ordered for the GUI
 // sidebar. Returns an error before Open.
 func (a *App) Scripts(ctx context.Context) ([]store.ScriptRow, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return nil, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return nil, errStoreNotOpen
 	}
@@ -30,6 +35,11 @@ func (a *App) Scripts(ctx context.Context) ([]store.ScriptRow, error) {
 
 // ScriptSummaries lists editor metadata without reading stored script bodies.
 func (a *App) ScriptSummaries(ctx context.Context) ([]store.ScriptRow, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return nil, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return nil, errStoreNotOpen
 	}
@@ -38,6 +48,11 @@ func (a *App) ScriptSummaries(ctx context.Context) ([]store.ScriptRow, error) {
 
 // ScriptByID returns a single script. Wraps store.ErrNotFound when absent.
 func (a *App) ScriptByID(ctx context.Context, id int64) (*store.ScriptRow, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return nil, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return nil, errStoreNotOpen
 	}
@@ -47,6 +62,11 @@ func (a *App) ScriptByID(ctx context.Context, id int64) (*store.ScriptRow, error
 // CreateScript inserts a new script and returns its id. The trigger must be a
 // known pipeline trigger or on_compose; the body is stored verbatim.
 func (a *App) CreateScript(ctx context.Context, sc store.ScriptRow) (int64, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return 0, admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return 0, errStoreNotOpen
 	}
@@ -59,6 +79,11 @@ func (a *App) CreateScript(ctx context.Context, sc store.ScriptRow) (int64, erro
 // UpdateScript overwrites the mutable fields of the script identified by sc.ID.
 // Wraps store.ErrNotFound when the id is unknown.
 func (a *App) UpdateScript(ctx context.Context, sc store.ScriptRow) error {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return errStoreNotOpen
 	}
@@ -70,6 +95,11 @@ func (a *App) UpdateScript(ctx context.Context, sc store.ScriptRow) error {
 
 // SetScriptEnabled toggles the enabled flag on one script.
 func (a *App) SetScriptEnabled(ctx context.Context, id int64, enabled bool) error {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return errStoreNotOpen
 	}
@@ -78,6 +108,11 @@ func (a *App) SetScriptEnabled(ctx context.Context, id int64, enabled bool) erro
 
 // DeleteScript removes a script by id.
 func (a *App) DeleteScript(ctx context.Context, id int64) error {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return admissionErr
+	}
+	defer finish()
 	if a.store == nil {
 		return errStoreNotOpen
 	}
@@ -117,6 +152,11 @@ type ScriptTestResult struct {
 // exception is returned as an error (with any logs still attached in the
 // result's caller path); a reject() is reported via Rejected/RejectReason.
 func (a *App) TestScript(ctx context.Context, body string, in ScriptTestInput) (ScriptTestResult, error) {
+	ctx, finish, admissionErr := a.beginOperation(ctx)
+	if admissionErr != nil {
+		return ScriptTestResult{}, admissionErr
+	}
+	defer finish()
 	if a.scriptEngine == nil {
 		return ScriptTestResult{}, ErrScriptEngineUnavailable
 	}

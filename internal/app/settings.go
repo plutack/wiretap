@@ -111,7 +111,11 @@ func (a *App) DefaultStorePath() (string, error) {
 // current config + credentials. Used after relay settings change. Like
 // StartTunnel it is a no-op (not an error) when the relay is unconfigured.
 func (a *App) RestartTunnel(ctx context.Context) error {
-	a.StopTunnel()
+	stopCtx, cancel := context.WithTimeout(ctx, ShutdownTimeout)
+	defer cancel()
+	if err := a.StopTunnelContext(stopCtx); err != nil {
+		return err
+	}
 	a.SetConnectedProjects(nil)
 	return a.StartTunnel(ctx)
 }

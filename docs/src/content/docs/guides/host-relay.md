@@ -134,10 +134,29 @@ as defense in depth, but does not promise to sanitize arbitrary strings.
 Failures use stable event names and operation metadata instead of dumping raw
 error messages that might expose secrets.
 
-`http_shutdown_completed` means HTTP shutdown finished; it does **not** yet
-promise that upgraded WebSockets and all workers were gracefully drained. Full
-relay tunnel draining is separate follow-up work. Client/TUI/desktop diagnostics
-use file-backed logs; see [Client diagnostic logs](/reference/cli/#client-diagnostic-logs).
+Client/TUI/desktop diagnostics use file-backed logs; see
+[Client diagnostic logs](/reference/cli/#client-diagnostic-logs).
+
+## Graceful shutdown (v0.5.2)
+
+On SIGINT or SIGTERM the relay rejects new work with HTTP 503 and stops accepting
+connections. Accepted HTTP requests get up to five seconds to finish. It then
+cancels and closes upgraded WebSocket tunnels and joins their ACK/read and delivery
+workers before closing SQLite. The same bounded cleanup runs if HTTP serving fails.
+
+If the drain deadline expires, active HTTP connections and tunnels are forcibly
+closed and request contexts cancelled. A one-second final join allowance follows.
+Requests interrupted before commit may fail and must be retried by their sender;
+requests committed before shutdown remain durable. Client reconnects resume from
+local persisted sequence cursors; replay of an unacknowledged row is harmless
+because local insertion is idempotent. This is restart safety, not zero downtime.
+
+`http_shutdown_completed` refers only to HTTP draining. `relay_workers_stopped`
+confirms accepted handlers and tunnel workers have exited; `database_closed` follows
+it. `relay_shutdown_forced` reports deadline expiry. If a worker fails to stop even
+after forced cancellation, cleanup returns an error and intentionally leaves the
+database open rather than closing it underneath an active worker. Allow at least
+seven seconds before an orchestrator sends SIGKILL. SIGKILL cannot run cleanup.
 
 ## Upgrade safely
 

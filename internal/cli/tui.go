@@ -1,8 +1,13 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"github.com/plutack/wiretap/internal/logging"
+	"os"
+	"os/signal"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -22,13 +27,13 @@ func newTUICmd(version string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "tui",
 		Short: "Live dashboard of captured webhooks and traffic",
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) (result error) {
 			logger := logging.FromContext(cmd.Context())
 			a := app.New(newConfigManager(), app.WithLogger(logger), app.WithScriptEngine(newScriptEngine(), scriptErrorLogger(logger)))
 			if err := a.Open(cmd.Context()); err != nil {
 				return fmt.Errorf("tui: open store: %w", err)
 			}
-			defer a.Close()
+			defer func() { result = errors.Join(result, a.Close()) }()
 
 			// Start the relay tunnel in the background (no-op when relay
 			// URL or credentials are missing — the dashboard still shows
@@ -61,8 +66,16 @@ func newTUICmd(version string) *cobra.Command {
 			}
 
 			m := tui.New(deps, tui.WithTheme(theme))
-			p := tea.NewProgram(m, tea.WithAltScreen())
+			runCtx, stopSignals := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stopSignals()
+			p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(runCtx))
 			_, err := p.Run()
+			if runCtx.Err() != nil && errors.Is(err, tea.ErrProgramKilled) {
+				return nil
+			}
+			if errors.Is(err, context.Canceled) {
+				return nil
+			}
 			return err
 		},
 	}

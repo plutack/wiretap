@@ -21,7 +21,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"github.com/plutack/wiretap/internal/logging"
 	"io"
@@ -165,11 +164,14 @@ type Proxy struct {
 	clock       testutil.Clock
 	roundTrip   http.RoundTripper // for plain-HTTP forward proxying
 
-	mu      sync.Mutex
-	ln      net.Listener
-	server  *http.Server
-	conns   map[net.Conn]struct{}
-	running bool
+	mu       sync.Mutex
+	ln       net.Listener
+	server   *http.Server
+	conns    map[net.Conn]struct{}
+	running  bool
+	draining bool
+	work     map[*proxyWork]struct{}
+	changed  chan struct{}
 }
 
 // Option configures a Proxy.
@@ -292,33 +294,6 @@ func (p *Proxy) StartAsync() (string, error) {
 	return p.ln.Addr().String(), nil
 }
 
-// Stop cancels serving and closes outstanding client connections (including
-// hijacked tunnels). Calling Stop more than once, or without having started,
-// is safe.
-func (p *Proxy) Stop(ctx context.Context) error {
-	p.mu.Lock()
-	for c := range p.conns {
-		_ = c.Close()
-	}
-	p.conns = make(map[net.Conn]struct{})
-	srv := p.server
-	ln := p.ln
-	p.ln = nil
-	p.mu.Unlock()
-	var errs []error
-	if srv != nil {
-		if err := srv.Shutdown(ctx); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if ln != nil {
-		if err := ln.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
-}
-
 // Addr returns the resolved listen address, or the configured addr before
 // Listen. Tests call it after StartAsync to dial the proxy.
 func (p *Proxy) Addr() string {
@@ -345,6 +320,18 @@ func (p *Proxy) trackConn(c net.Conn, add bool) {
 
 // ServeHTTP dispatches plain-HTTP forward proxying vs HTTPS CONNECT tunneling.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	parent := r.Context()
+	if r.Method == http.MethodConnect {
+		parent = context.WithoutCancel(parent)
+	}
+	ctx, finish, ok := p.begin(parent)
+	if !ok {
+		w.Header().Set("Connection", "close")
+		http.Error(w, "proxy is draining", http.StatusServiceUnavailable)
+		return
+	}
+	defer finish()
+	r = r.WithContext(ctx)
 	if r.Method == http.MethodConnect {
 		p.handleConnect(w, r)
 		return
@@ -424,7 +411,7 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	clientTLS := tls.Server(clientConn, &tls.Config{Certificates: []tls.Certificate{leaf}})
 	// After Hijack the server cancels r.Context(), so drive the handshake with a
 	// fresh background context rather than a soon-dead one.
-	if err := clientTLS.HandshakeContext(context.Background()); err != nil {
+	if err := clientTLS.HandshakeContext(ctx); err != nil {
 		p.logger.Warn("proxy_client_tls_handshake_failed")
 		return
 	}
@@ -437,13 +424,15 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.bridge(clientTLS, upstreamTLS, host)
+	p.bridge(ctx, clientTLS, upstreamTLS, host)
 }
 
 // bridge shuttles HTTP/1.1 requests between the client (whose TLS we own) and
 // the upstream (whose TLS the dialer owns), recording each exchange. The loop
 // ends on EOF, a half-close, or a close/keep-alive-exhausted decision.
-func (p *Proxy) bridge(clientTLS, upstreamTLS *tls.Conn, host string) {
+func (p *Proxy) bridge(ctx context.Context, clientTLS, upstreamTLS *tls.Conn, host string) {
+	stopUpstream := context.AfterFunc(ctx, func() { _ = upstreamTLS.Close() })
+	defer stopUpstream()
 	cr := bufio.NewReader(clientTLS)
 	ur := bufio.NewReader(upstreamTLS)
 	uw := bufio.NewWriter(upstreamTLS)
@@ -452,6 +441,10 @@ func (p *Proxy) bridge(clientTLS, upstreamTLS *tls.Conn, host string) {
 	for {
 		req, err := http.ReadRequest(cr)
 		if err != nil {
+			return
+		}
+		if p.isDraining() {
+			_ = req.Body.Close()
 			return
 		}
 
@@ -476,7 +469,7 @@ func (p *Proxy) bridge(clientTLS, upstreamTLS *tls.Conn, host string) {
 
 		// Let the transformer (scripting engine) rewrite the request before it
 		// goes upstream. A transformer error aborts the exchange.
-		method, urlStr, reqHeaders, reqBody, err := p.transformReq(p.ctx(), req.Method, u.String(), req.Header.Clone(), reqBody)
+		method, urlStr, reqHeaders, reqBody, err := p.transformReq(ctx, req.Method, u.String(), req.Header.Clone(), reqBody)
 		if err != nil {
 			return
 		}
@@ -519,7 +512,7 @@ func (p *Proxy) bridge(clientTLS, upstreamTLS *tls.Conn, host string) {
 
 		// Let the transformer rewrite the response before it returns to the
 		// client.
-		status, respHeaders, respBody, err := p.transformResp(p.ctx(), resp.StatusCode, respHeader, respBody)
+		status, respHeaders, respBody, err := p.transformResp(ctx, resp.StatusCode, respHeader, respBody)
 		if err != nil {
 			return
 		}
@@ -530,7 +523,7 @@ func (p *Proxy) bridge(clientTLS, upstreamTLS *tls.Conn, host string) {
 		// by the time the caller observes the response. The recorded values are
 		// the post-transform request/response — i.e. what actually crossed the
 		// wire.
-		p.record(p.ctx(), Capture{
+		p.record(ctx, Capture{
 			At:          p.clock.Now(),
 			Method:      method,
 			URL:         urlStr,
@@ -551,16 +544,11 @@ func (p *Proxy) bridge(clientTLS, upstreamTLS *tls.Conn, host string) {
 			return
 		}
 
-		if resp.Close || req.Close {
+		if resp.Close || req.Close || p.isDraining() {
 			return
 		}
 	}
 }
-
-// ctx returns a background context for side-effecting calls; the request's own
-// context is cancelled the instant we hijack, so we must not reuse it for the
-// recorder (which may outlive the request slightly).
-func (p *Proxy) ctx() context.Context { return context.Background() }
 
 // handleHTTP forwards a plain-HTTP proxy request (one whose URL is already
 // absolute: http://host/path). Plain-HTTP interception is limited in the MVP

@@ -93,7 +93,7 @@ func TestRelayLifecycleLogging(t *testing.T) {
 	if err := cmd.Wait(); err != nil {
 		t.Fatal(err, stderr.String(), events)
 	}
-	want := []string{"relay_starting", "database_opened", "database_migrations_completed", "relay_listening", "relay_shutdown_requested", "http_shutdown_completed", "database_closed", "relay_stopped"}
+	want := []string{"relay_starting", "database_opened", "database_migrations_completed", "relay_listening", "relay_shutdown_requested", "relay_draining", "http_shutdown_completed", "relay_workers_stopped", "database_closed", "relay_stopped"}
 	if strings.Join(events, ",") != strings.Join(want, ",") {
 		t.Fatalf("events = %v", events)
 	}

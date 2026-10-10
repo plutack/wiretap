@@ -61,7 +61,29 @@ names/exception text, and credential values. Sequence/session IDs, status codes,
 sizes and durations may be retained. Review diagnostic files before sharing them.
 
 These are backend diagnostics, not browser console capture or a new desktop log
-viewer. Full bounded shutdown/draining remains separate work.
+viewer.
+
+## Graceful client shutdown (v0.5.2)
+
+Closing the GUI, quitting the TUI, or signalling the TUI stops admission of new
+app operations, cancels and joins the relay tunnel and its writer, and gives
+accepted replay/forward/script/store operations a five-second shutdown budget.
+On timeout those operations are cancelled; an unjoined worker keeps its database
+open and shutdown returns an error instead of closing an in-use store. GUI and
+TUI cleanup errors are recorded/returned rather than discarded. GUI operating-system
+signal handling remains supplied by Wails; normal window closure uses the same
+app shutdown path. SIGKILL and abrupt power loss cannot run graceful cleanup.
+
+Interception shutdown stops new proxy/control API work and drains accepted HTTP
+and CONNECT exchanges. Persistent CONNECT connections do not accept an unlimited
+stream of new exchanges while draining: the current exchange can finish, and idle
+or stalled tunnels are force-closed at the deadline. Forced cleanup cancels upstream
+I/O and waits up to one additional second for handlers. Shell startup patches and
+override wrappers are cleaned even if network draining times out; session-row
+finalization uses its own one-second deadline. The CLI-owned store is closed only
+after proxy/control API workers leave. Allow at least eight seconds for interception
+cleanup before sending SIGKILL. Interrupted upstream requests may already have
+performed side effects; Wiretap does not retry them automatically.
 
 ## Interception
 

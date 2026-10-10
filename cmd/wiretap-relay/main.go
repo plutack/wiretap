@@ -74,7 +74,12 @@ func runWithLogger(addr, dbPath, adminToken string, logger *slog.Logger) (result
 		return fmt.Errorf("wiretap-relay: open database: %w", err)
 	}
 	logger.Info("database_opened")
+	storeSafeToClose := true
 	defer func() {
+		if !storeSafeToClose {
+			logger.Error("database_close_deferred", "reason", "workers_still_running")
+			return
+		}
 		if err := db.Close(); err != nil {
 			logger.Error("database_close_failed")
 			result = errors.Join(result, err)
@@ -118,17 +123,29 @@ func runWithLogger(addr, dbPath, adminToken string, logger *slog.Logger) (result
 		if err != nil {
 			logger.Error("relay_serve_failed")
 		}
-		_ = httpSrv.Shutdown(context.Background())
-		return err
+		result = err
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	started = time.Now()
-	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
-		logger.Error("http_shutdown_failed", "timed_out", errors.Is(err, context.DeadlineExceeded), "duration", time.Since(started))
-		return err
+	srv.BeginDrain()
+	httpErr := httpSrv.Shutdown(shutdownCtx)
+	if httpErr != nil {
+		logger.Error("http_shutdown_failed", "timed_out", errors.Is(httpErr, context.DeadlineExceeded), "duration", time.Since(started))
+		_ = httpSrv.Close()
+	} else {
+		logger.Info("http_shutdown_completed", "duration", time.Since(started))
 	}
-	// HTTP shutdown does not yet drain upgraded WebSockets; do not claim it does.
-	logger.Info("http_shutdown_completed", "duration", time.Since(started))
-	return nil
+	workerErr := srv.Shutdown(shutdownCtx)
+	if workerErr != nil {
+		// Forced socket close/cancellation should join quickly. If not, leave
+		// SQLite open: closing it while a handler still uses it is unsafe.
+		forceCtx, forceCancel := context.WithTimeout(context.Background(), time.Second)
+		defer forceCancel()
+		if err := srv.Wait(forceCtx); err != nil {
+			storeSafeToClose = false
+			return errors.Join(result, httpErr, workerErr, err)
+		}
+	}
+	return errors.Join(result, httpErr, workerErr)
 }
